@@ -115,7 +115,7 @@ pnpm package:mac -- --arch=arm64
 pnpm release:mac
 ```
 
-该命令要求干净的 Git 工作区以及仓库外注入的 Apple 凭据。它完成 App/DMG 签名并只提交一次公证，保存 Submission ID 后立即退出，不维持长连接。之后运行 `pnpm release:mac:finish` 查询同一个 ID：处理中会立即返回，Accepted 后才执行 staple、Gatekeeper 验证、更新 ZIP、校验值和可追溯 manifest。不要手工重提文件。
+该命令要求干净的 Git 工作区以及仓库外注入的 Apple 凭据。它完成 App/DMG 签名并只提交一次公证，把待处理文件保存在 Application Support 的持久目录，保存 Submission ID 后立即退出，不维持长连接。之后运行 `pnpm release:mac:finish` 查询同一个 ID：处理中会立即返回，Accepted 后才执行 staple、Gatekeeper 验证、更新 ZIP、校验值和可追溯 manifest。不要手工重提文件。
 
 ## 固定运行时
 

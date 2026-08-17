@@ -11,7 +11,7 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,6 +45,16 @@ const outputDirectory = resolve(
   process.env.MACOS_RELEASE_OUTPUT ?? join(projectRoot, 'out', 'release'),
 );
 const statePath = join(outputDirectory, 'notarization-state.json');
+const releaseWorkRoot = resolve(
+  process.env.MACOS_RELEASE_WORK_ROOT ??
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      productName,
+      'Release Work',
+    ),
+);
 const notaryCredentials = notaryCredentialArguments();
 await validateNotaryCredentials(notaryCredentials);
 
@@ -87,9 +97,8 @@ async function submitRelease(): Promise<void> {
         `${productName}.app`,
       ),
   );
-  const temporaryRoot = await mkdtemp(
-    join(tmpdir(), 'deepseek-yukiryou-release-'),
-  );
+  await mkdir(releaseWorkRoot, { recursive: true, mode: 0o700 });
+  const temporaryRoot = await mkdtemp(join(releaseWorkRoot, 'release-'));
   const signedApp = join(temporaryRoot, `${productName}.app`);
   const diskImageRoot = join(temporaryRoot, 'dmg-root');
   const diskImage = join(temporaryRoot, `${productName}.dmg`);
@@ -126,6 +135,7 @@ async function submitRelease(): Promise<void> {
     ]);
     run('codesign', ['--force', '--timestamp', '--sign', identity, diskImage]);
     run('hdiutil', ['verify', diskImage]);
+    await rm(diskImageRoot, { recursive: true, force: true });
 
     const notaryResult = await submitForNotarization(diskImage);
     if (notaryResult.id === undefined || notaryResult.id.trim() === '') {

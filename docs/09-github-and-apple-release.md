@@ -56,9 +56,10 @@ Apple 公证服务会为提交容器及其中的嵌套代码生成 ticket，所�
 
 - `MACOS_RELEASE_SKIP_PACKAGE=true`：复用 `MACOS_RELEASE_APP` 指向的现有 App。
 - `MACOS_RELEASE_OUTPUT=/absolute/path`：改变最终输出目录。
+- `MACOS_RELEASE_WORK_ROOT=/absolute/path`：改变等待公证期间的持久化工作目录。
 - `MACOS_RELEASE_ALLOW_DIRTY=true`：允许脏工作区；manifest 会明确标记，禁止将这种产物公开发布。
 
-提交成功后，状态文件和 `/private/var/.../deepseek-yukiryou-release-*` 临时目录会保留到 `release:mac:finish` 完成；断网、关闭终端或重启电脑均不需要重提。失败时脚本会打印保留目录，成功生成最终产物后才自动清理。不要绕过脚本手工补做另一份公证。
+提交成功后，状态文件和 `~/Library/Application Support/DeepSeek YukiRyou/Release Work/` 中的签名 App/DMG 会保留到 `release:mac:finish` 完成，不依赖可能被系统清理的临时目录。DMG 生成后会立即删除重复的 staging 副本以节省磁盘。断网、关闭终端或重启电脑均不需要重提；成功生成最终产物后才自动清理对应工作目录。不要绕过脚本手工补做另一份公证。
 
 GitHub Release 中的更新 ZIP 必须保持 `DeepSeek YukiRyou-darwin-arm64-<version>.zip` 命名，以便 `update.electronjs.org` 按 `darwin-arm64` 精确选择。更新器只消费经过 Developer ID 签名与 Apple 公证的 ZIP，不上传开发构建。
 
