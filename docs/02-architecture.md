@@ -66,7 +66,7 @@ interface RuntimeSupervisor {
 
 ### `DesktopWindow`
 
-负责主窗口的可信导航、加载/诊断状态、窗口持久化以及外部链接处理。模块内部保持一个本地静态 renderer 作为 44px 可拖动顶栏和启动/失败页面，并将官方 Harness 放入受限的 `WebContentsView`。二者是独立的 webContents。隔离 preload 使用只读 `ResizeObserver` 采集 Harness 侧栏的实际动画宽度，经主进程校验后更新顶栏 CSS 变量；不向 Harness 页面暴露 Electron 接口，也不修改 Harness 的样式或节点。
+负责主窗口的可信导航、加载/诊断状态、窗口持久化以及外部链接处理。模块内部保持一个本地静态 renderer 作为 44px 可拖动顶栏和启动/失败页面，并将官方 Harness 放入受限的 `WebContentsView`。二者是独立的 webContents。隔离 preload 使用只读 `ResizeObserver` 采集 Harness 侧栏的实际动画宽度，经主进程校验后更新顶栏 CSS 变量。它还暴露一个只含更新快照、订阅与 `check|install` 命令的窄桥；更新存在时在 Harness 品牌行挂载临时按钮，结构不匹配时失效关闭。
 
 ```ts
 interface DesktopWindow {
@@ -86,8 +86,8 @@ interface DesktopWindow {
 
 - “外观”调用官方 `ctx.theme.getTheme()` / `setTheme()`，因此浅色、深色、跟随系统及持久化只有一个事实来源。
 - 隔离 preload 将 Harness 最终解析出的明暗模式和两个桌面 chrome 颜色归一化后转发给本地顶栏；后续风格按 [外观扩展契约](./08-appearance-extension.md) 同时提供 Harness 令牌与顶栏令牌。
-- “关于”只展示构建时固定的应用、Harness、Node、pnpm 和 arm64 信息，不读取网页或系统敏感数据。
-- 扩展只注册 `settings.section`，不获得 Electron、Node、文件系统或任意 IPC 能力。
+- “关于”展示主进程提供的应用更新状态，以及构建时固定的 Harness、Node、pnpm 和 arm64 信息，不读取网页或系统敏感数据。
+- 扩展只注册 `settings.section`，不获得 Electron、Node、文件系统或通用 IPC 能力；它只能调用 preload 暴露的两个固定更新动作。
 
 ### `AppUpdater`
 
@@ -101,7 +101,7 @@ interface AppUpdater {
 }
 ```
 
-V1 可以先提供手动检查；自动后台检查必须复用同一接口。测试使用内存 adapter，生产使用签名更新 feed adapter。
+自动检查与手动检查复用同一个更新状态机。正式版启动 15 秒后检查，随后每 6 小时检查；生产使用固定的签名更新 feed。
 
 ### `AppCoordinator`
 

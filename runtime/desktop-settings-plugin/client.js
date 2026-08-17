@@ -19,7 +19,21 @@ window.__ModuleLoader__.load({
         'about.nav': '关于',
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Apple Silicon 原生应用',
-        'about.description': '为个人开发工作流打造的 DeepSeek Harness macOS 桌面体验。',
+        'about.description': '专为 Apple Silicon 打造的 DeepSeek Harness 桌面工作空间。',
+        'about.version': '版本',
+        'about.updateTitle': '软件更新',
+        'about.updateIdle': '自动检查已开启，也可以立即检查。',
+        'about.updateDisabled': '开发构建不连接更新服务，正式版将自动检查。',
+        'about.updateChecking': '正在连接更新服务…',
+        'about.updateLatest': '当前已是最新版本。',
+        'about.updateDownloading': '发现新版本，正在后台下载。',
+        'about.updateDownloaded': '新版本已准备好，重启即可完成安装。',
+        'about.updateError': '暂时无法检查，请稍后重试。',
+        'about.check': '检查更新',
+        'about.checking': '检查中…',
+        'about.install': '重启并更新',
+        'about.retry': '重新检查',
+        'about.details': '版本信息',
         'about.application': '桌面应用',
         'about.harness': 'DeepSeek Harness',
         'about.node': 'Node.js',
@@ -42,7 +56,21 @@ window.__ModuleLoader__.load({
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Native for Apple Silicon',
         'about.description':
-          'A personalized DeepSeek Harness desktop experience for macOS.',
+          'A focused DeepSeek Harness workspace built for Apple Silicon.',
+        'about.version': 'Version',
+        'about.updateTitle': 'Software update',
+        'about.updateIdle': 'Automatic checks are on, or check now.',
+        'about.updateDisabled': 'Development builds do not connect to the update service.',
+        'about.updateChecking': 'Contacting the update service…',
+        'about.updateLatest': 'You are running the latest version.',
+        'about.updateDownloading': 'A new version was found and is downloading.',
+        'about.updateDownloaded': 'The new version is ready. Restart to install it.',
+        'about.updateError': 'Unable to check right now. Please try again.',
+        'about.check': 'Check for updates',
+        'about.checking': 'Checking…',
+        'about.install': 'Restart and update',
+        'about.retry': 'Check again',
+        'about.details': 'Version information',
         'about.application': 'Desktop application',
         'about.harness': 'DeepSeek Harness',
         'about.node': 'Node.js',
@@ -140,35 +168,39 @@ window.__ModuleLoader__.load({
         text-align: center;
       }
       .dsh-desktop-about-page {
-        padding-top: 2px;
+        width: min(760px, 100%);
+        padding-top: 0;
       }
       .dsh-desktop-about-hero {
         display: flex;
-        padding: 20px;
+        min-height: 132px;
+        padding: 24px;
         align-items: center;
-        gap: 18px;
+        gap: 20px;
         border: 1px solid var(--dsw-alias-border-l2);
-        border-radius: 18px;
+        border-radius: 20px;
         background:
-          radial-gradient(circle at 15% 20%, rgb(77 107 254 / 14%), transparent 45%),
+          radial-gradient(circle at 12% 18%, rgb(77 107 254 / 16%), transparent 42%),
+          linear-gradient(145deg, rgb(77 107 254 / 5%), transparent 58%),
           var(--dsw-alias-bg-layer-1);
       }
       .dsh-desktop-about-logo {
         box-sizing: border-box;
-        width: 104px;
-        height: 104px;
+        width: 92px;
+        height: 92px;
         flex: none;
-        border: 1px solid rgb(77 107 254 / 18%);
-        border-radius: 24px;
-        box-shadow: 0 12px 30px rgb(38 70 180 / 16%);
+        border: 1px solid rgb(77 107 254 / 20%);
+        border-radius: 22px;
+        box-shadow: 0 14px 34px rgb(38 70 180 / 18%);
         object-fit: cover;
       }
       .dsh-desktop-about-copy {
         min-width: 0;
       }
       .dsh-desktop-about-copy h2 {
-        font-size: 23px;
-        line-height: 32px;
+        font-size: 25px;
+        letter-spacing: -.3px;
+        line-height: 34px;
       }
       .dsh-desktop-about-badge {
         display: inline-flex;
@@ -182,24 +214,88 @@ window.__ModuleLoader__.load({
         line-height: 18px;
       }
       .dsh-desktop-about-copy .dsh-desktop-settings-description {
-        margin: 9px 0 0;
+        max-width: 480px;
+        margin: 10px 0 0;
+      }
+      .dsh-desktop-update-card {
+        display: grid;
+        min-height: 76px;
+        margin-top: 14px;
+        padding: 15px 16px;
+        grid-template-columns: 42px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 13px;
+        border: 1px solid var(--dsw-alias-border-l2);
+        border-radius: 14px;
+        background: var(--dsw-alias-bg-layer-1);
+      }
+      .dsh-desktop-update-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 13px;
+        color: var(--dsw-static-deepseek-500, #4d6bfe);
+        background: rgb(77 107 254 / 11%);
+        font-size: 21px;
+        font-weight: 500;
+      }
+      .dsh-desktop-update-copy { min-width: 0; }
+      .dsh-desktop-update-title {
+        color: var(--dsw-alias-label-primary);
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 21px;
+      }
+      .dsh-desktop-update-status {
+        margin-top: 2px;
+        color: var(--dsw-alias-label-secondary);
+        font-size: 12px;
+        line-height: 18px;
+      }
+      .dsh-desktop-update-button {
+        height: 34px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 10px;
+        color: #fff;
+        background: var(--dsw-static-deepseek-500, #4d6bfe);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 550;
+        white-space: nowrap;
+      }
+      .dsh-desktop-update-button:hover:not(:disabled) { filter: brightness(.96); }
+      .dsh-desktop-update-button:disabled {
+        color: var(--dsw-alias-label-tertiary);
+        background: var(--dsw-alias-interactive-bg-hover);
+        cursor: default;
       }
       .dsh-desktop-about-card {
         display: grid;
         margin-top: 14px;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
+        overflow: hidden;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border: 1px solid var(--dsw-alias-border-l2);
+        border-radius: 14px;
+        background: var(--dsw-alias-bg-layer-1);
+      }
+      .dsh-desktop-about-card-title {
+        margin: 0;
+        padding: 13px 15px 3px;
+        grid-column: 1 / -1;
+        color: var(--dsw-alias-label-secondary);
+        font-size: 12px;
+        font-weight: 500;
       }
       .dsh-desktop-about-row {
         display: flex;
-        min-height: 58px;
-        padding: 12px 14px;
+        min-height: 56px;
+        padding: 10px 15px 14px;
         flex-direction: column;
         justify-content: center;
         gap: 3px;
-        border: 1px solid var(--dsw-alias-border-l2);
-        border-radius: 12px;
-        background: var(--dsw-alias-bg-layer-1);
         font-size: 13px;
       }
       .dsh-desktop-about-value {
@@ -213,14 +309,14 @@ window.__ModuleLoader__.load({
       }
       .dsh-desktop-about-developer {
         display: flex;
-        min-height: 54px;
-        margin-top: 10px;
-        padding: 0 14px;
+        min-height: 62px;
+        margin-top: 14px;
+        padding: 0 16px;
         align-items: center;
         justify-content: space-between;
         gap: 16px;
         border: 1px solid var(--dsw-alias-border-l2);
-        border-radius: 12px;
+        border-radius: 14px;
         color: var(--dsw-alias-label-primary);
         background: var(--dsw-alias-bg-layer-1);
         font-size: 13px;
@@ -230,7 +326,21 @@ window.__ModuleLoader__.load({
         background: var(--dsw-alias-interactive-bg-hover);
       }
       .dsh-desktop-about-developer-label {
-        color: var(--dsw-alias-label-secondary);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--dsw-alias-label-primary);
+        font-weight: 550;
+      }
+      .dsh-desktop-about-developer-icon {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        border-radius: 50%;
+        color: var(--dsw-alias-label-primary);
+        background: var(--dsw-alias-interactive-bg-hover);
+        font-size: 15px;
       }
       .dsh-desktop-about-developer-value {
         color: var(--dsw-static-deepseek-500, #4d6bfe);
@@ -246,8 +356,10 @@ window.__ModuleLoader__.load({
       @media (max-width: 760px) {
         .dsh-desktop-theme-grid { grid-template-columns: 1fr; }
         .dsh-desktop-about-hero { align-items: flex-start; }
-        .dsh-desktop-about-logo { width: 82px; height: 82px; border-radius: 20px; }
-        .dsh-desktop-about-card { grid-template-columns: 1fr; }
+        .dsh-desktop-about-logo { width: 78px; height: 78px; border-radius: 19px; }
+        .dsh-desktop-update-card { grid-template-columns: 38px minmax(0, 1fr); }
+        .dsh-desktop-update-button { grid-column: 1 / -1; }
+        .dsh-desktop-about-card { grid-template-columns: 1fr 1fr; }
       }
     `;
     if (!document.querySelector('style[data-plugin-css="dsh-desktop-settings"]')) {
@@ -306,10 +418,54 @@ window.__ModuleLoader__.load({
       );
     }
 
+    const fallbackUpdateState = {
+      status: 'disabled',
+      currentVersion: '0.1.0',
+    };
+
+    function updateApi() {
+      return window.deepSeekYukiRyouUpdates;
+    }
+
+    function useUpdateState() {
+      const api = updateApi();
+      const [state, setState] = React.useState(
+        () => api?.getSnapshot() ?? fallbackUpdateState,
+      );
+      React.useEffect(() => api?.subscribe((nextState) => setState(nextState)), [api]);
+      return state;
+    }
+
+    function updatePresentation(state, t) {
+      const statusKeys = {
+        disabled: 'about.updateDisabled',
+        idle: 'about.updateIdle',
+        checking: 'about.updateChecking',
+        latest: 'about.updateLatest',
+        downloading: 'about.updateDownloading',
+        downloaded: 'about.updateDownloaded',
+        error: 'about.updateError',
+      };
+      return {
+        description: t(statusKeys[state.status] ?? 'about.updateIdle'),
+        button:
+          state.status === 'downloaded'
+            ? t('about.install')
+            : state.status === 'checking' || state.status === 'downloading'
+              ? t('about.checking')
+              : state.status === 'error'
+                ? t('about.retry')
+                : t('about.check'),
+        disabled: state.status === 'checking' || state.status === 'downloading',
+      };
+    }
+
     function AboutSection({ t }) {
       const brandAsset = '/plugins/@dsh-desktop/settings/brand.png';
+      const state = useUpdateState();
+      const update = updatePresentation(state, t);
       const rows = [
-        ['about.application', '0.1.0'],
+        ['about.application', state.currentVersion],
         ['about.harness', '0.1.0-rc.6'],
         ['about.node', '24.19.0'],
         ['about.pnpm', '10.34.5'],
@@ -333,7 +489,7 @@ window.__ModuleLoader__.load({
             React.createElement(
               'span',
               { className: 'dsh-desktop-about-badge' },
-              t('about.badge'),
+              `${t('about.badge')} · ${t('about.version')} ${state.currentVersion}`,
             ),
             React.createElement(
               'p',
@@ -344,7 +500,50 @@ window.__ModuleLoader__.load({
         ),
         React.createElement(
           'div',
+          { className: 'dsh-desktop-update-card' },
+          React.createElement(
+            'span',
+            { className: 'dsh-desktop-update-icon', 'aria-hidden': true },
+            '↻',
+          ),
+          React.createElement(
+            'div',
+            { className: 'dsh-desktop-update-copy' },
+            React.createElement(
+              'div',
+              { className: 'dsh-desktop-update-title' },
+              state.releaseName
+                ? `${t('about.updateTitle')} · ${state.releaseName}`
+                : t('about.updateTitle'),
+            ),
+            React.createElement(
+              'div',
+              { className: 'dsh-desktop-update-status', role: 'status' },
+              update.description,
+            ),
+          ),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: 'dsh-desktop-update-button',
+              disabled: update.disabled,
+              onClick: () => {
+                if (state.status === 'downloaded') updateApi()?.install();
+                else updateApi()?.check();
+              },
+            },
+            update.button,
+          ),
+        ),
+        React.createElement(
+          'div',
           { className: 'dsh-desktop-about-card' },
+          React.createElement(
+            'h3',
+            { className: 'dsh-desktop-about-card-title' },
+            t('about.details'),
+          ),
           ...rows.map(([label, value]) =>
             React.createElement(
               'div',
@@ -369,6 +568,11 @@ window.__ModuleLoader__.load({
           React.createElement(
             'span',
             { className: 'dsh-desktop-about-developer-label' },
+            React.createElement(
+              'span',
+              { className: 'dsh-desktop-about-developer-icon', 'aria-hidden': true },
+              '⌘',
+            ),
             t('about.developer'),
           ),
           React.createElement(

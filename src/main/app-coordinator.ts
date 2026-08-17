@@ -25,6 +25,7 @@ import {
   createDesktopWindow,
   type DesktopWindow,
 } from './window/desktop-window.js';
+import type { UpdateCommand } from '../shared/update-bridge.js';
 
 const moduleDirectory = __dirname;
 
@@ -69,8 +70,6 @@ export class AppCoordinator {
       currentVersion: app.getVersion(),
       platform: process.platform,
       architecture: process.arch,
-      onDownloaded: (releaseName, releaseNotes) =>
-        void this.#offerUpdateInstall(releaseName, releaseNotes),
       onError: (error) => this.#handleUpdaterError(error),
     });
 
@@ -82,8 +81,13 @@ export class AppCoordinator {
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
+      onUpdateCommand: (command) => void this.#handleUpdateCommand(command),
       onRendererCrash: (target, reason) =>
         this.#log?.write('renderer.crashed', `target=${target} reason=${reason}`),
+    });
+    this.#updater.subscribe((state) => {
+      this.#log?.write('update.state', JSON.stringify(state));
+      this.#window?.setUpdateState(state);
     });
     await this.#window.showLoading();
     if (recoveredPreferences !== undefined) {
@@ -126,6 +130,7 @@ export class AppCoordinator {
     });
     this.#installMenu(logDirectory);
     await this.#startRuntime();
+    this.#updater.startAutomaticChecks();
   }
 
   #copyDiagnostics(): void {
@@ -283,30 +288,21 @@ export class AppCoordinator {
 
   #handleUpdaterError(error: Error): void {
     this.#log?.write('update.error', error.message);
-    dialog.showErrorBox(
-      '更新下载失败',
-      '请检查网络连接，或通过 GitHub Releases 手动下载安装。',
-    );
   }
 
-  async #offerUpdateInstall(
-    releaseName: string,
-    releaseNotes: string,
-  ): Promise<void> {
-    this.#log?.write('update.downloaded', `release=${releaseName}`);
-    const { response } = await dialog.showMessageBox({
-      type: 'info',
-      title: '更新已下载',
-      message: `DeepSeek YukiRyou ${releaseName} 已准备好`,
-      detail: releaseNotes.slice(0, 2_000),
-      buttons: ['重启并安装', '稍后'],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    });
-    if (response === 0) {
-      await this.#installDownloadedUpdate();
+  async #handleUpdateCommand(command: UpdateCommand): Promise<void> {
+    if (command === 'install') {
+      if (this.#updater?.getState().status === 'downloaded') {
+        await this.#installDownloadedUpdate();
+      }
+      return;
     }
+    this.#log?.write('update.check-requested', 'source=harness');
+    await this.#updater?.checkForUpdates().catch((error: unknown) => {
+      this.#handleUpdaterError(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    });
   }
 
   async #installDownloadedUpdate(): Promise<void> {

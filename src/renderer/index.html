@@ -19,10 +19,30 @@
     ></header>
     <section class="window-content">
       <main class="loading-shell" aria-live="polite">
-        <div class="mark" aria-hidden="true">YR</div>
-        <h1>正在准备 DeepSeek YukiRyou</h1>
-        <p>DeepSeek Harness 桌面运行环境初始化中……</p>
-        <div class="progress" aria-hidden="true"><span></span></div>
+        <div class="ambient ambient-one" aria-hidden="true"></div>
+        <div class="ambient ambient-two" aria-hidden="true"></div>
+        <div class="brand-stage" aria-hidden="true">
+          <span class="orbit orbit-outer"></span>
+          <span class="orbit orbit-inner"></span>
+          <span class="spark spark-one"></span>
+          <span class="spark spark-two"></span>
+          <div class="brand-frame">
+            <img
+              class="brand-image"
+              src="../../resources/icons/deepseek-yukiryou.png"
+              alt=""
+            />
+            <span class="brand-shine"></span>
+          </div>
+        </div>
+        <div class="loading-copy">
+          <span class="eyebrow">DEEPSEEK YUKIRYOU</span>
+          <h1>正在唤醒 Harness</h1>
+          <p data-testid="startup-status">正在准备本地开发环境</p>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
         <nav class="failure-actions" aria-label="故障操作" hidden>
           <a class="primary" href="dsh-desktop://action/retry">重试启动</a>
           <a href="dsh-desktop://action/open-logs">打开日志</a>

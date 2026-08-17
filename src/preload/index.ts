@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
 import {
   DESKTOP_CHROME_CONTENT_TOKEN,
@@ -13,10 +13,45 @@ import {
   TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
   validatedSidebarWidth,
 } from '../shared/sidebar-width-sync.js';
+import {
+  UPDATE_COMMAND_CHANNEL,
+  UPDATE_STATE_CHANNEL,
+  type DesktopUpdateState,
+  type UpdateCommand,
+  shouldShowHeaderUpdate,
+  validatedUpdateState,
+} from '../shared/update-bridge.js';
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
 let pendingAppearance: DesktopAppearanceSnapshot | undefined;
+let updateState: DesktopUpdateState = {
+  status: 'disabled',
+  currentVersion: '0.0.0',
+};
+const updateListeners = new Set<(state: DesktopUpdateState) => void>();
+
+ipcRenderer.on(UPDATE_STATE_CHANNEL, (_event, value: unknown) => {
+  const nextState = validatedUpdateState(value);
+  if (nextState === undefined) return;
+  updateState = nextState;
+  for (const listener of updateListeners) listener(nextState);
+  reconcileHarnessUpdateButton();
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouUpdates', {
+  getSnapshot: (): DesktopUpdateState => updateState,
+  subscribe: (listener: (state: DesktopUpdateState) => void): (() => void) => {
+    updateListeners.add(listener);
+    return () => updateListeners.delete(listener);
+  },
+  check: (): void => sendUpdateCommand('check'),
+  install: (): void => sendUpdateCommand('install'),
+});
+
+function sendUpdateCommand(command: UpdateCommand): void {
+  ipcRenderer.send(UPDATE_COMMAND_CHANNEL, command);
+}
 
 function applyToolbarWidth(): void {
   document.documentElement?.style.setProperty(
@@ -205,9 +240,99 @@ function installHarnessAppearanceObserver(): void {
   schedule();
 }
 
+function reconcileHarnessUpdateButton(): void {
+  const existing = document.querySelector<HTMLElement>(
+    '[data-dsh-desktop-update-button]',
+  );
+  if (!shouldShowHeaderUpdate(updateState)) {
+    existing?.remove();
+    return;
+  }
+  const sidebar = findHarnessSidebar();
+  const logoRow = sidebar?.firstElementChild;
+  const brand = logoRow?.querySelector('button');
+  if (!(logoRow instanceof HTMLElement) || !(brand instanceof HTMLButtonElement)) {
+    existing?.remove();
+    return;
+  }
+  const button =
+    existing instanceof HTMLButtonElement
+      ? existing
+      : document.createElement('button');
+  button.dataset.dshDesktopUpdateButton = '';
+  button.type = 'button';
+  button.className = 'dsh-desktop-header-update';
+  const ready = updateState.status === 'downloaded';
+  const language = document.documentElement.lang.toLowerCase();
+  const label = ready
+    ? language.startsWith('en')
+      ? 'Restart to update'
+      : '重启更新'
+    : language.startsWith('en')
+      ? 'Downloading update'
+      : '正在更新';
+  const buttonText = ready ? label : '•••';
+  if (button.textContent !== buttonText) button.textContent = buttonText;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.disabled = !ready;
+  button.onclick = ready ? () => sendUpdateCommand('install') : null;
+  if (button.parentElement !== logoRow) {
+    logoRow.insertBefore(button, logoRow.lastElementChild);
+  }
+}
+
+function installHarnessUpdateButton(): void {
+  if (!document.querySelector('style[data-dsh-desktop-update-style]')) {
+    const style = document.createElement('style');
+    style.dataset.dshDesktopUpdateStyle = '';
+    style.textContent = `
+      .dsh-desktop-header-update {
+        box-sizing: border-box;
+        min-width: 30px;
+        height: 26px;
+        padding: 0 9px;
+        border: 1px solid rgb(77 107 254 / 24%);
+        border-radius: 999px;
+        color: var(--dsw-static-deepseek-500, #4d6bfe);
+        background: rgb(77 107 254 / 10%);
+        cursor: pointer;
+        flex: none;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 24px;
+      }
+      .dsh-desktop-header-update:hover:not(:disabled) {
+        background: rgb(77 107 254 / 17%);
+      }
+      .dsh-desktop-header-update:disabled {
+        cursor: default;
+        letter-spacing: 1px;
+      }
+    `;
+    document.head.append(style);
+  }
+  let scheduled = false;
+  const schedule = (): void => {
+    if (scheduled) return;
+    scheduled = true;
+    window.requestAnimationFrame(() => {
+      scheduled = false;
+      reconcileHarnessUpdateButton();
+    });
+  };
+  new MutationObserver(schedule).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+  schedule();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   applyToolbarWidth();
   applyToolbarAppearance();
   installHarnessSidebarObserver();
   installHarnessAppearanceObserver();
+  installHarnessUpdateButton();
 });

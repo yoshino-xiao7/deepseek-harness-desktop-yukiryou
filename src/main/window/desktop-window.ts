@@ -11,6 +11,13 @@ import {
   TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
   validatedSidebarWidth,
 } from '../../shared/sidebar-width-sync.js';
+import {
+  UPDATE_COMMAND_CHANNEL,
+  UPDATE_STATE_CHANNEL,
+  type DesktopUpdateState,
+  type UpdateCommand,
+  validatedUpdateCommand,
+} from '../../shared/update-bridge.js';
 import { createDesktopWindowOptions } from './desktop-window-options.js';
 import { harnessContentBounds } from './desktop-window-layout.js';
 import {
@@ -30,6 +37,7 @@ export interface DesktopWindow {
   showFailure(failure: RuntimeFailure): Promise<void>;
   reload(): void;
   reveal(): void;
+  setUpdateState(state: DesktopUpdateState): void;
   dispose(): void;
 }
 
@@ -40,6 +48,7 @@ export interface DesktopWindowOptions {
   readonly onOpenLogs: () => void;
   readonly onCopyDiagnostics: () => void;
   readonly onExportDiagnostics: () => void;
+  readonly onUpdateCommand: (command: UpdateCommand) => void;
   readonly onRendererCrash: (target: RendererTarget, reason: string) => void;
 }
 
@@ -59,6 +68,7 @@ class ElectronDesktopWindow implements DesktopWindow {
   #showingHarness = false;
   #sidebarWidth: number | undefined;
   #appearance: ReturnType<typeof validatedAppearanceSnapshot>;
+  #updateState: DesktopUpdateState | undefined;
   readonly #rendererRecovery = createRendererRecoveryPolicy(
     [250, 1_000],
     30_000,
@@ -99,6 +109,10 @@ class ElectronDesktopWindow implements DesktopWindow {
       void this.#recoverRenderer('toolbar', details.reason);
     });
     this.#harnessView.webContents.on(
+      'did-finish-load',
+      () => this.#restoreHarnessState(),
+    );
+    this.#harnessView.webContents.on(
       'render-process-gone',
       (_event, details) => {
         void this.#recoverRenderer('harness', details.reason);
@@ -107,6 +121,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#installNavigationPolicy();
     this.#installSidebarWidthSync();
     this.#installAppearanceSync();
+    this.#installUpdateBridge();
   }
 
   async showLoading(): Promise<void> {
@@ -153,6 +168,13 @@ class ElectronDesktopWindow implements DesktopWindow {
     }
     this.#window.show();
     this.#window.focus();
+  }
+
+  setUpdateState(state: DesktopUpdateState): void {
+    this.#updateState = state;
+    if (!this.#harnessView.webContents.isDestroyed()) {
+      this.#harnessView.webContents.send(UPDATE_STATE_CHANNEL, state);
+    }
   }
 
   dispose(): void {
@@ -301,6 +323,23 @@ class ElectronDesktopWindow implements DesktopWindow {
         TOOLBAR_APPEARANCE_CHANNEL,
         this.#appearance,
       );
+    }
+  }
+
+  #installUpdateBridge(): void {
+    this.#harnessView.webContents.on(
+      'ipc-message',
+      (_event, channel, value: unknown) => {
+        if (channel !== UPDATE_COMMAND_CHANNEL) return;
+        const command = validatedUpdateCommand(value);
+        if (command !== undefined) this.#options.onUpdateCommand(command);
+      },
+    );
+  }
+
+  #restoreHarnessState(): void {
+    if (this.#updateState !== undefined) {
+      this.#harnessView.webContents.send(UPDATE_STATE_CHANNEL, this.#updateState);
     }
   }
 

@@ -52,6 +52,26 @@ describe('packaged desktop application', () => {
             .getPropertyValue('-webkit-app-region'),
         );
       expect(dragRegion).toBe('drag');
+      const startupVisual = await shellPage!.evaluate(() => {
+        const image = document.querySelector('.brand-image');
+        const stage = document.querySelector('.brand-stage');
+        return {
+          imageLoaded:
+            image instanceof HTMLImageElement &&
+            image.complete &&
+            image.naturalWidth > 0,
+          heading: document.querySelector('h1')?.textContent?.trim(),
+          progressDots: document.querySelectorAll('.progress-track span').length,
+          stageAnimation:
+            stage === null ? '' : window.getComputedStyle(stage).animationName,
+        };
+      });
+      expect(startupVisual).toMatchObject({
+        imageLoaded: true,
+        heading: '正在唤醒 Harness',
+        progressDots: 3,
+        stageAnimation: 'stage-arrive',
+      });
 
       await expect
         .poll(
@@ -338,9 +358,31 @@ describe('packaged desktop application', () => {
                 themeLabels: themeButtons.map((button) => button.textContent?.trim()),
                 darkApplied: document.body.hasAttribute('data-ds-dark-theme'),
                 aboutLogoLoaded: aboutLogo instanceof HTMLImageElement,
+                aboutLogoDiagnostics: (() => {
+                  const image = dialog.querySelector('.dsh-desktop-about-logo');
+                  return image instanceof HTMLImageElement
+                    ? {
+                        src: image.src,
+                        complete: image.complete,
+                        naturalWidth: image.naturalWidth,
+                      }
+                    : undefined;
+                })(),
                 developerHref: dialog.querySelector(
                   '.dsh-desktop-about-developer',
                 )?.getAttribute('href'),
+                updateButtonText: dialog.querySelector(
+                  '.dsh-desktop-update-button',
+                )?.textContent?.trim(),
+                updateStatusText: dialog.querySelector(
+                  '.dsh-desktop-update-status',
+                )?.textContent?.trim(),
+                updateBridgeShape: {
+                  check: typeof window.deepSeekYukiRyouUpdates?.check,
+                  install: typeof window.deepSeekYukiRyouUpdates?.install,
+                  subscribe: typeof window.deepSeekYukiRyouUpdates?.subscribe,
+                  getSnapshot: typeof window.deepSeekYukiRyouUpdates?.getSnapshot,
+                },
                 aboutText: aboutPage?.parentElement?.textContent ?? '',
               });
             })
@@ -364,13 +406,81 @@ describe('packaged desktop application', () => {
         ]),
       );
       expect(settingsResult?.darkApplied).toBe(true);
-      expect(settingsResult?.aboutLogoLoaded).toBe(true);
+      if (!settingsResult?.aboutLogoLoaded) {
+        throw new Error(
+          `about logo failed: ${JSON.stringify(settingsResult?.aboutLogoDiagnostics)}`,
+        );
+      }
       expect(settingsResult?.developerHref).toBe(
         'https://github.com/yoshino-xiao7',
       );
+      expect(settingsResult?.updateButtonText).toMatch(
+        /^(检查更新|检查中…|重新检查|重启并更新|Check for updates|Checking…|Check again|Restart and update)$/,
+      );
+      expect(settingsResult?.updateStatusText).toBeTruthy();
+      expect(settingsResult?.updateBridgeShape).toEqual({
+        check: 'function',
+        install: 'function',
+        subscribe: 'function',
+        getSnapshot: 'function',
+      });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
       expect(settingsResult?.aboutText).toContain('0.1.0-rc.6');
       expect(settingsResult?.aboutText).toMatch(/Apple Silicon.*arm64/);
+
+      await electronApp.evaluate(({ webContents }) => {
+        const harness = webContents
+          .getAllWebContents()
+          .find((contents) =>
+            contents.getURL().startsWith('http://127.0.0.1:'),
+          );
+        harness?.send('dsh-desktop:update-state', {
+          status: 'downloaded',
+          currentVersion: '0.1.0',
+          releaseName: '0.2.0',
+          releaseNotes: 'Ready for E2E verification',
+        });
+      });
+      await expect
+        .poll(() =>
+          electronApp!.evaluate(async ({ webContents }) => {
+            const harness = webContents
+              .getAllWebContents()
+              .find((contents) =>
+                contents.getURL().startsWith('http://127.0.0.1:'),
+              );
+            return harness?.executeJavaScript(`
+              document.querySelector('[data-dsh-desktop-update-button]')
+                ?.textContent?.trim()
+            `);
+          }),
+        )
+        .toMatch(/^(重启更新|Restart to update)$/);
+      await electronApp.evaluate(({ webContents }) => {
+        const harness = webContents
+          .getAllWebContents()
+          .find((contents) =>
+            contents.getURL().startsWith('http://127.0.0.1:'),
+          );
+        harness?.send('dsh-desktop:update-state', {
+          status: 'latest',
+          currentVersion: '0.1.0',
+        });
+      });
+      await expect
+        .poll(() =>
+          electronApp!.evaluate(async ({ webContents }) => {
+            const harness = webContents
+              .getAllWebContents()
+              .find((contents) =>
+                contents.getURL().startsWith('http://127.0.0.1:'),
+              );
+            return harness?.executeJavaScript(`
+              document.querySelector('[data-dsh-desktop-update-button]') === null
+            `);
+          }),
+        )
+        .toBe(true);
 
       await expect
         .poll(
