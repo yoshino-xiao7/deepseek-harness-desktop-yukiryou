@@ -68,12 +68,11 @@ pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
 ### Release tag
 
 1. 在对应架构的 macOS runner 上装配并验证 runtime。
-2. 构建 arm64 `.app`、DMG 与 ZIP；若恢复 Intel 发布，则在原生 Intel runner 单独构建 x64，不制作 Universal 包。
-3. 使用 Developer ID Application 签名并启用 Hardened Runtime。
-4. 上传 Apple notarization，成功后 staple ticket。
-5. 执行 `codesign`、`spctl`、`stapler` 和安装后冒烟测试。
-6. 生成 SHA-256、SBOM、第三方许可证清单与 release notes。
-7. 发布到 draft；人工验证两个架构后再公开并更新 feed。
+2. 运行唯一入口 `pnpm release:mac`：构建 arm64 App、Developer ID 签名、制作并签名 DMG。
+3. 只提交 DMG 一次；Accepted 后 staple App/DMG，并强制执行 `codesign`、`spctl`、`hdiutil` 与 ticket 验证。
+4. 从已 staple 的 App 生成更新 ZIP，同时生成 SHA-256 和记录 Git commit/Submission ID 的 manifest。
+5. 完成安装后冒烟、SBOM、第三方许可证和 release notes。
+6. 发布到 draft；核对 tag、manifest 和附件哈希后再公开并更新 feed。
 
 正式发布必须从干净 tag 构建。CI 不允许在签名后修改 `.app` 内容。
 
