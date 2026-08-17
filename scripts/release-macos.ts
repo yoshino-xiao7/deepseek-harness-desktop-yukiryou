@@ -120,7 +120,9 @@ async function submitRelease(): Promise<void> {
     ]);
 
     await mkdir(diskImageRoot, { recursive: true });
-    run('ditto', [signedApp, join(diskImageRoot, `${productName}.app`)]);
+    const stagedApp = join(diskImageRoot, `${productName}.app`);
+    run('ditto', [signedApp, stagedApp]);
+    verifyApplicationSignature(stagedApp);
     await symlink('/Applications', join(diskImageRoot, 'Applications'));
     run('hdiutil', [
       'create',
@@ -204,6 +206,11 @@ async function finishRelease(): Promise<void> {
   const manifestPath = join(outputDirectory, 'release-manifest.json');
 
   run('ditto', ['-c', '-k', '--keepParent', state.signedApp, finalZip]);
+  const archiveVerificationRoot = join(state.temporaryRoot, 'zip-verification');
+  await mkdir(archiveVerificationRoot);
+  run('ditto', ['-x', '-k', finalZip, archiveVerificationRoot]);
+  verifyApplication(join(archiveVerificationRoot, `${productName}.app`));
+  await rm(archiveVerificationRoot, { recursive: true, force: true });
   await copyFile(state.diskImage, finalDmg);
   const checksums = [
     [basename(finalDmg), await sha256(finalDmg)],
@@ -312,9 +319,13 @@ async function validateNotaryCredentials(
 }
 
 function verifyApplication(path: string): void {
-  run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', path]);
+  verifyApplicationSignature(path);
   run('spctl', ['--assess', '--type', 'execute', '--verbose=4', path]);
   run('xcrun', ['stapler', 'validate', path]);
+}
+
+function verifyApplicationSignature(path: string): void {
+  run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', path]);
 }
 
 function verifyDiskImage(path: string): void {

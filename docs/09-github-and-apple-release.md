@@ -46,7 +46,8 @@ pnpm release:mac
 4. Apple 返回 Submission ID 后立即写入 `out/release/notarization-state.json` 并退出，不保持 `--wait` 长连接。
 5. 随时运行 `pnpm release:mac:finish` 查询同一个 ID；仍在处理就立即返回，不会重新提交。
 6. Apple 返回 `Accepted` 后，对 App 和 DMG 分别 staple，再执行 `codesign`、`spctl`、`hdiutil` 和 `stapler validate`。
-7. 从已 staple 的 App 生成自动更新 ZIP，并输出 DMG、ZIP、SHA-256 与包含 Git commit/公证 Submission ID 的 manifest。
+7. DMG staging 中的复制 App 必须再次通过签名验证；从已 staple 的 App 生成更新 ZIP 后，必须重新解包并通过签名、Gatekeeper 与 ticket 验证。
+8. 输出 DMG、ZIP、SHA-256 与包含 Git commit/公证 Submission ID 的 manifest。
 
 Apple 公证服务会为提交容器及其中的嵌套代码生成 ticket，所以不需要把 App、ZIP、DMG 分别排队提交。ZIP 本身不能 staple，因此必须在 App staple 完成后重新生成。签名和公证均在非 File Provider 管理的系统临时目录完成，避免 Documents 同步服务添加 FinderInfo/resource-fork 属性。
 

@@ -44,6 +44,10 @@ for (const bundle of bundles) {
   codesign(bundle, true);
 }
 codesign(absoluteAppPath, true);
+// A second outer-bundle pass avoids a stale CMS result after the main
+// executable was signed earlier in the sequential traversal. The first inode
+// can otherwise verify from the local cache while a byte-identical copy fails.
+codesign(absoluteAppPath, true);
 
 run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', absoluteAppPath]);
 process.stdout.write(
