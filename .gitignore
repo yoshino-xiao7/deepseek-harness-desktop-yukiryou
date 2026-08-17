@@ -1,0 +1,13 @@
+node_modules/
+.vite/
+**/.vite/
+out/
+dist/
+coverage/
+resources/runtime/
+.cache/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

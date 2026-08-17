@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "node": {
+    "version": "24.19.0",
+    "archives": {
+      "arm64": {
+        "file": "node-v24.19.0-darwin-arm64.tar.xz",
+        "sha256": "3f1cf157479c1480352083105e13faf9d008ede98e7e157746b6df940d197b94"
+      },
+      "x64": {
+        "file": "node-v24.19.0-darwin-x64.tar.xz",
+        "sha256": "d35e95230f46f6f0751df497c56622c6735e05d5e1fb1630996a005b9d328fe4"
+      }
+    }
+  },
+  "dsh": {
+    "version": "0.1.0-rc.6",
+    "integrity": "sha512-brpZfED7ieRa2PQ5tUxMhHrM1pb2CmKFVM/f6yMULBDMicahk+Z2OsHgTwTDnoiZm23Ftu9rQz0NN4pflaoJcg=="
+  },
+  "pnpm": {
+    "version": "10.34.5",
+    "integrity": "sha512-pO4F8vc2WCVb1qiYWcBlpFwopX2u+uLIk6Fo7itzFow3uR6D5X6mdlStA/AwMXRkMOi84442LgQmBfuKvIAZLg=="
+  }
+}

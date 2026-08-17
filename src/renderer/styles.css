@@ -1,0 +1,148 @@
+:root {
+  --harness-sidebar-width: 280px;
+  --toolbar-sidebar-background: #f7f8fa;
+  --toolbar-content-background: #fff;
+
+  color-scheme: light dark;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  background: #f5f7fb;
+  color: #172033;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #fff;
+  overflow: hidden;
+}
+
+.window-toolbar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  background: linear-gradient(
+    to right,
+    var(--toolbar-sidebar-background) var(--harness-sidebar-width),
+    var(--toolbar-content-background) var(--harness-sidebar-width)
+  );
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-content {
+  display: grid;
+  place-items: center;
+  height: calc(100vh - 44px);
+  background:
+    radial-gradient(circle at 50% 25%, rgb(64 105 255 / 12%), transparent 34rem),
+    #f5f7fb;
+}
+
+.loading-shell {
+  width: min(30rem, calc(100vw - 4rem));
+  text-align: center;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: 0 auto 1.5rem;
+  border-radius: 1.25rem;
+  color: white;
+  background: linear-gradient(145deg, #2355f5, #6438d8);
+  box-shadow: 0 1.25rem 3rem rgb(50 75 180 / 25%);
+  font-weight: 760;
+  letter-spacing: -0.04em;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin: 0.65rem 0 1.5rem;
+  color: #68728a;
+  font-size: 0.92rem;
+}
+
+.progress {
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: rgb(56 82 180 / 12%);
+}
+
+.progress span {
+  display: block;
+  width: 45%;
+  height: 100%;
+  border-radius: inherit;
+  background: #3d61ee;
+  animation: loading 1.35s ease-in-out infinite alternate;
+}
+
+.failure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+}
+
+.failure-actions[hidden] {
+  display: none;
+}
+
+.failure-actions a {
+  padding: 0.62rem 0.9rem;
+  border: 1px solid rgb(61 97 238 / 28%);
+  border-radius: 0.7rem;
+  color: #3155d7;
+  text-decoration: none;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.failure-actions a.primary {
+  border-color: #3d61ee;
+  color: white;
+  background: #3d61ee;
+}
+
+@keyframes loading {
+  from {
+    transform: translateX(-10%);
+  }
+
+  to {
+    transform: translateX(132%);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root,
+  body {
+    background: #10131a;
+    color: #eef1f8;
+  }
+
+  :root:not([data-appearance-scheme]) .window-toolbar {
+    --toolbar-sidebar-background: #10131a;
+    --toolbar-content-background: #10131a;
+  }
+
+  .window-content {
+    background:
+      radial-gradient(circle at 50% 25%, rgb(74 105 255 / 20%), transparent 34rem),
+      #10131a;
+  }
+
+  p {
+    color: #9ba4b8;
+  }
+}
