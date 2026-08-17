@@ -42,7 +42,7 @@ pnpm release:mac
 
 1. 验证版本号、Developer ID、公证凭据和干净 Git 工作区。
 2. 构建 arm64 App，并在系统临时目录中顺序签署所有嵌套 Mach-O 与 App bundle。
-3. 制作并签署 DMG；只把这个 DMG 提交 Apple 一次。
+3. 制作并签署 DMG；使用标准 S3 端点（`--no-s3-acceleration`）只提交一次，避免当前网络连接 Transfer Acceleration 端点时长时间无响应。
 4. Apple 返回 Submission ID 后立即写入 `out/release/notarization-state.json` 并退出，不保持 `--wait` 长连接。
 5. 随时运行 `pnpm release:mac:finish` 查询同一个 ID；仍在处理就立即返回，不会重新提交。
 6. Apple 返回 `Accepted` 后，对 App 和 DMG 分别 staple，再执行 `codesign`、`spctl`、`hdiutil` 和 `stapler validate`。

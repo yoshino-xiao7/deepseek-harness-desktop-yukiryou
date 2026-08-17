@@ -266,6 +266,7 @@ async function submitForNotarization(path: string): Promise<NotaryResult> {
     'submit',
     path,
     ...notaryCredentials,
+    '--no-s3-acceleration',
     '--output-format',
     'json',
   ]);
