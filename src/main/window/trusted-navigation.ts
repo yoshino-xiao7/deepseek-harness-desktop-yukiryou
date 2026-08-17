@@ -5,7 +5,11 @@ export type TrustedHarnessOrigin = string & {
 };
 
 export type NavigationDecision = 'allow' | 'open-external' | 'deny';
-export type LocalAction = 'retry' | 'open-logs' | 'copy-diagnostics';
+export type LocalAction =
+  | 'retry'
+  | 'open-logs'
+  | 'copy-diagnostics'
+  | 'export-diagnostics';
 
 export function classifyLocalAction(target: string): LocalAction | undefined {
   try {
@@ -21,7 +25,8 @@ export function classifyLocalAction(target: string): LocalAction | undefined {
     const action = parsed.pathname.slice(1);
     return action === 'retry' ||
       action === 'open-logs' ||
-      action === 'copy-diagnostics'
+      action === 'copy-diagnostics' ||
+      action === 'export-diagnostics'
       ? action
       : undefined;
   } catch {

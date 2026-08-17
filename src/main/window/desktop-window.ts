@@ -35,6 +35,7 @@ export interface DesktopWindowOptions {
   readonly onRetry: () => void;
   readonly onOpenLogs: () => void;
   readonly onCopyDiagnostics: () => void;
+  readonly onExportDiagnostics: () => void;
 }
 
 export function createDesktopWindow(
@@ -220,12 +221,13 @@ class ElectronDesktopWindow implements DesktopWindow {
   }
 
   #performLocalAction(
-    action: 'retry' | 'open-logs' | 'copy-diagnostics',
+    action: 'retry' | 'open-logs' | 'copy-diagnostics' | 'export-diagnostics',
   ): void {
     const callbacks = {
       retry: this.#options.onRetry,
       'open-logs': this.#options.onOpenLogs,
       'copy-diagnostics': this.#options.onCopyDiagnostics,
+      'export-diagnostics': this.#options.onExportDiagnostics,
     };
     callbacks[action]();
   }

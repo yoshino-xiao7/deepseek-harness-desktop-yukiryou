@@ -14,13 +14,26 @@ Release 必须在签名、公证与 staple 完成后创建，避免把当前未�
 
 ## Apple 开发者资料
 
-本机当前已安装 Xcode 与 `notarytool`，但 Keychain 尚无有效代码签名身份。正式发布前需要：
+本机已经完成 Developer ID 与 App Store Connect 公证凭据准备。发布构建通过环境变量注入凭据，任何私钥都不得写入仓库：
 
-1. 在 Apple Developer 的 Certificates, Identifiers & Profiles 创建 `Developer ID Application` 证书，并确保对应私钥与证书都安装在本机登录 Keychain。
-2. 提供 Apple Developer Team ID（可公开标识，不是密码）。
-3. 为公证准备 App Store Connect API Key：Issuer ID、Key ID 和 `.p8` 私钥；私钥只放入 Keychain 或 CI Secret，不提交仓库、不粘贴到日志。
-4. 为 Electron 主程序、Helpers 与内置 Node sidecar 配置 Hardened Runtime 和经过实际运行验证的最小 entitlements。
-5. 对 DMG/ZIP 执行 `notarytool` 上传、公证结果检查、`stapler` 与 Gatekeeper 验证。
+1. `MACOS_SIGN_IDENTITY`：登录 Keychain 中的 `Developer ID Application` 完整名称。
+2. `APPLE_API_KEY`：仓库外 `.p8` 私钥的绝对路径。
+3. `APPLE_API_KEY_ID`：团队 API Key ID。
+4. `APPLE_API_ISSUER`：团队 Issuer ID。
+
+内置 Harness Runtime 包含大量原生二进制与依赖文件。Electron Packager 的默认并发签名遍历可能触发 `EMFILE`，所以发布流程使用 `scripts/sign-macos-app.ts` 顺序识别并签署 Mach-O，再按从深到浅的顺序封装 Electron bundles。Hardened Runtime 使用 `resources/entitlements.mac.plist`，不包含调试专用的 `get-task-allow`。
+
+发布命令示例（实际值仅在当前 shell 或安全 CI Secret 中注入）：
+
+```bash
+pnpm package:mac -- --arch=arm64
+pnpm sign:mac -- \
+  --app="/private/tmp/release/DeepSeek YukiRyou.app" \
+  --identity="Developer ID Application: ... (...)" \
+  --entitlements="resources/entitlements.mac.plist"
+```
+
+签名和公证必须在非 File Provider 管理的临时目录完成，避免 Documents 同步服务添加 FinderInfo/resource-fork 属性。签名后用 `notarytool submit --wait` 上传临时 ZIP，Accepted 后对 `.app` 和最终 `.dmg` 执行 `stapler`。
 
 若账号不是 Account Holder，需要 Account Holder 创建 Developer ID 证书，或为管理员授予 cloud-managed Developer ID certificate access。
 

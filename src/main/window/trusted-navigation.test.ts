@@ -15,13 +15,16 @@ describe('trusted Harness navigation', () => {
     ).toBe('allow');
   });
 
-  it('accepts only the three exact local diagnostic actions', () => {
+  it('accepts only the exact local diagnostic actions', () => {
     expect(classifyLocalAction('dsh-desktop://action/retry')).toBe('retry');
     expect(classifyLocalAction('dsh-desktop://action/open-logs')).toBe(
       'open-logs',
     );
     expect(classifyLocalAction('dsh-desktop://action/copy-diagnostics')).toBe(
       'copy-diagnostics',
+    );
+    expect(classifyLocalAction('dsh-desktop://action/export-diagnostics')).toBe(
+      'export-diagnostics',
     );
     expect(classifyLocalAction('dsh-desktop://evil/retry')).toBeUndefined();
     expect(classifyLocalAction('dsh-desktop://action/delete')).toBeUndefined();

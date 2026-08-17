@@ -36,6 +36,7 @@
     "test:watch": "vitest",
     "runtime:vendor": "node scripts/vendor-runtime.ts",
     "runtime:verify": "node scripts/verify-runtime.ts",
+    "sign:mac": "node scripts/sign-macos-app.ts",
     "verify:release": "node scripts/verify-release.ts",
     "package:mac": "electron-forge package --platform=darwin",
     "make:mac": "electron-forge make --platform=darwin",

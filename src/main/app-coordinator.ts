@@ -1,10 +1,12 @@
-import { app, clipboard, Menu, shell } from 'electron';
+import { app, clipboard, dialog, Menu, shell } from 'electron';
 import { mkdir } from 'node:fs/promises';
+import { release } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { resolveRendererLocation } from './app-config.js';
 import { createAppLog, redact, type AppLog } from './diagnostics/app-log.js';
+import { createDiagnosticArchive } from './diagnostics/diagnostic-archive.js';
 import {
   createRuntimeSupervisor,
   type RuntimeFailure,
@@ -58,6 +60,7 @@ export class AppCoordinator {
       onRetry: () => void this.restartRuntime(),
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
+      onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
     });
     await this.#window.showLoading();
 
@@ -111,6 +114,48 @@ export class AppCoordinator {
         `Details: ${redact(failure?.message ?? 'No failure recorded')}`,
       ].join('\n'),
     );
+  }
+
+  async #exportDiagnostics(logDirectory: string): Promise<void> {
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
+    const result = await dialog.showSaveDialog({
+      title: '导出诊断包',
+      defaultPath: join(
+        app.getPath('downloads'),
+        `DeepSeek-YukiRyou-Diagnostics-${timestamp}.zip`,
+      ),
+      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+    });
+    if (result.canceled || result.filePath === undefined) {
+      return;
+    }
+
+    try {
+      this.#log?.write('diagnostics.export-requested');
+      await this.#log?.flush();
+      const failure = this.#lastFailure;
+      await createDiagnosticArchive({
+        destinationPath: result.filePath,
+        logDirectory,
+        metadata: {
+          application: app.name,
+          applicationVersion: app.getVersion(),
+          electronVersion: process.versions.electron,
+          harnessVersion: '0.1.0-rc.6',
+          architecture: process.arch,
+          macOSVersion: release(),
+          failureCode: failure?.code ?? 'none',
+          failureDetails: failure?.message ?? 'No failure recorded',
+          userHome: app.getPath('home'),
+        },
+      });
+      this.#log?.write('diagnostics.exported');
+      shell.showItemInFolder(result.filePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.#log?.write('diagnostics.export-failed', message);
+      dialog.showErrorBox('无法导出诊断包', '请打开日志查看详细信息。');
+    }
   }
 
   async restartRuntime(): Promise<void> {
@@ -187,6 +232,10 @@ export class AppCoordinator {
           {
             label: 'Open Logs',
             click: () => void shell.openPath(logDirectory),
+          },
+          {
+            label: 'Export Diagnostics…',
+            click: () => void this.#exportDiagnostics(logDirectory),
           },
           { type: 'separator' },
           { role: 'hide' },
