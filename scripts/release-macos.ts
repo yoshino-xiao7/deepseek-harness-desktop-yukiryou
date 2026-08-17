@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawn, spawnSync } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import {
   access,
@@ -10,7 +11,6 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
-import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,111 +24,177 @@ interface NotaryResult {
   readonly status?: string;
 }
 
+interface NotarizationState {
+  readonly schemaVersion: 1;
+  readonly submissionId: string;
+  readonly status: 'In Progress';
+  readonly productVersion: string;
+  readonly architecture: 'arm64';
+  readonly gitCommit: string;
+  readonly dirtyWorktree: boolean;
+  readonly temporaryRoot: string;
+  readonly signedApp: string;
+  readonly diskImage: string;
+  readonly submittedAt: string;
+}
+
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const packageManifest = JSON.parse(
-  await readFile(join(projectRoot, 'package.json'), 'utf8'),
-) as PackageManifest;
 const productName = 'DeepSeek YukiRyou';
-const architecture = 'arm64';
-const version = packageManifest.version;
-if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
-  throw new Error(`package.json contains an invalid release version: ${version}`);
-}
-const identity = requiredEnvironment('MACOS_SIGN_IDENTITY');
-const notaryCredentials = notaryCredentialArguments();
-await validateNotaryCredentials(notaryCredentials);
-const gitCommit = runCapture('git', ['rev-parse', 'HEAD'], projectRoot).trim();
-const gitStatus = runCapture('git', ['status', '--porcelain'], projectRoot).trim();
-if (gitStatus !== '' && process.env.MACOS_RELEASE_ALLOW_DIRTY !== 'true') {
-  throw new Error(
-    'Release builds require a clean Git worktree. Commit the changes or set MACOS_RELEASE_ALLOW_DIRTY=true for a non-publishable rehearsal.',
-  );
-}
+const architecture = 'arm64' as const;
 const outputDirectory = resolve(
   process.env.MACOS_RELEASE_OUTPUT ?? join(projectRoot, 'out', 'release'),
 );
-const appSource = resolve(
-  process.env.MACOS_RELEASE_APP ??
-    join(
-      projectRoot,
-      'out',
-      `${productName}-darwin-${architecture}`,
-      `${productName}.app`,
-    ),
-);
-const temporaryRoot = await mkdtemp(
-  join(tmpdir(), 'deepseek-yukiryou-release-'),
-);
-const signedApp = join(temporaryRoot, `${productName}.app`);
-const diskImageRoot = join(temporaryRoot, 'dmg-root');
-const temporaryDmg = join(temporaryRoot, `${productName}.dmg`);
-const finalDmg = join(
-  outputDirectory,
-  `${productName}-${version}-${architecture}.dmg`,
-);
-const finalZip = join(
-  outputDirectory,
-  `${productName}-darwin-${architecture}-${version}.zip`,
-);
-const checksumPath = join(outputDirectory, 'SHA256SUMS.txt');
-const manifestPath = join(outputDirectory, 'release-manifest.json');
-let releaseCompleted = false;
+const statePath = join(outputDirectory, 'notarization-state.json');
+const notaryCredentials = notaryCredentialArguments();
+await validateNotaryCredentials(notaryCredentials);
 
-try {
-  if (process.env.MACOS_RELEASE_SKIP_PACKAGE !== 'true') {
-    run('pnpm', ['package:mac', '--', '--arch=arm64'], projectRoot);
-  }
+if (process.argv.includes('--finish')) {
+  await finishRelease();
+} else {
+  await submitRelease();
+}
 
-  await mkdir(outputDirectory, { recursive: true });
-  run('ditto', [appSource, signedApp]);
-  run('xattr', ['-cr', signedApp]);
-  run(process.execPath, [
-    join(projectRoot, 'scripts', 'sign-macos-app.ts'),
-    `--app=${signedApp}`,
-    `--identity=${identity}`,
-    `--entitlements=${join(projectRoot, 'resources', 'entitlements.mac.plist')}`,
-  ]);
-
-  await mkdir(diskImageRoot, { recursive: true });
-  run('ditto', [signedApp, join(diskImageRoot, `${productName}.app`)]);
-  await symlink('/Applications', join(diskImageRoot, 'Applications'));
-  run('hdiutil', [
-    'create',
-    '-volname',
-    productName,
-    '-srcfolder',
-    diskImageRoot,
-    '-ov',
-    '-format',
-    'UDZO',
-    temporaryDmg,
-  ]);
-  run('codesign', [
-    '--force',
-    '--timestamp',
-    '--sign',
-    identity,
-    temporaryDmg,
-  ]);
-  run('hdiutil', ['verify', temporaryDmg]);
-
-  const notaryResult = await submitForNotarization(
-    temporaryDmg,
-    notaryCredentials,
-  );
-  if (notaryResult.status !== 'Accepted') {
+async function submitRelease(): Promise<void> {
+  if (await pathExists(statePath)) {
     throw new Error(
-      `Apple notarization returned ${notaryResult.status ?? 'an unknown status'}`,
+      `An existing notarization is recorded at ${statePath}. Run pnpm release:mac:finish instead of submitting again.`,
     );
   }
 
-  run('xcrun', ['stapler', 'staple', signedApp]);
-  run('xcrun', ['stapler', 'staple', temporaryDmg]);
-  verifyApplication(signedApp);
-  verifyDiskImage(temporaryDmg);
+  const packageManifest = JSON.parse(
+    await readFile(join(projectRoot, 'package.json'), 'utf8'),
+  ) as PackageManifest;
+  const version = packageManifest.version;
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error(`package.json contains an invalid release version: ${version}`);
+  }
 
-  run('ditto', ['-c', '-k', '--keepParent', signedApp, finalZip]);
-  await copyFile(temporaryDmg, finalDmg);
+  const identity = requiredEnvironment('MACOS_SIGN_IDENTITY');
+  const gitCommit = runCapture('git', ['rev-parse', 'HEAD'], projectRoot).trim();
+  const gitStatus = runCapture('git', ['status', '--porcelain'], projectRoot).trim();
+  if (gitStatus !== '' && process.env.MACOS_RELEASE_ALLOW_DIRTY !== 'true') {
+    throw new Error(
+      'Release builds require a clean Git worktree. Commit the changes or set MACOS_RELEASE_ALLOW_DIRTY=true for a non-publishable rehearsal.',
+    );
+  }
+
+  const appSource = resolve(
+    process.env.MACOS_RELEASE_APP ??
+      join(
+        projectRoot,
+        'out',
+        `${productName}-darwin-${architecture}`,
+        `${productName}.app`,
+      ),
+  );
+  const temporaryRoot = await mkdtemp(
+    join(tmpdir(), 'deepseek-yukiryou-release-'),
+  );
+  const signedApp = join(temporaryRoot, `${productName}.app`);
+  const diskImageRoot = join(temporaryRoot, 'dmg-root');
+  const diskImage = join(temporaryRoot, `${productName}.dmg`);
+  let submissionRecorded = false;
+
+  try {
+    if (process.env.MACOS_RELEASE_SKIP_PACKAGE !== 'true') {
+      run('pnpm', ['package:mac', '--', '--arch=arm64'], projectRoot);
+    }
+
+    await mkdir(outputDirectory, { recursive: true });
+    run('ditto', [appSource, signedApp]);
+    run('xattr', ['-cr', signedApp]);
+    run(process.execPath, [
+      join(projectRoot, 'scripts', 'sign-macos-app.ts'),
+      `--app=${signedApp}`,
+      `--identity=${identity}`,
+      `--entitlements=${join(projectRoot, 'resources', 'entitlements.mac.plist')}`,
+    ]);
+
+    await mkdir(diskImageRoot, { recursive: true });
+    run('ditto', [signedApp, join(diskImageRoot, `${productName}.app`)]);
+    await symlink('/Applications', join(diskImageRoot, 'Applications'));
+    run('hdiutil', [
+      'create',
+      '-volname',
+      productName,
+      '-srcfolder',
+      diskImageRoot,
+      '-ov',
+      '-format',
+      'UDZO',
+      diskImage,
+    ]);
+    run('codesign', ['--force', '--timestamp', '--sign', identity, diskImage]);
+    run('hdiutil', ['verify', diskImage]);
+
+    const notaryResult = await submitForNotarization(diskImage);
+    if (notaryResult.id === undefined || notaryResult.id.trim() === '') {
+      throw new Error('Apple accepted the upload but returned no Submission ID');
+    }
+
+    const state: NotarizationState = {
+      schemaVersion: 1,
+      submissionId: notaryResult.id,
+      status: 'In Progress',
+      productVersion: version,
+      architecture,
+      gitCommit,
+      dirtyWorktree: gitStatus !== '',
+      temporaryRoot,
+      signedApp,
+      diskImage,
+      submittedAt: new Date().toISOString(),
+    };
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, {
+      mode: 0o600,
+    });
+    submissionRecorded = true;
+    process.stdout.write(
+      `Notarization submitted once as ${state.submissionId}. State saved to ${statePath}.\nRun pnpm release:mac:finish later; no long-lived connection is required.\n`,
+    );
+  } finally {
+    if (!submissionRecorded) {
+      process.stderr.write(
+        `Release submission failed; intermediate files were preserved at ${temporaryRoot}\n`,
+      );
+    }
+  }
+}
+
+async function finishRelease(): Promise<void> {
+  const state = await readState();
+  const result = await notarizationInfo(state.submissionId);
+
+  if (result.status === 'In Progress') {
+    process.stdout.write(
+      `Notarization ${state.submissionId} is still In Progress. No files were resubmitted.\n`,
+    );
+    return;
+  }
+  if (result.status !== 'Accepted') {
+    throw new Error(
+      `Apple notarization ${state.submissionId} returned ${result.status ?? 'an unknown status'}. The preserved workspace is ${state.temporaryRoot}`,
+    );
+  }
+
+  run('xcrun', ['stapler', 'staple', state.signedApp]);
+  run('xcrun', ['stapler', 'staple', state.diskImage]);
+  verifyApplication(state.signedApp);
+  verifyDiskImage(state.diskImage);
+
+  const finalDmg = join(
+    outputDirectory,
+    `${productName}-${state.productVersion}-${state.architecture}.dmg`,
+  );
+  const finalZip = join(
+    outputDirectory,
+    `${productName}-darwin-${state.architecture}-${state.productVersion}.zip`,
+  );
+  const checksumPath = join(outputDirectory, 'SHA256SUMS.txt');
+  const manifestPath = join(outputDirectory, 'release-manifest.json');
+
+  run('ditto', ['-c', '-k', '--keepParent', state.signedApp, finalZip]);
+  await copyFile(state.diskImage, finalDmg);
   const checksums = [
     [basename(finalDmg), await sha256(finalDmg)],
     [basename(finalZip), await sha256(finalZip)],
@@ -142,11 +208,11 @@ try {
     `${JSON.stringify(
       {
         schemaVersion: 1,
-        version,
-        architecture,
-        gitCommit,
-        dirtyWorktree: gitStatus !== '',
-        notarizationSubmissionId: notaryResult.id,
+        version: state.productVersion,
+        architecture: state.architecture,
+        gitCommit: state.gitCommit,
+        dirtyWorktree: state.dirtyWorktree,
+        notarizationSubmissionId: state.submissionId,
         artifacts: checksums.map(([file, sha256Digest]) => ({
           file,
           sha256: sha256Digest,
@@ -156,28 +222,52 @@ try {
       2,
     )}\n`,
   );
-  releaseCompleted = true;
+  await rm(statePath, { force: true });
+  await rm(state.temporaryRoot, { recursive: true, force: true });
   process.stdout.write(`Release artifacts ready in ${outputDirectory}\n`);
-} finally {
-  if (releaseCompleted) {
-    await rm(temporaryRoot, { recursive: true, force: true });
-  } else {
-    process.stderr.write(
-      `Release failed; intermediate files were preserved at ${temporaryRoot}\n`,
-    );
-  }
 }
 
-async function submitForNotarization(
-  path: string,
-  credentialArguments: readonly string[],
-): Promise<NotaryResult> {
+async function readState(): Promise<NotarizationState> {
+  let state: NotarizationState;
+  try {
+    state = JSON.parse(await readFile(statePath, 'utf8')) as NotarizationState;
+  } catch (error) {
+    throw new Error(
+      `Unable to read ${statePath}. Submit with pnpm release:mac first.`,
+      { cause: error },
+    );
+  }
+  if (
+    state.schemaVersion !== 1 ||
+    typeof state.submissionId !== 'string' ||
+    typeof state.signedApp !== 'string' ||
+    typeof state.diskImage !== 'string'
+  ) {
+    throw new Error(`Invalid notarization state in ${statePath}`);
+  }
+  await access(state.signedApp);
+  await access(state.diskImage);
+  return state;
+}
+
+async function submitForNotarization(path: string): Promise<NotaryResult> {
   const output = await runStreaming('xcrun', [
     'notarytool',
     'submit',
     path,
-    ...credentialArguments,
-    '--wait',
+    ...notaryCredentials,
+    '--output-format',
+    'json',
+  ]);
+  return JSON.parse(output) as NotaryResult;
+}
+
+async function notarizationInfo(submissionId: string): Promise<NotaryResult> {
+  const output = await runStreaming('xcrun', [
+    'notarytool',
+    'info',
+    submissionId,
+    ...notaryCredentials,
     '--output-format',
     'json',
   ]);
@@ -239,6 +329,15 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function run(command: string, arguments_: readonly string[], cwd?: string): void {
   const result = spawnSync(command, arguments_, {
     cwd,
@@ -290,9 +389,11 @@ async function runStreaming(
     child.once('error', rejectPromise);
     child.once('close', (code) => {
       if (code === 0) resolvePromise(stdout);
-      else rejectPromise(
-        new Error(`${command} failed with status ${String(code)}: ${stderr}`),
-      );
+      else {
+        rejectPromise(
+          new Error(`${command} failed with status ${String(code)}: ${stderr}`),
+        );
+      }
     });
   });
 }

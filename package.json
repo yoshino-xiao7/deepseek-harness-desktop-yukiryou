@@ -40,6 +40,7 @@
     "runtime:verify": "node scripts/verify-runtime.ts",
     "sign:mac": "node scripts/sign-macos-app.ts",
     "release:mac": "node scripts/release-macos.ts",
+    "release:mac:finish": "node scripts/release-macos.ts --finish",
     "verify:release": "node scripts/verify-release.ts",
     "package:mac": "electron-forge package --platform=darwin",
     "make:mac": "electron-forge make --platform=darwin",

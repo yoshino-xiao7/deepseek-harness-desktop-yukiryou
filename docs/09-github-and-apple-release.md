@@ -43,8 +43,10 @@ pnpm release:mac
 1. 验证版本号、Developer ID、公证凭据和干净 Git 工作区。
 2. 构建 arm64 App，并在系统临时目录中顺序签署所有嵌套 Mach-O 与 App bundle。
 3. 制作并签署 DMG；只把这个 DMG 提交 Apple 一次。
-4. Apple 返回 `Accepted` 后，对 App 和 DMG 分别 staple，再执行 `codesign`、`spctl`、`hdiutil` 和 `stapler validate`。
-5. 从已 staple 的 App 生成自动更新 ZIP，并输出 DMG、ZIP、SHA-256 与包含 Git commit/公证 Submission ID 的 manifest。
+4. Apple 返回 Submission ID 后立即写入 `out/release/notarization-state.json` 并退出，不保持 `--wait` 长连接。
+5. 随时运行 `pnpm release:mac:finish` 查询同一个 ID；仍在处理就立即返回，不会重新提交。
+6. Apple 返回 `Accepted` 后，对 App 和 DMG 分别 staple，再执行 `codesign`、`spctl`、`hdiutil` 和 `stapler validate`。
+7. 从已 staple 的 App 生成自动更新 ZIP，并输出 DMG、ZIP、SHA-256 与包含 Git commit/公证 Submission ID 的 manifest。
 
 Apple 公证服务会为提交容器及其中的嵌套代码生成 ticket，所以不需要把 App、ZIP、DMG 分别排队提交。ZIP 本身不能 staple，因此必须在 App staple 完成后重新生成。签名和公证均在非 File Provider 管理的系统临时目录完成，避免 Documents 同步服务添加 FinderInfo/resource-fork 属性。
 
@@ -56,7 +58,7 @@ Apple 公证服务会为提交容器及其中的嵌套代码生成 ticket，所�
 - `MACOS_RELEASE_OUTPUT=/absolute/path`：改变最终输出目录。
 - `MACOS_RELEASE_ALLOW_DIRTY=true`：允许脏工作区；manifest 会明确标记，禁止将这种产物公开发布。
 
-失败时脚本会打印并保留 `/private/var/.../deepseek-yukiryou-release-*` 临时目录。查清问题后手工删除；成功时自动清理。不要绕过脚本手工补做另一份公证。
+提交成功后，状态文件和 `/private/var/.../deepseek-yukiryou-release-*` 临时目录会保留到 `release:mac:finish` 完成；断网、关闭终端或重启电脑均不需要重提。失败时脚本会打印保留目录，成功生成最终产物后才自动清理。不要绕过脚本手工补做另一份公证。
 
 GitHub Release 中的更新 ZIP 必须保持 `DeepSeek YukiRyou-darwin-arm64-<version>.zip` 命名，以便 `update.electronjs.org` 按 `darwin-arm64` 精确选择。更新器只消费经过 Developer ID 签名与 Apple 公证的 ZIP，不上传开发构建。
 
