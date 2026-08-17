@@ -31,6 +31,7 @@ webPreferences: {
 
 - 本地顶栏 renderer 与 Harness 使用不同的 webContents；Harness 只加载到下方 `WebContentsView`，不向其 DOM 注入拖动层或样式。隔离 preload 只读观察侧栏宽度，并通过固定 IPC channel 上报数值；主进程校验数值有限且位于当前窗口宽度内后才转发给本地顶栏。
 - 外观与关于页使用 Harness 官方插件插槽。桌面扩展随应用离线打包，只获得 Harness 的 slots、locale 和 theme 服务，不暴露 Electron/Node API，也不通过任意用户路径加载代码。外观同步 IPC 只接受 `light|dark` 和浏览器归一化的 `rgb/rgba` 颜色，拒绝选择器、CSS 代码、URL 与任意属性。
+- 启动恢复只检查 Runtime Home 根目录下的常规文件 `settings.yaml`，使用与 Harness 相同的结构化 YAML 解析器。仅语法损坏或根节点不是映射时触发恢复；原文件以原权限重命名保存，新的空设置文件使用 `0600`，会话、凭据、工作区缓存和符号链接均不在自动恢复范围内。
 - V1 Harness UI 不需要 preload 接口；若新增，只通过 `contextBridge` 暴露窄、可验证、无任意路径/命令参数的能力。
 - 使用 `will-navigate` 拒绝非当前可信 origin。
 - `setWindowOpenHandler` 默认 deny；允许的 `https:` 外链交给系统浏览器。

@@ -1,12 +1,13 @@
 import { app, clipboard, dialog, Menu, shell } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import { release } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { resolveRendererLocation } from './app-config.js';
 import { createAppLog, redact, type AppLog } from './diagnostics/app-log.js';
 import { createDiagnosticArchive } from './diagnostics/diagnostic-archive.js';
+import { recoverInvalidPreferences } from './preferences/preferences-recovery.js';
 import {
   createRuntimeSupervisor,
   type RuntimeFailure,
@@ -52,6 +53,7 @@ export class AppCoordinator {
     const logDirectory = join(userData, 'logs');
     await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
     this.#log = await createAppLog(logDirectory);
+    const recoveredPreferences = await this.#recoverPreferences(runtimeHome);
 
     const loadingLocation = rendererLocation();
     this.#window = createDesktopWindow({
@@ -63,6 +65,9 @@ export class AppCoordinator {
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
     });
     await this.#window.showLoading();
+    if (recoveredPreferences !== undefined) {
+      this.#notifyPreferenceRecovery(recoveredPreferences);
+    }
 
     const runtimeRoot = app.isPackaged
       ? join(process.resourcesPath, 'runtime')
@@ -114,6 +119,52 @@ export class AppCoordinator {
         `Details: ${redact(failure?.message ?? 'No failure recorded')}`,
       ].join('\n'),
     );
+  }
+
+  async #recoverPreferences(runtimeHome: string): Promise<string | undefined> {
+    try {
+      const result = await recoverInvalidPreferences(
+        join(runtimeHome, 'settings.yaml'),
+      );
+      if (result.status === 'recovered') {
+        this.#log?.write(
+          'preferences.recovered',
+          `backup=${result.backupPath} reason=${result.reason}`,
+        );
+        return result.backupPath;
+      }
+    } catch (error) {
+      this.#log?.write(
+        'preferences.recovery-failed',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    return undefined;
+  }
+
+  #notifyPreferenceRecovery(backupPath: string): void {
+    void dialog
+      .showMessageBox({
+        type: 'warning',
+        title: '偏好设置已恢复',
+        message: '检测到损坏的偏好设置，已恢复为默认值。',
+        detail: `原文件已安全备份为 ${basename(backupPath)}。会话、凭据和工作区数据没有改动。`,
+        buttons: ['继续', '在 Finder 中显示备份'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      })
+      .then(({ response }) => {
+        if (response === 1) {
+          shell.showItemInFolder(backupPath);
+        }
+      })
+      .catch((error: unknown) => {
+        this.#log?.write(
+          'preferences.recovery-notification-failed',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
   }
 
   async #exportDiagnostics(logDirectory: string): Promise<void> {

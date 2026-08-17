@@ -18,13 +18,14 @@
 - 关于页展示开发者 GitHub `yoshino-xiao7`，点击后由系统浏览器打开主页。
 - 运行时意外退出最多自动重启两次；失败页支持手动重试、打开日志和复制脱敏诊断。
 - 应用日志按 2 MiB 自动轮转并保留 3 份历史；故障页和应用菜单可导出 ZIP 诊断包，包内仅包含脱敏后的环境摘要与桌面日志。
+- 启动时校验 Harness `settings.yaml`；语法损坏或根节点类型错误时保留带时间戳的 `.corrupt-*` 原文件，创建权限为 `0600` 的空设置并提示用户，会话、凭据与工作区数据不受影响。
 - Apple Silicon `.app`、DMG 和 ZIP 构建成功；打包应用真实启动官方 Harness 的 Playwright 测试通过。
 - 运行时生产依赖审计为 0 个已知漏洞；内置 pnpm 已从存在高危公告的 10.33.2 升级到 10.34.5。
 
 ## 自动验证现状
 
 ```text
-Unit:        27 passed
+Unit:        30 passed
 Integration: 4 passed（fake Harness、真实 dsh、内置 pnpm、打包契约）
 E2E arm64:   1 passed（真实打包应用 + 官方 Harness + 外观/关于设置 + Harness/顶栏主题同步 + 侧栏动画逐帧同步 + 拖动区域 + Electron 隔离选项）
 Artifacts:   arm64 DMG + ZIP generated
@@ -50,7 +51,6 @@ Artifacts:   arm64 DMG + ZIP generated
 
 ## 尚未完成的非发布项
 
-- 损坏偏好文件检测与恢复。
 - renderer 崩溃的独立重建测试、100 次启停压力测试和 8 小时 soak test。
 - Harness 缺少已验证的稳定任务事件接口，因此通知功能按方案延期，不使用 DOM 文本猜测。
 - Intel 原生机器上的 x64 E2E；当前用户设备与交付目标为 Apple Silicon。
