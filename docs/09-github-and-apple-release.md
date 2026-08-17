@@ -35,6 +35,8 @@ pnpm sign:mac -- \
 
 签名和公证必须在非 File Provider 管理的临时目录完成，避免 Documents 同步服务添加 FinderInfo/resource-fork 属性。签名后用 `notarytool submit --wait` 上传临时 ZIP，Accepted 后对 `.app` 和最终 `.dmg` 执行 `stapler`。
 
+GitHub Release 中的更新 ZIP 必须保持 `DeepSeek YukiRyou-darwin-arm64-<version>.zip` 命名，以便 `update.electronjs.org` 按 `darwin-arm64` 精确选择。更新器只消费经过 Developer ID 签名与 Apple 公证的 ZIP，不上传开发构建。
+
 若账号不是 Account Holder，需要 Account Holder 创建 Developer ID 证书，或为管理员授予 cloud-managed Developer ID certificate access。
 
 ## 发布验证

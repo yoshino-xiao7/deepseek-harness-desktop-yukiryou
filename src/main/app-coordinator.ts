@@ -17,6 +17,11 @@ import { createRuntimeRecoveryPolicy } from './runtime/runtime-recovery-policy.j
 import { createHarnessRuntimeCommand } from './runtime/runtime-command.js';
 import { ensureDesktopSettingsExtension } from './runtime/runtime-extension.js';
 import {
+  createAppUpdater,
+  type AppUpdater,
+} from './update/app-updater.js';
+import { isUpdaterSupported } from './update/update-config.js';
+import {
   createDesktopWindow,
   type DesktopWindow,
 } from './window/desktop-window.js';
@@ -27,6 +32,7 @@ export class AppCoordinator {
   #window: DesktopWindow | undefined;
   #runtime: RuntimeSupervisor | undefined;
   #log: AppLog | undefined;
+  #updater: AppUpdater | undefined;
   #quitting = false;
   readonly #recovery = createRuntimeRecoveryPolicy([250, 1_000]);
   #recovering = false;
@@ -54,6 +60,19 @@ export class AppCoordinator {
     await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
     this.#log = await createAppLog(logDirectory);
     const recoveredPreferences = await this.#recoverPreferences(runtimeHome);
+    this.#updater = createAppUpdater({
+      enabled: isUpdaterSupported({
+        isPackaged: app.isPackaged,
+        platform: process.platform,
+        architecture: process.arch,
+      }),
+      currentVersion: app.getVersion(),
+      platform: process.platform,
+      architecture: process.arch,
+      onDownloaded: (releaseName, releaseNotes) =>
+        void this.#offerUpdateInstall(releaseName, releaseNotes),
+      onError: (error) => this.#handleUpdaterError(error),
+    });
 
     const loadingLocation = rendererLocation();
     this.#window = createDesktopWindow({
@@ -63,6 +82,8 @@ export class AppCoordinator {
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
+      onRendererCrash: (target, reason) =>
+        this.#log?.write('renderer.crashed', `target=${target} reason=${reason}`),
     });
     await this.#window.showLoading();
     if (recoveredPreferences !== undefined) {
@@ -216,6 +237,91 @@ export class AppCoordinator {
     await this.#startRuntime();
   }
 
+  async #checkForUpdates(): Promise<void> {
+    this.#log?.write('update.check-requested');
+    try {
+      const result = await this.#updater?.checkForUpdates();
+      if (result === undefined) {
+        return;
+      }
+      const messages = {
+        disabled: {
+          message: '开发版本不执行自动更新',
+          detail: '自动更新仅在经过 Developer ID 签名的正式 Apple Silicon 版本中启用。',
+        },
+        busy: {
+          message: '正在检查更新',
+          detail: '当前检查或下载尚未完成，请稍后再试。',
+        },
+        'not-available': {
+          message: 'DeepSeek YukiRyou 已是最新版本',
+          detail: `当前版本：${app.getVersion()}`,
+        },
+        available: {
+          message: '发现新版本',
+          detail: '更新正在后台下载，完成后会提示你重启安装。',
+        },
+      } as const;
+      await dialog.showMessageBox({
+        type: 'info',
+        title: '软件更新',
+        ...messages[result.status],
+        buttons: ['好'],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.#log?.write('update.check-failed', message);
+      await dialog.showMessageBox({
+        type: 'error',
+        title: '软件更新',
+        message: '暂时无法检查更新',
+        detail: '请检查网络连接，或稍后通过 GitHub Releases 手动下载。',
+        buttons: ['好'],
+      });
+    }
+  }
+
+  #handleUpdaterError(error: Error): void {
+    this.#log?.write('update.error', error.message);
+    dialog.showErrorBox(
+      '更新下载失败',
+      '请检查网络连接，或通过 GitHub Releases 手动下载安装。',
+    );
+  }
+
+  async #offerUpdateInstall(
+    releaseName: string,
+    releaseNotes: string,
+  ): Promise<void> {
+    this.#log?.write('update.downloaded', `release=${releaseName}`);
+    const { response } = await dialog.showMessageBox({
+      type: 'info',
+      title: '更新已下载',
+      message: `DeepSeek YukiRyou ${releaseName} 已准备好`,
+      detail: releaseNotes.slice(0, 2_000),
+      buttons: ['重启并安装', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (response === 0) {
+      await this.#installDownloadedUpdate();
+    }
+  }
+
+  async #installDownloadedUpdate(): Promise<void> {
+    if (this.#quitting) {
+      return;
+    }
+    this.#quitting = true;
+    this.#log?.write('update.installing');
+    await this.#runtime?.stop('update');
+    this.#window?.dispose();
+    this.#updater?.dispose();
+    await this.#log?.close();
+    this.#updater?.quitAndInstall();
+  }
+
   async #recoverRuntime(failure: RuntimeFailure): Promise<void> {
     if (this.#recovering || this.#quitting) {
       return;
@@ -245,6 +351,7 @@ export class AppCoordinator {
     this.#log?.write('app.quit');
     await this.#runtime?.stop('quit');
     this.#window?.dispose();
+    this.#updater?.dispose();
     await this.#log?.close();
     app.quit();
   }
@@ -287,6 +394,10 @@ export class AppCoordinator {
           {
             label: 'Export Diagnostics…',
             click: () => void this.#exportDiagnostics(logDirectory),
+          },
+          {
+            label: 'Check for Updates…',
+            click: () => void this.#checkForUpdates(),
           },
           { type: 'separator' },
           { role: 'hide' },

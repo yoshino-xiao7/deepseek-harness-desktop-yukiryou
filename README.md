@@ -28,6 +28,7 @@ DeepSeek YukiRyou 将官方 `@deepseek-ai/dsh` Web UI 封装为独立 macOS 应�
 - 单实例、关闭隐藏、Dock 恢复、运行时重启和结构化故障诊断。
 - 有界日志轮转，以及经过凭据与用户目录脱敏的 ZIP 诊断包导出。
 - 启动时校验 Harness 偏好文件；损坏时保留时间戳备份并安全恢复默认设置。
+- 正式签名版本支持从 GitHub Releases 手动检查更新、后台下载并重启安装。
 
 ## 环境要求
 

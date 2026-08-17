@@ -14,6 +14,10 @@ import {
 import { createDesktopWindowOptions } from './desktop-window-options.js';
 import { harnessContentBounds } from './desktop-window-layout.js';
 import {
+  createRendererRecoveryPolicy,
+  type RendererTarget,
+} from './renderer-recovery-policy.js';
+import {
   classifyLocalAction,
   classifyNavigation,
   createTrustedHarnessOrigin,
@@ -36,6 +40,7 @@ export interface DesktopWindowOptions {
   readonly onOpenLogs: () => void;
   readonly onCopyDiagnostics: () => void;
   readonly onExportDiagnostics: () => void;
+  readonly onRendererCrash: (target: RendererTarget, reason: string) => void;
 }
 
 export function createDesktopWindow(
@@ -52,6 +57,13 @@ class ElectronDesktopWindow implements DesktopWindow {
   #trustedOrigin: TrustedHarnessOrigin | undefined;
   #disposing = false;
   #showingHarness = false;
+  #sidebarWidth: number | undefined;
+  #appearance: ReturnType<typeof validatedAppearanceSnapshot>;
+  readonly #rendererRecovery = createRendererRecoveryPolicy(
+    [250, 1_000],
+    30_000,
+  );
+  readonly #recoveringRenderers = new Set<RendererTarget>();
 
   constructor(options: DesktopWindowOptions) {
     this.#options = options;
@@ -80,12 +92,25 @@ class ElectronDesktopWindow implements DesktopWindow {
         this.#window.hide();
       }
     });
+    this.#window.webContents.on('did-finish-load', () =>
+      this.#restoreToolbarState(),
+    );
+    this.#window.webContents.on('render-process-gone', (_event, details) => {
+      void this.#recoverRenderer('toolbar', details.reason);
+    });
+    this.#harnessView.webContents.on(
+      'render-process-gone',
+      (_event, details) => {
+        void this.#recoverRenderer('harness', details.reason);
+      },
+    );
     this.#installNavigationPolicy();
     this.#installSidebarWidthSync();
     this.#installAppearanceSync();
   }
 
   async showLoading(): Promise<void> {
+    this.#rendererRecovery.reset('toolbar');
     this.#trustedOrigin = undefined;
     this.#showingHarness = false;
     this.#harnessView.setVisible(false);
@@ -95,6 +120,7 @@ class ElectronDesktopWindow implements DesktopWindow {
   async showHarness(origin: string): Promise<void> {
     const trustedOrigin = createTrustedHarnessOrigin(origin);
     this.#trustedOrigin = trustedOrigin;
+    this.#rendererRecovery.reset('harness');
     await this.#harnessView.webContents.loadURL(trustedOrigin);
     this.#showingHarness = true;
     this.#harnessView.setVisible(true);
@@ -134,6 +160,52 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#window.contentView.removeChildView(this.#harnessView);
     this.#harnessView.webContents.close();
     this.#window.destroy();
+  }
+
+  async #recoverRenderer(target: RendererTarget, reason: string): Promise<void> {
+    if (this.#disposing || this.#recoveringRenderers.has(target)) {
+      return;
+    }
+    this.#recoveringRenderers.add(target);
+    this.#options.onRendererCrash(target, reason);
+    try {
+      while (!this.#disposing) {
+        const delayMs = this.#rendererRecovery.nextDelay(target);
+        if (delayMs === undefined) {
+          await this.showFailure({
+            code: 'renderer-crashed',
+            message: `${target} renderer repeatedly crashed: ${reason}`,
+          });
+          return;
+        }
+        await delay(delayMs);
+        try {
+          if (target === 'toolbar') {
+            const currentUrl = this.#window.webContents.getURL();
+            await this.#window.loadURL(
+              isLocalRendererNavigation(this.#loadingUrl, currentUrl)
+                ? currentUrl
+                : this.#loadingUrl,
+            );
+          } else {
+            const trustedOrigin = this.#trustedOrigin;
+            if (!this.#showingHarness || trustedOrigin === undefined) {
+              return;
+            }
+            this.#harnessView.setVisible(false);
+            await this.#harnessView.webContents.loadURL(trustedOrigin);
+            this.#harnessView.setVisible(true);
+            this.#harnessView.webContents.focus();
+          }
+          return;
+        } catch (error) {
+          reason = error instanceof Error ? error.message : String(error);
+          this.#options.onRendererCrash(target, reason);
+        }
+      }
+    } finally {
+      this.#recoveringRenderers.delete(target);
+    }
   }
 
   #installNavigationPolicy(): void {
@@ -188,6 +260,7 @@ class ElectronDesktopWindow implements DesktopWindow {
           this.#window.contentView.getBounds().width,
         );
         if (width !== undefined) {
+          this.#sidebarWidth = width;
           this.#window.webContents.send(
             TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
             width,
@@ -206,6 +279,7 @@ class ElectronDesktopWindow implements DesktopWindow {
         }
         const appearance = validatedAppearanceSnapshot(value);
         if (appearance !== undefined) {
+          this.#appearance = appearance;
           this.#window.webContents.send(
             TOOLBAR_APPEARANCE_CHANNEL,
             appearance,
@@ -213,6 +287,21 @@ class ElectronDesktopWindow implements DesktopWindow {
         }
       },
     );
+  }
+
+  #restoreToolbarState(): void {
+    if (this.#sidebarWidth !== undefined) {
+      this.#window.webContents.send(
+        TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
+        this.#sidebarWidth,
+      );
+    }
+    if (this.#appearance !== undefined) {
+      this.#window.webContents.send(
+        TOOLBAR_APPEARANCE_CHANNEL,
+        this.#appearance,
+      );
+    }
   }
 
   #layoutHarnessView(): void {
@@ -238,6 +327,10 @@ class ElectronDesktopWindow implements DesktopWindow {
     }
     return isLocalRendererNavigation(this.#loadingUrl, target) ? 'allow' : 'deny';
   }
+}
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function isLocalRendererNavigation(rendererUrl: string, target: string): boolean {

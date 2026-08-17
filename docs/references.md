@@ -9,6 +9,6 @@
 - [Electron Packaging](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging)：打包和签名的官方流程。
 - [Electron Distribution Overview](https://www.electronjs.org/docs/latest/tutorial/distribution-overview)：发布与更新概览。
 - [Electron autoUpdater](https://www.electronjs.org/docs/latest/api/auto-updater/)：macOS 自动更新要求应用已签名。
+- [update.electronjs.org](https://github.com/electron/update.electronjs.org)：公开 GitHub Release 的平台/架构 feed 路径与 macOS ZIP 命名规则。
 - [Electron Notifications](https://www.electronjs.org/docs/latest/tutorial/notifications)：macOS 通知要求代码签名。
 - [Electron Context Isolation glossary](https://www.electronjs.org/docs/latest/glossary/)：renderer 隔离原则。
-

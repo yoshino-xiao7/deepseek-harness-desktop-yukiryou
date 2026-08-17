@@ -6,7 +6,8 @@ export type RuntimeFailureCode =
   | 'spawn-failed'
   | 'exited-before-ready'
   | 'unexpected-exit'
-  | 'startup-timeout';
+  | 'startup-timeout'
+  | 'renderer-crashed';
 
 export interface RuntimeFailure {
   readonly code: RuntimeFailureCode;

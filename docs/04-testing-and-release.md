@@ -35,6 +35,15 @@
 - Runtime 崩溃后恢复；超过重试上限显示诊断页。
 - Quit 后不存在本应用拥有的子进程。
 
+### 稳定性命令
+
+```bash
+pnpm test:stress # 100 次启动、就绪、停止与端口回收
+pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
+```
+
+日常 `test:integration` 会执行一次压力循环和 100ms soak 冒烟；正式的 8 小时 soak 属于发布候选验证，不在每次开发检查中阻塞运行。
+
 ### 手工发布矩阵
 
 | 维度 | 必测值 |
@@ -78,6 +87,7 @@
 ## 发布与回滚
 
 - 更新默认分批：先手动下载验证，再开放自动检查。
+- V1 使用 `https://update.electronjs.org/yoshino-xiao7/deepseek-yukiryou/darwin-arm64/<version>` 读取公开 GitHub Release；ZIP 文件名必须同时包含 `darwin` 与 `arm64`。
 - 更新 feed 保留上一个稳定版本下载链接和校验值。
 - 桌面偏好迁移采用“读取旧版、写入新临时文件、原子替换”；失败则回退默认偏好。
 - 不自动降级 Harness 数据格式。若新版 dsh 写入不可逆格式，发布前必须提供备份/恢复策略，否则不升级该运行时。

@@ -18,6 +18,8 @@ pnpm typecheck
 pnpm test
 pnpm test:integration
 pnpm test:e2e
+pnpm test:stress
+pnpm test:soak
 pnpm runtime:vendor
 pnpm runtime:verify
 pnpm package:mac

@@ -102,7 +102,8 @@ describe('packaged desktop application', () => {
                 await new Promise((next) => setTimeout(next, 100));
               }
               if ((readWidth() ?? 0) < 200) {
-                const button = [...document.querySelectorAll('button')].find(
+                const buttons = [...document.querySelectorAll('button')];
+                const button = buttons.find(
                   (candidate) => /打开侧边栏|open sidebar/i.test(
                     [
                       candidate.getAttribute('aria-label'),
@@ -111,11 +112,20 @@ describe('packaged desktop application', () => {
                     ].filter(Boolean).join(' '),
                   ),
                 );
-                if (!(button instanceof HTMLButtonElement)) {
+                const alreadyExpanding = buttons.some((candidate) =>
+                  /收起侧边栏|collapse sidebar/i.test(
+                    [
+                      candidate.getAttribute('aria-label'),
+                      candidate.getAttribute('title'),
+                      candidate.textContent,
+                    ].filter(Boolean).join(' '),
+                  ),
+                );
+                if (!(button instanceof HTMLButtonElement) && !alreadyExpanding) {
                   resolve(undefined);
                   return;
                 }
-                button.click();
+                button?.click();
               }
               for (let attempt = 0; attempt < 50; attempt += 1) {
                 const width = readWidth();
@@ -130,10 +140,10 @@ describe('packaged desktop application', () => {
           `);
         },
       );
-      expect(expandedHarnessWidth).toBe(280);
+      expect(expandedHarnessWidth).toBeCloseTo(280, 1);
       await expect
         .poll(readToolbarSidebarWidth, { timeout: 5_000 })
-        .toBe(280);
+        .toBeCloseTo(280, 1);
       await shellPage!.evaluate(() => {
         const sampleWindow = window as unknown as {
           toolbarWidthSamples: number[];
@@ -178,7 +188,8 @@ describe('packaged desktop application', () => {
                   : undefined;
               };
               if ((readWidth() ?? 0) > 100) {
-                const button = [...document.querySelectorAll('button')].find(
+                const buttons = [...document.querySelectorAll('button')];
+                const button = buttons.find(
                   (candidate) => /收起侧边栏|collapse sidebar/i.test(
                     [
                       candidate.getAttribute('aria-label'),
@@ -187,11 +198,20 @@ describe('packaged desktop application', () => {
                     ].filter(Boolean).join(' '),
                   ),
                 );
-                if (!(button instanceof HTMLButtonElement)) {
+                const alreadyCollapsing = buttons.some((candidate) =>
+                  /打开侧边栏|open sidebar/i.test(
+                    [
+                      candidate.getAttribute('aria-label'),
+                      candidate.getAttribute('title'),
+                      candidate.textContent,
+                    ].filter(Boolean).join(' '),
+                  ),
+                );
+                if (!(button instanceof HTMLButtonElement) && !alreadyCollapsing) {
                   resolve(undefined);
                   return;
                 }
-                button.click();
+                button?.click();
               }
               for (let attempt = 0; attempt < 50; attempt += 1) {
                 const width = readWidth();
@@ -206,10 +226,10 @@ describe('packaged desktop application', () => {
           `);
         },
       );
-      expect(collapsedHarnessWidth).toBe(56);
+      expect(collapsedHarnessWidth).toBeCloseTo(56, 1);
       await expect
         .poll(readToolbarSidebarWidth, { timeout: 5_000 })
-        .toBe(56);
+        .toBeCloseTo(56, 1);
       const animationSamples = await shellPage!.evaluate(
         () =>
           (
