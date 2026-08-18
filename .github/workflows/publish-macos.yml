@@ -32,9 +32,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          release_json=$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,isPrerelease,tagName,targetCommitish)
+          release_json=$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,isPrerelease,tagName)
           node -e "const r=JSON.parse(process.argv[1]); if (!r.isDraft || !r.isPrerelease || r.tagName !== process.env.RELEASE_TAG) throw new Error('Release must be the matching prerelease draft')" "${release_json}"
-          target=$(node -e "process.stdout.write(JSON.parse(process.argv[1]).targetCommitish)" "${release_json}")
+          target=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')
+          test -n "${target}"
           echo "target=${target}" >> "${GITHUB_OUTPUT}"
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

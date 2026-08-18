@@ -69,6 +69,9 @@ describe('macOS release workflow contract', () => {
     expect(download?.with?.['run-id']).toBe('${{ inputs.source_run_id }}');
     expect(commands).not.toContain('release:mac');
     expect(commands).not.toContain('notarytool submit');
+    expect(commands).toContain('tag_sha=');
+    expect(commands).toContain('"${tag_sha}" != "${source_sha}"');
+    expect(commands).not.toContain('--target "${SOURCE_SHA}"');
     expect(verifyDmgIndex).toBeGreaterThan(-1);
     expect(createDraftIndex).toBeGreaterThan(verifyDmgIndex);
   });
