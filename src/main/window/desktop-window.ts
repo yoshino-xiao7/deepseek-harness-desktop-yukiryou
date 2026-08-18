@@ -1,6 +1,36 @@
-import { BrowserWindow, shell, WebContentsView } from 'electron';
+import { BrowserWindow, ipcMain, shell, WebContentsView } from 'electron';
 
 import type { RuntimeFailure } from '../runtime/runtime-supervisor.js';
+import {
+  HARNESS_REVIEW_INTENT_CHANNEL,
+  SHELL_REVIEW_TARGET_CHANNEL,
+  WORKSPACE_REVIEW_REQUEST_CHANNEL,
+  type ChangedFileReviewIntent,
+  type WorkspaceReviewRequest,
+  type WorkspaceReviewResponse,
+  validatedWorkspaceReviewRequest,
+  validatedChangedFileReviewIntent,
+} from '../../shared/workspace-review.js';
+import {
+  COMPANION_COMMAND_CHANNEL,
+  COMPANION_PANEL_WIDTH,
+  COMPANION_PREVIEW_WIDTH,
+  COMPANION_STATE_CHANNEL,
+  COMPANION_WIDE_REVIEW_MIN_WIDTH,
+  HARNESS_CONTEXT_CHANNEL,
+  type CompanionWorkspaceSnapshot,
+  type DesktopCompanionSnapshot,
+  type HarnessContextSnapshot,
+  validatedCompanionCommand,
+  validatedHarnessContext,
+  transitionCompanion,
+  transitionCompanionWorkspace,
+} from '../../shared/desktop-companion.js';
+import {
+  ACCOUNT_BALANCE_REQUEST_CHANNEL,
+  ACCOUNT_BALANCE_STATE_CHANNEL,
+  type AccountBalanceSnapshot,
+} from '../../shared/account-balance.js';
 import {
   HARNESS_APPEARANCE_CHANNEL,
   TOOLBAR_APPEARANCE_CHANNEL,
@@ -19,7 +49,11 @@ import {
   validatedUpdateCommand,
 } from '../../shared/update-bridge.js';
 import { createDesktopWindowOptions } from './desktop-window-options.js';
-import { harnessContentBounds } from './desktop-window-layout.js';
+import {
+  animatedReservedWidth,
+  COMPANION_LAYOUT_ANIMATION_MS,
+  harnessContentBounds,
+} from './desktop-window-layout.js';
 import {
   createRendererRecoveryPolicy,
   type RendererTarget,
@@ -38,17 +72,27 @@ export interface DesktopWindow {
   reload(): void;
   reveal(): void;
   setUpdateState(state: DesktopUpdateState): void;
+  setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void;
   dispose(): void;
 }
 
 export interface DesktopWindowOptions {
   readonly loadingUrl: string;
-  readonly preloadPath: string;
+  readonly shellPreloadPath: string;
+  readonly harnessPreloadPath: string;
   readonly onRetry: () => void;
   readonly onOpenLogs: () => void;
   readonly onCopyDiagnostics: () => void;
   readonly onExportDiagnostics: () => void;
   readonly onUpdateCommand: (command: UpdateCommand) => void;
+  readonly onAccountBalanceRequest: (
+    force: boolean,
+  ) => Promise<AccountBalanceSnapshot>;
+  readonly onHarnessContext: (snapshot: HarnessContextSnapshot) => void;
+  readonly onWorkspaceReviewRequest: (
+    request: WorkspaceReviewRequest,
+  ) => Promise<WorkspaceReviewResponse>;
+  readonly onHarnessReviewIntent: (intent: ChangedFileReviewIntent) => Promise<WorkspaceReviewResponse>;
   readonly onRendererCrash: (target: RendererTarget, reason: string) => void;
 }
 
@@ -69,6 +113,19 @@ class ElectronDesktopWindow implements DesktopWindow {
   #sidebarWidth: number | undefined;
   #appearance: ReturnType<typeof validatedAppearanceSnapshot>;
   #updateState: DesktopUpdateState | undefined;
+  #balanceRequestRevision = 0;
+  #companionState: DesktopCompanionSnapshot = {
+    active: false,
+    open: true,
+    previewOpen: false,
+    workspace: { status: 'none' },
+  };
+  #lastHarnessContextRevision = -1;
+  #contextRateWindowStartedAt = 0;
+  #contextRateCount = 0;
+  #reservedRightWidth = 0;
+  #layoutAnimationRevision = 0;
+  #layoutAnimationTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #rendererRecovery = createRendererRecoveryPolicy(
     [250, 1_000],
     30_000,
@@ -79,11 +136,11 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#options = options;
     this.#loadingUrl = options.loadingUrl;
     this.#window = new BrowserWindow(
-      createDesktopWindowOptions(options.preloadPath),
+      createDesktopWindowOptions(options.shellPreloadPath),
     );
     this.#harnessView = new WebContentsView({
       webPreferences: {
-        preload: options.preloadPath,
+        preload: options.harnessPreloadPath,
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
@@ -122,12 +179,18 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#installSidebarWidthSync();
     this.#installAppearanceSync();
     this.#installUpdateBridge();
+    this.#installAccountBalanceBridge();
+    this.#installCompanionBridge();
+    this.#installWorkspaceReviewBridge();
+    this.#installHarnessReviewIntentBridge();
   }
 
   async showLoading(): Promise<void> {
     this.#rendererRecovery.reset('toolbar');
     this.#trustedOrigin = undefined;
     this.#showingHarness = false;
+    this.#companionState = { ...this.#companionState, active: false, previewOpen: false, workspace: { status: 'none' } };
+    this.#sendCompanionState();
     this.#harnessView.setVisible(false);
     await this.#window.loadURL(this.#loadingUrl);
   }
@@ -138,7 +201,9 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#rendererRecovery.reset('harness');
     await this.#harnessView.webContents.loadURL(trustedOrigin);
     this.#showingHarness = true;
-    this.#harnessView.setVisible(true);
+    this.#companionState = { ...this.#companionState, active: true };
+    this.#sendCompanionState();
+    this.#layoutHarnessView();
     this.#harnessView.webContents.focus();
     this.reveal();
   }
@@ -146,6 +211,8 @@ class ElectronDesktopWindow implements DesktopWindow {
   async showFailure(failure: RuntimeFailure): Promise<void> {
     this.#trustedOrigin = undefined;
     this.#showingHarness = false;
+    this.#companionState = { ...this.#companionState, active: false, previewOpen: false, workspace: { status: 'none' } };
+    this.#sendCompanionState();
     this.#harnessView.setVisible(false);
     const location = new URL(this.#loadingUrl);
     location.searchParams.set('state', 'failure');
@@ -177,8 +244,15 @@ class ElectronDesktopWindow implements DesktopWindow {
     }
   }
 
+  setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void {
+    this.#companionState = transitionCompanionWorkspace(this.#companionState, state);
+    this.#sendCompanionState();
+  }
+
   dispose(): void {
     this.#disposing = true;
+    this.#cancelLayoutAnimation();
+    ipcMain.removeHandler(WORKSPACE_REVIEW_REQUEST_CHANNEL);
     this.#window.contentView.removeChildView(this.#harnessView);
     this.#harnessView.webContents.close();
     this.#window.destroy();
@@ -216,8 +290,8 @@ class ElectronDesktopWindow implements DesktopWindow {
             }
             this.#harnessView.setVisible(false);
             await this.#harnessView.webContents.loadURL(trustedOrigin);
-            this.#harnessView.setVisible(true);
-            this.#harnessView.webContents.focus();
+            this.#layoutHarnessView();
+            if (this.#harnessView.getVisible()) this.#harnessView.webContents.focus();
           }
           return;
         } catch (error) {
@@ -324,6 +398,7 @@ class ElectronDesktopWindow implements DesktopWindow {
         this.#appearance,
       );
     }
+    this.#sendCompanionState();
   }
 
   #installUpdateBridge(): void {
@@ -338,14 +413,130 @@ class ElectronDesktopWindow implements DesktopWindow {
   }
 
   #restoreHarnessState(): void {
+    this.#lastHarnessContextRevision = -1;
     if (this.#updateState !== undefined) {
       this.#harnessView.webContents.send(UPDATE_STATE_CHANNEL, this.#updateState);
     }
   }
 
-  #layoutHarnessView(): void {
+  #installCompanionBridge(): void {
+    this.#window.webContents.on('ipc-message', (_event, channel, value: unknown) => {
+      if (channel !== COMPANION_COMMAND_CHANNEL) return;
+      const command = validatedCompanionCommand(value);
+      if (command === undefined) return;
+      this.#companionState = transitionCompanion(this.#companionState, command);
+      this.#sendCompanionState();
+      this.#layoutHarnessView(command.kind === 'toggle');
+    });
+    this.#harnessView.webContents.on('ipc-message', (_event, channel, value: unknown) => {
+      if (channel !== HARNESS_CONTEXT_CHANNEL) return;
+      const snapshot = validatedHarnessContext(value);
+      if (snapshot === undefined || snapshot.revision <= this.#lastHarnessContextRevision || !this.#acceptContextEvent()) return;
+      this.#lastHarnessContextRevision = snapshot.revision;
+      this.#options.onHarnessContext(snapshot);
+    });
+  }
+
+  #installWorkspaceReviewBridge(): void {
+    ipcMain.removeHandler(WORKSPACE_REVIEW_REQUEST_CHANNEL);
+    ipcMain.handle(WORKSPACE_REVIEW_REQUEST_CHANNEL, async (event, value: unknown) => {
+      if (
+        event.sender !== this.#window.webContents ||
+        event.senderFrame !== this.#window.webContents.mainFrame
+      ) return { kind: 'unavailable', reason: 'no-workspace' };
+      const request = validatedWorkspaceReviewRequest(value);
+      if (request === undefined) return { kind: 'unavailable', reason: 'invalid-node' };
+      return this.#options.onWorkspaceReviewRequest(request);
+    });
+  }
+
+  #installHarnessReviewIntentBridge(): void {
+    this.#harnessView.webContents.on('ipc-message', (_event, channel, value: unknown) => {
+      if (channel !== HARNESS_REVIEW_INTENT_CHANNEL) return;
+      const intent = validatedChangedFileReviewIntent(value);
+      if (intent === undefined) return;
+      void this.#options.onHarnessReviewIntent(intent).then((response) => {
+        if (response.kind !== 'preview' || this.#disposing || this.#window.webContents.isDestroyed()) return;
+        this.#companionState = { ...this.#companionState, open: true, previewOpen: true };
+        this.#sendCompanionState();
+        this.#layoutHarnessView(true);
+        this.#window.webContents.send(SHELL_REVIEW_TARGET_CHANNEL, response);
+      });
+    });
+  }
+
+  #acceptContextEvent(): boolean {
+    const now = Date.now();
+    if (now - this.#contextRateWindowStartedAt >= 1_000) {
+      this.#contextRateWindowStartedAt = now;
+      this.#contextRateCount = 0;
+    }
+    this.#contextRateCount += 1;
+    return this.#contextRateCount <= 20;
+  }
+
+  #sendCompanionState(): void {
+    if (!this.#window.webContents.isDestroyed()) {
+      this.#window.webContents.send(COMPANION_STATE_CHANNEL, this.#companionState);
+    }
+  }
+
+  #installAccountBalanceBridge(): void {
+    this.#harnessView.webContents.on(
+      'ipc-message',
+      (_event, channel, value: unknown) => {
+        if (channel !== ACCOUNT_BALANCE_REQUEST_CHANNEL || typeof value !== 'boolean') return;
+        const revision = ++this.#balanceRequestRevision;
+        this.#harnessView.webContents.send(ACCOUNT_BALANCE_STATE_CHANNEL, { status: 'loading' });
+        void this.#options.onAccountBalanceRequest(value).then((snapshot) => {
+          if (revision === this.#balanceRequestRevision && !this.#harnessView.webContents.isDestroyed()) {
+            this.#harnessView.webContents.send(ACCOUNT_BALANCE_STATE_CHANNEL, snapshot);
+          }
+        });
+      },
+    );
+  }
+
+  #layoutHarnessView(animate = false): void {
     const { width, height } = this.#window.contentView.getBounds();
-    this.#harnessView.setBounds(harnessContentBounds({ width, height }));
+    const reviewFocus = this.#showingHarness && this.#companionState.open && this.#companionState.previewOpen && width < COMPANION_WIDE_REVIEW_MIN_WIDTH;
+    const panel = this.#showingHarness && this.#companionState.open ? Math.min(COMPANION_PANEL_WIDTH, Math.max(0, width - 480)) : 0;
+    const preview = this.#showingHarness && this.#companionState.open && this.#companionState.previewOpen && !reviewFocus ? COMPANION_PREVIEW_WIDTH : 0;
+    const target = panel + preview;
+    if (!animate || reviewFocus || !this.#showingHarness) {
+      this.#cancelLayoutAnimation();
+      this.#applyHarnessLayout(target, reviewFocus, width, height);
+      return;
+    }
+    this.#animateHarnessLayout(target, width, height);
+  }
+
+  #animateHarnessLayout(target: number, width: number, height: number): void {
+    this.#cancelLayoutAnimation();
+    const revision = ++this.#layoutAnimationRevision;
+    const startedAt = Date.now();
+    const from = this.#reservedRightWidth;
+    this.#harnessView.setVisible(this.#showingHarness);
+    const frame = (): void => {
+      if (this.#disposing || revision !== this.#layoutAnimationRevision) return;
+      const progress = Math.min(1, (Date.now() - startedAt) / COMPANION_LAYOUT_ANIMATION_MS);
+      this.#applyHarnessLayout(animatedReservedWidth(from, target, progress), false, width, height);
+      if (progress < 1) this.#layoutAnimationTimer = setTimeout(frame, 16);
+      else this.#layoutAnimationTimer = undefined;
+    };
+    frame();
+  }
+
+  #applyHarnessLayout(reserved: number, reviewFocus: boolean, width: number, height: number): void {
+    this.#reservedRightWidth = reserved;
+    this.#harnessView.setVisible(this.#showingHarness && !reviewFocus);
+    this.#harnessView.setBounds(harnessContentBounds({ width, height }, reserved));
+  }
+
+  #cancelLayoutAnimation(): void {
+    this.#layoutAnimationRevision += 1;
+    if (this.#layoutAnimationTimer !== undefined) clearTimeout(this.#layoutAnimationTimer);
+    this.#layoutAnimationTimer = undefined;
   }
 
   #performLocalAction(

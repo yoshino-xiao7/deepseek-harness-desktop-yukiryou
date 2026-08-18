@@ -30,6 +30,19 @@ describe('bundled Harness runtime', () => {
       const runtimeRoot = join(projectRoot, 'resources', 'runtime');
       await ensureDesktopSettingsExtension(runtimeHome, runtimeRoot);
       const runtimeCommand = createHarnessRuntimeCommand(runtimeRoot);
+      const dshVersion = await execFileAsync(runtimeCommand.command, [
+        join(
+          runtimeRoot,
+          'dsh',
+          'node_modules',
+          '@deepseek-ai',
+          'dsh',
+          'lib',
+          'bin.js',
+        ),
+        '--version',
+      ]);
+      expect(dshVersion.stdout.trim()).toBe('0.1.0-rc.7');
       supervisor = createRuntimeSupervisor({
         command: runtimeCommand.command,
         args: runtimeCommand.args,
@@ -39,9 +52,10 @@ describe('bundled Harness runtime', () => {
           join(runtimeRoot, 'node', 'bin'),
         ],
         workspaceRoot,
-        version: '0.1.0-rc.6',
+        version: '0.1.0-rc.7',
         startupTimeoutMs: 20_000,
         shutdownTimeoutMs: 5_000,
+        createCompanionToken: () => 'integration-token-that-is-long-enough-123456789',
       });
 
       const ready = await supervisor.start();
@@ -51,6 +65,7 @@ describe('bundled Harness runtime', () => {
       expect(response.headers.get('content-type')).toContain('text/html');
       const html = await response.text();
       expect(html).toContain('@dsh-desktop/settings');
+      expect(html).toContain('@dsh-desktop/companion');
       const pluginResponse = await fetch(
         `${ready.origin}/plugins/@dsh-desktop/settings/client.js`,
       );
@@ -63,6 +78,35 @@ describe('bundled Harness runtime', () => {
       );
       expect(brandResponse.status).toBe(200);
       expect(brandResponse.headers.get('content-type')).toContain('image/png');
+      const companionClient = await fetch(
+        `${ready.origin}/plugins/@dsh-desktop/companion/client.js`,
+      );
+      expect(companionClient.status).toBe(200);
+      const companionScript = await companionClient.text();
+      expect(companionScript).toContain("conversation.chat.turnTail");
+      expect(companionScript).toContain("desktop-turn-changes");
+      expect(companionScript).toContain("deepSeekYukiRyouReview");
+      const unauthorized = await fetch(
+        `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"kind":"account.balance"}' },
+      );
+      expect(unauthorized.status).toBe(403);
+      const balance = await fetch(
+        `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-dsh-desktop-companion-token': 'integration-token-that-is-long-enough-123456789',
+          },
+          body: '{"kind":"account.balance"}',
+        },
+      );
+      expect(balance.status).toBe(200);
+      await expect(balance.json()).resolves.toEqual({
+        status: 'unavailable',
+        reason: 'credential-unconfigured',
+      });
     },
     30_000,
   );

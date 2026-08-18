@@ -1,4 +1,5 @@
 import { app, clipboard, dialog, Menu, shell } from 'electron';
+import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { release } from 'node:os';
 import { basename, join } from 'node:path';
@@ -15,7 +16,12 @@ import {
 } from './runtime/runtime-supervisor.js';
 import { createRuntimeRecoveryPolicy } from './runtime/runtime-recovery-policy.js';
 import { createHarnessRuntimeCommand } from './runtime/runtime-command.js';
-import { ensureDesktopSettingsExtension } from './runtime/runtime-extension.js';
+import { createRuntimeCompanionClient } from './runtime/runtime-companion-client.js';
+import {
+  createWorkspaceInspector,
+  type WorkspaceInspector,
+} from './workspace/workspace-inspector.js';
+import { ensureBundledRuntimeExtensions } from './runtime/runtime-extension.js';
 import {
   createAppUpdater,
   type AppUpdater,
@@ -26,6 +32,9 @@ import {
   type DesktopWindow,
 } from './window/desktop-window.js';
 import type { UpdateCommand } from '../shared/update-bridge.js';
+import type { AccountBalanceSnapshot } from '../shared/account-balance.js';
+import type { HarnessContextSnapshot } from '../shared/desktop-companion.js';
+import type { WorkspaceReviewRequest, WorkspaceReviewResponse } from '../shared/workspace-review.js';
 
 const moduleDirectory = __dirname;
 
@@ -38,6 +47,9 @@ export class AppCoordinator {
   readonly #recovery = createRuntimeRecoveryPolicy([250, 1_000]);
   #recovering = false;
   #lastFailure: RuntimeFailure | undefined;
+  #companionToken = '';
+  #workspaceAuthorityRevision = 0;
+  #workspaceInspector: WorkspaceInspector | undefined;
 
   async run(): Promise<void> {
     if (!app.requestSingleInstanceLock()) {
@@ -76,12 +88,18 @@ export class AppCoordinator {
     const loadingLocation = rendererLocation();
     this.#window = createDesktopWindow({
       loadingUrl: loadingLocation,
-      preloadPath: join(moduleDirectory, 'preload-entry.cjs'),
+      shellPreloadPath: join(moduleDirectory, 'shell-preload-entry.cjs'),
+      harnessPreloadPath: join(moduleDirectory, 'harness-preload-entry.cjs'),
       onRetry: () => void this.restartRuntime(),
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
       onUpdateCommand: (command) => void this.#handleUpdateCommand(command),
+      onAccountBalanceRequest: (force) => this.#readAccountBalance(force),
+      onHarnessContext: (snapshot) => void this.#handleHarnessContext(snapshot),
+      onWorkspaceReviewRequest: (request) => this.#handleWorkspaceReviewRequest(request),
+      onHarnessReviewIntent: (intent) => this.#workspaceInspector?.previewChangedPath(intent.path, intent.historicalDiff)
+        ?? Promise.resolve({ kind: 'unavailable', reason: 'no-workspace' }),
       onRendererCrash: (target, reason) =>
         this.#log?.write('renderer.crashed', `target=${target} reason=${reason}`),
     });
@@ -97,7 +115,7 @@ export class AppCoordinator {
     const runtimeRoot = app.isPackaged
       ? join(process.resourcesPath, 'runtime')
       : join(app.getAppPath(), 'resources', 'runtime');
-    await ensureDesktopSettingsExtension(runtimeHome, runtimeRoot);
+    await ensureBundledRuntimeExtensions(runtimeHome, runtimeRoot);
     const runtimeCommand = createHarnessRuntimeCommand(runtimeRoot);
     this.#runtime = createRuntimeSupervisor({
       command: runtimeCommand.command,
@@ -108,9 +126,13 @@ export class AppCoordinator {
         join(runtimeRoot, 'node', 'bin'),
       ],
       workspaceRoot: app.getPath('documents'),
-      version: '0.1.0-rc.6',
+      version: '0.1.0-rc.7',
       startupTimeoutMs: 20_000,
       shutdownTimeoutMs: 5_000,
+      createCompanionToken: () => {
+        this.#companionToken = randomBytes(32).toString('base64url');
+        return this.#companionToken;
+      },
       onOutput: (stream, chunk) => {
         if (stream === 'stderr') {
           this.#log?.write('runtime.stderr', chunk);
@@ -133,13 +155,70 @@ export class AppCoordinator {
     this.#updater.startAutomaticChecks();
   }
 
+  async #readAccountBalance(force: boolean): Promise<AccountBalanceSnapshot> {
+    const state = this.#runtime?.getState();
+    if (state?.kind !== 'ready' || this.#companionToken === '') {
+      return { status: 'unavailable', reason: 'network' };
+    }
+    return createRuntimeCompanionClient(this.#companionToken).readAccountBalance(
+      state.origin,
+      force,
+    );
+  }
+
+  async #handleHarnessContext(snapshot: HarnessContextSnapshot): Promise<void> {
+    const requestRevision = ++this.#workspaceAuthorityRevision;
+    if (snapshot.sessionId === undefined) {
+      this.#workspaceInspector = undefined;
+      this.#window?.setCompanionWorkspace({ status: 'none' });
+      return;
+    }
+    this.#window?.setCompanionWorkspace({ status: 'authorizing', running: snapshot.running });
+    const state = this.#runtime?.getState();
+    if (state?.kind !== 'ready' || this.#companionToken === '') {
+      this.#window?.setCompanionWorkspace({ status: 'unavailable', running: snapshot.running });
+      return;
+    }
+    const authority = await createRuntimeCompanionClient(this.#companionToken).authorizeWorkspace(
+      state.origin,
+      {
+        sessionId: snapshot.sessionId,
+        ...(snapshot.workspaceId === undefined ? {} : { workspaceId: snapshot.workspaceId }),
+      },
+    );
+    if (requestRevision !== this.#workspaceAuthorityRevision) return;
+    if (authority === undefined || (snapshot.workspaceId !== undefined && authority.workspaceId !== snapshot.workspaceId)) {
+      this.#workspaceInspector = undefined;
+      this.#window?.setCompanionWorkspace({ status: 'unavailable', running: snapshot.running });
+      return;
+    }
+    this.#workspaceInspector = createWorkspaceInspector(authority.root);
+    this.#window?.setCompanionWorkspace({
+      status: 'ready',
+      workspaceId: authority.workspaceId,
+      title: authority.title,
+      running: snapshot.running,
+    });
+  }
+
+  async #handleWorkspaceReviewRequest(
+    request: WorkspaceReviewRequest,
+  ): Promise<WorkspaceReviewResponse> {
+    const inspector = this.#workspaceInspector;
+    if (inspector === undefined) return { kind: 'unavailable', reason: 'no-workspace' };
+    if (request.kind === 'overview') return inspector.overview();
+    if (request.kind === 'directory.list') return inspector.listDirectory(request.nodeId);
+    if (request.kind === 'change.diff') return inspector.diff(request.nodeId);
+    return inspector.preview(request.nodeId);
+  }
+
   #copyDiagnostics(): void {
     const failure = this.#lastFailure;
     clipboard.writeText(
       [
         `Application: ${app.name} ${app.getVersion()}`,
         `Electron: ${process.versions.electron}`,
-        `Harness: 0.1.0-rc.6`,
+        `Harness: 0.1.0-rc.7`,
         `Architecture: ${process.arch}`,
         `Failure: ${failure?.code ?? 'none'}`,
         `Details: ${redact(failure?.message ?? 'No failure recorded')}`,
@@ -218,7 +297,7 @@ export class AppCoordinator {
           application: app.name,
           applicationVersion: app.getVersion(),
           electronVersion: process.versions.electron,
-          harnessVersion: '0.1.0-rc.6',
+          harnessVersion: '0.1.0-rc.7',
           architecture: process.arch,
           macOSVersion: release(),
           failureCode: failure?.code ?? 'none',

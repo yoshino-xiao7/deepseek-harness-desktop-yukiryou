@@ -10,7 +10,12 @@
 - `DesktopWindow`：可信 origin、导航拒绝、外链转交、窗口关闭/激活语义。
 - `AppCoordinator`：单实例、quit 状态机、renderer 崩溃和 Harness 崩溃的不同恢复路径。
 - 日志脱敏：token、header、路径参数和嵌套错误对象。
-- 运行时清单：架构、哈希、版本和缺失文件。
+- 运行时清单：source manifest、production lock、DSH integrity 与 install-script allowlist 必须精确对齐。
+- `AccountBalance`：官方 schema 映射、decimal string 保真、single-flight、TTL、超时、body/schema 上限、错误分类与 stale last-good。
+- `Workspace Authority`：只有属于注册 Workspace 的 Session 才返回 canonical root；错误 Workspace、畸形 ID 和非 ok 状态 fail closed。
+- `WorkspaceInspector`：opaque node、懒加载目录、深度/条目/字节/图片像素上限、fatal UTF-8、`O_NOFOLLOW` 稳定文件读取、symlink 换位拒绝、跨 capability ID 拒绝、Markdown 专用结果和相对 HEAD 的真实 diff。
+- `SafeMarkdown`：HTML、SVG/MathML、iframe/object、远程与 data 图片、`javascript:`/`file:` 链接、事件属性、深层列表和 fenced script 只产生安全结构和 inert text，不产生 URL、HTML 或执行节点。
+- `ReviewTargetStore`：先到 preview 可重放；Workspace capability 改变后清空正文并通知当前 renderer 释放内存。
 
 内部 I/O 使用 production adapter 与 fake adapter。fake 必须模拟失败和时间，不使用真实 `sleep`。
 
@@ -21,28 +26,37 @@
 对固定版本官方 dsh 运行契约测试：
 
 - CLI 可执行并返回预期版本。
+- 内置 Node、`pty.node`、`spawn-helper` 架构一致，真实 PTY 往返、sharp 1×1 PNG 和 koffi 加载通过。
 - `web --host 127.0.0.1 --port <port>` 可启动。
 - 就绪 URL 与重定向行为符合探测器预期。
 - Runtime Home 隔离有效。
 - SIGTERM/超时终止行为已记录。
+- settings/companion 两个随包扩展同时加载；余额 RPC 拒绝无 token 请求，正确 token 只返回脱敏快照，RuntimeState 不包含 token。
 
 ### Electron 端到端测试
 
+- 稳定启动门禁只依赖桌面壳与 Harness origin/readyState 契约，并允许通过 `DSH_E2E_EXECUTABLE_PATH` 指向全新 runner 实际安装的候选。
 - 干净用户目录首次启动。
 - Harness UI 加载、刷新、窗口关闭与 Dock 激活。
 - 3080 被占用时使用其他端口。
 - 恶意导航、`window.open` 和权限请求被拒绝。
 - Runtime 崩溃后恢复；超过重试上限显示诊断页。
 - Quit 后不存在本应用拥有的子进程。
+- `sidebar.footer.action` 余额卡在宽栏可见、rail 可收起；Harness bridge 形状固定且本地 shell 页面检测不到余额 bridge。
+- 本地 toolbar 可开关 Desktop Companion；干净用户目录无 Session 时显示安全空状态，shell bridge 拒绝绝对路径，关闭面板恢复 Harness 宽度。
 
 ### 稳定性命令
 
 ```bash
 pnpm test:stress # 100 次启动、就绪、停止与端口回收
 pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
+pnpm test:memory # 打包应用 2500 次侧栏/标签变化与 working-set 门禁
+pnpm test:upgrade # 真实 0.1.0 产物版本 + 旧 Runtime Home 保留门禁
+pnpm test:soak:app # 打包应用 60 秒 shell/Harness/进程/内存资格测试
+pnpm test:soak:app:release # GitHub 托管候选 5 小时打包应用 soak
 ```
 
-日常 `test:integration` 会执行一次压力循环和 100ms soak 冒烟；正式的 8 小时 soak 属于发布候选验证，不在每次开发检查中阻塞运行。
+日常 `test:integration` 会执行一次压力循环和 100ms soak 冒烟；本机发布资格使用 60 秒真实打包应用 soak。GitHub 托管 runner 的单 job 上限为 6 小时，因此正式流水线在异机安装后、公证前执行 5 小时真实候选 soak，并为安装与收尾预留 30 分钟。8 小时只作为本机或自托管 runner 的扩展矩阵，不作为不可执行的托管 CI 要求。
 
 ### 手工发布矩阵
 
@@ -68,9 +82,9 @@ pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
 ### Release tag
 
 1. 第一台 Apple Silicon runner 使用 Electron Forge 官方 `osxSign` 生成签名候选。
-2. 第二台全新 runner 下载候选、模拟 quarantine、复制到 `/Applications`，执行签名/证书链/架构验证和真实启动冒烟，并产生绑定 SHA-256 与 commit 的回执。
+2. 第二台全新 runner 下载候选、模拟 quarantine、复制到 `/Applications`，执行签名/证书链/架构、包内原生模块验证，并真实启动精确候选直到 Harness 就绪，然后产生绑定 SHA-256 与 commit 的回执。
 3. 只有回执与候选完全匹配，第三台 runner 才提交 Apple 一次；Accepted 后检查公证日志、staple 并生成最终 DMG/ZIP。
-4. 第四台全新 runner 分别安装最终 DMG/ZIP，执行 `codesign`、`spctl`、ticket、架构、校验和与启动冒烟。
+4. 第四台全新 runner 分别安装最终 DMG/ZIP，执行 `codesign`、`spctl`、ticket、架构、校验和，并再次启动精确的最终应用直到 Harness 就绪。
 5. 全部通过后创建 Draft；独立发布工作流从 Draft 重新下载并再次安装验收，通过后才发布 prerelease。任何失败都不得创建公开 Release。
 
 正式发布必须从干净 commit 构建。CI 不允许在签名后修改 `.app` 内容，也不允许覆盖已经存在的版本或 tag。

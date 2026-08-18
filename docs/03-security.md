@@ -43,7 +43,8 @@ webPreferences: {
 
 - dsh 必须显式绑定 `127.0.0.1`，不能使用 `0.0.0.0`、`::` 或局域网地址。
 - 主窗口 origin 来自本次启动结果，不来自配置文件、URL 参数或页面消息。
-- 记录 child handle、PID、进程组、随机 owner token 和启动时间；终止前重新验证所有权。
+- 当前记录 child handle、PID 与进程组；终止前的启动时间所有权复核尚未实现。Companion RPC 使用的随机实例 token 只用于 loopback 请求鉴权，不能替代操作系统进程所有权证明。
+- 每次 Runtime 启动生成新的 256-bit Companion token，只通过固定 allowlist child env 传递。主进程仅向固定 loopback route 发送该 token；禁止写入 RuntimeState、URL、renderer、日志或诊断包，旧 Runtime token 在重启后失效。
 - 子进程环境使用 allowlist 构造。API Key 若由 Harness 依赖环境变量读取，可以传递但永不记录。
 - 运行时目录权限尽可能设为用户私有；日志与导出文件创建时使用保守权限。
 
@@ -53,6 +54,14 @@ webPreferences: {
 - 日志默认包含时间、版本、状态转换、退出码和错误分类，不包含请求正文、模型内容、环境变量全集和文件内容。
 - 对常见 token 形态、Authorization header、查询参数做最终输出前脱敏。
 - “复制诊断信息”必须先展示将复制的内容；诊断包生成需要用户显式操作。
+
+### Workspace Preview
+
+- Workspace 文件只能通过 main 中的 opaque capability node 打开；renderer 与 Harness 不能提交 root 或绝对路径。
+- 普通文件使用 `O_NOFOLLOW` 打开句柄，读取前后比较 device、inode、size、mtime 与 ctime；symlink 换位拒绝，读取期间变化返回 `file-changed`。
+- 文本使用 fatal UTF-8 解码，拒绝非法编码和 NUL binary；常见图片在进入 renderer 前同时限制压缩字节、单边 16384px 与 32MP 总像素。
+- Markdown 只解析为 SafeMarkdown 的 heading、paragraph、blockquote、list、code 与文本节点；HTML、MDX、远程图片、URL 和事件属性没有可执行语义。
+- Workspace capability 改变时，main 关闭旧预览，shell preload 清空可重放 preview，renderer 立即释放旧正文与图片 data URL。
 
 ### 供应链与更新
 

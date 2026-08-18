@@ -31,3 +31,15 @@ _Avoid_: 最新版、用户安装版本
 **应用版本（App Version）**：
 桌面壳与一个运行时版本组成的可签名、可公证、可更新发布单元。
 _Avoid_: Harness 版本
+
+**桌面伴侣（Desktop Companion）**：
+由桌面壳承载的只读辅助能力集合。当前包含 Harness 官方 slot 账户余额、右栏与 Workspace Review，但不复制 Agent、会话或工具详情 UI；宠物活动区仍属于最后阶段。
+_Avoid_: 新 Harness UI、文件编辑器
+
+**Workspace Review**：
+面向当前 Harness Workspace 的只读文件树、Git 变更、diff 与安全预览。
+_Avoid_: IDE、自动修改
+
+**Workspace Authority / Capability**：
+Authority 是 Runtime 对 Session 所属 canonical Workspace 的权威解析；Capability 是主进程据此建立的短期不透明文件访问权限。
+_Avoid_: 浏览器传入路径、永久目录授权

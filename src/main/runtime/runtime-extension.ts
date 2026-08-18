@@ -1,7 +1,9 @@
 import { lstat, mkdir, readlink, symlink, unlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-export async function ensureDesktopSettingsExtension(
+const DESKTOP_EXTENSIONS = ['settings', 'companion'] as const;
+
+export async function ensureBundledRuntimeExtensions(
   runtimeHome: string,
   runtimeRoot: string,
 ): Promise<void> {
@@ -11,15 +13,20 @@ export async function ensureDesktopSettingsExtension(
     'node_modules',
     '@dsh-desktop',
   );
-  const linkPath = join(scopeDirectory, 'settings');
-  const targetPath = join(
-    runtimeRoot,
-    'dsh',
-    'node_modules',
-    '@dsh-desktop',
-    'settings',
-  );
   await mkdir(scopeDirectory, { recursive: true, mode: 0o700 });
+
+  for (const extension of DESKTOP_EXTENSIONS) {
+    await ensureExtensionLink(scopeDirectory, runtimeRoot, extension);
+  }
+}
+
+async function ensureExtensionLink(
+  scopeDirectory: string,
+  runtimeRoot: string,
+  extension: (typeof DESKTOP_EXTENSIONS)[number],
+): Promise<void> {
+  const linkPath = join(scopeDirectory, extension);
+  const targetPath = join(runtimeRoot, 'dsh', 'node_modules', '@dsh-desktop', extension);
 
   try {
     const status = await lstat(linkPath);
@@ -41,3 +48,6 @@ export async function ensureDesktopSettingsExtension(
 
   await symlink(targetPath, linkPath, 'dir');
 }
+
+/** @deprecated Use the complete app-owned extension assembly. */
+export const ensureDesktopSettingsExtension = ensureBundledRuntimeExtensions;

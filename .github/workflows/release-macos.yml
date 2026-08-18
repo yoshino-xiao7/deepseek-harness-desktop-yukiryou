@@ -72,6 +72,7 @@ jobs:
           corepack prepare pnpm@${PNPM_VERSION} --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm runtime:vendor -- --arch=arm64
+      - run: pnpm runtime:verify
       - run: pnpm test:integration
       - name: Import Developer ID certificate into an ephemeral keychain
         env:
@@ -126,6 +127,10 @@ jobs:
             --require-notarized=false \
             --candidate-manifest=out/release-candidate/candidate-manifest.json \
             --receipt=out/release-candidate/portable-verification.json
+      - name: Start the exact installed candidate and wait for Harness
+        env:
+          DSH_E2E_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
+        run: pnpm exec vitest run tests/e2e/packaged-startup.test.ts --no-file-parallelism
       - uses: actions/upload-artifact@v4
         with:
           name: macos-portable-verification
@@ -133,9 +138,43 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  soak_candidate:
+    name: Five-hour installed candidate soak
+    needs: verify_candidate
+    runs-on: macos-15
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-release-candidate
+          path: out/release-candidate
+      - name: Install the exact candidate for soak
+        run: |
+          pnpm verify:distribution -- \
+            --kind=zip \
+            --archive="out/release-candidate/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}-candidate.zip" \
+            --install-app="/Applications/${PRODUCT_NAME}.app" \
+            --expect-version="${RELEASE_VERSION}" \
+            --require-notarized=false \
+            --candidate-manifest=out/release-candidate/candidate-manifest.json \
+            --receipt=out/release-candidate/soak-install-verification.json
+      - name: Keep shell and Harness healthy for five hours
+        env:
+          DSH_E2E_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
+        run: pnpm test:soak:app:release
+
   notarize:
     name: Notarize the exact verified candidate
-    needs: verify_candidate
+    needs: soak_candidate
     runs-on: macos-15
     timeout-minutes: 360
     steps:
@@ -250,6 +289,10 @@ jobs:
             --expect-version="${RELEASE_VERSION}" \
             --require-notarized=true \
             --simulate-download=true
+      - name: Start the exact installed final application and wait for Harness
+        env:
+          DSH_E2E_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
+        run: pnpm exec vitest run tests/e2e/packaged-startup.test.ts --no-file-parallelism
 
   release:
     name: Create verified draft

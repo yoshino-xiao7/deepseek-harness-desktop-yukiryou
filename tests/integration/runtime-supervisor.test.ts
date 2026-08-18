@@ -34,6 +34,7 @@ describe('RuntimeSupervisor', () => {
       version: 'fake-1.0.0',
       startupTimeoutMs: 5_000,
       shutdownTimeoutMs: 2_000,
+      createCompanionToken: () => 'test-companion-token-that-never-enters-state',
     });
 
     const ready = await supervisor.start();
@@ -48,7 +49,11 @@ describe('RuntimeSupervisor', () => {
           new RegExp(`^${runtimeBinDirectory.replaceAll('/', '\\/')}:`),
         ),
         workspace: canonicalWorkspaceRoot,
+        companionTokenConfigured: true,
       });
+    expect(JSON.stringify(supervisor.getState())).not.toContain(
+      'test-companion-token',
+    );
 
     await supervisor.stop('quit');
     expect(supervisor.getState()).toEqual({ kind: 'stopped' });

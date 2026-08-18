@@ -11,7 +11,7 @@ describe('Harness runtime command', () => {
         '--profile',
         'web',
         '--patch',
-        '/runtime/desktop-settings.patch.yml',
+        '/runtime/desktop-extensions.patch.yml',
       ],
     });
   });

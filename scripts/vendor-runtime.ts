@@ -95,16 +95,21 @@ run(nodeExecutable, [
   PATH: [join(stagingDirectory, 'node', 'bin'), process.env.PATH]
     .filter((entry): entry is string => entry !== undefined)
     .join(delimiter),
-});
+}, 600_000);
 
 await cp(
   join(projectRoot, 'runtime', 'desktop-settings-plugin'),
   join(dshDirectory, 'node_modules', '@dsh-desktop', 'settings'),
   { recursive: true },
 );
+await cp(
+  join(projectRoot, 'runtime', 'desktop-companion-plugin'),
+  join(dshDirectory, 'node_modules', '@dsh-desktop', 'companion'),
+  { recursive: true },
+);
 await copyFile(
-  join(projectRoot, 'runtime', 'desktop-settings.patch.yml'),
-  join(stagingDirectory, 'desktop-settings.patch.yml'),
+  join(projectRoot, 'runtime', 'desktop-extensions.patch.yml'),
+  join(stagingDirectory, 'desktop-extensions.patch.yml'),
 );
 
 const installedManifest = {
@@ -121,22 +126,36 @@ await writeFile(
   { mode: 0o600 },
 );
 
-run(nodeExecutable, ['--version'], `v${manifest.node.version}`);
-run(nodeExecutable, [
-  join(
-    dshDirectory,
-    'node_modules',
-    '@deepseek-ai',
-    'dsh',
-    'lib',
-    'bin.js',
-  ),
-  '--version',
-]);
+run(
+  nodeExecutable,
+  ['--version'],
+  `v${manifest.node.version}`,
+  undefined,
+  15_000,
+);
+run(
+  nodeExecutable,
+  [
+    join(
+      dshDirectory,
+      'node_modules',
+      '@deepseek-ai',
+      'dsh',
+      'lib',
+      'bin.js',
+    ),
+    '--version',
+  ],
+  manifest.dsh.version,
+  undefined,
+  15_000,
+);
 run(
   nodeExecutable,
   [join(dshDirectory, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'), '--version'],
   manifest.pnpm.version,
+  undefined,
+  15_000,
 );
 await pruneRuntime(stagingDirectory, architecture);
 
@@ -226,12 +245,14 @@ function run(
   args: readonly string[],
   expected?: string,
   environment?: NodeJS.ProcessEnv,
+  timeout?: number,
 ): void {
   const result = spawnSync(command, args, {
     cwd: projectRoot,
     encoding: 'utf8',
     shell: false,
     stdio: expected === undefined ? 'inherit' : 'pipe',
+    timeout,
     env:
       environment === undefined
         ? undefined
