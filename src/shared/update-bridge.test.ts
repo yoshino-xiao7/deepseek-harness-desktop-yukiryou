@@ -7,9 +7,10 @@ import {
 } from './update-bridge.js';
 
 describe('desktop update bridge', () => {
-  it('accepts only the two supported renderer commands', () => {
+  it('accepts only the supported renderer commands', () => {
     expect(validatedUpdateCommand('check')).toBe('check');
     expect(validatedUpdateCommand('install')).toBe('install');
+    expect(validatedUpdateCommand('download')).toBe('download');
     expect(validatedUpdateCommand('open-terminal')).toBeUndefined();
   });
 
@@ -41,6 +42,9 @@ describe('desktop update bridge', () => {
     ).toBe(true);
     expect(
       shouldShowHeaderUpdate({ status: 'downloaded', currentVersion: '0.1.0' }),
+    ).toBe(true);
+    expect(
+      shouldShowHeaderUpdate({ status: 'manual', currentVersion: '0.1.0' }),
     ).toBe(true);
   });
 });

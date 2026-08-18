@@ -37,6 +37,8 @@ import type { HarnessContextSnapshot } from '../shared/desktop-companion.js';
 import type { WorkspaceReviewRequest, WorkspaceReviewResponse } from '../shared/workspace-review.js';
 
 const moduleDirectory = __dirname;
+const RELEASE_DOWNLOAD_URL =
+  'https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/latest';
 
 export class AppCoordinator {
   #window: DesktopWindow | undefined;
@@ -74,11 +76,12 @@ export class AppCoordinator {
     this.#log = await createAppLog(logDirectory);
     const recoveredPreferences = await this.#recoverPreferences(runtimeHome);
     this.#updater = createAppUpdater({
-      enabled: isUpdaterSupported({
-        isPackaged: app.isPackaged,
-        platform: process.platform,
-        architecture: process.arch,
-      }),
+      enabled: process.env.DSH_DESKTOP_E2E !== '1' &&
+        isUpdaterSupported({
+          isPackaged: app.isPackaged,
+          platform: process.platform,
+          architecture: process.arch,
+        }),
       currentVersion: app.getVersion(),
       platform: process.platform,
       architecture: process.arch,
@@ -370,6 +373,10 @@ export class AppCoordinator {
   }
 
   async #handleUpdateCommand(command: UpdateCommand): Promise<void> {
+    if (command === 'download') {
+      await shell.openExternal(RELEASE_DOWNLOAD_URL);
+      return;
+    }
     if (command === 'install') {
       if (this.#updater?.getState().status === 'downloaded') {
         await this.#installDownloadedUpdate();

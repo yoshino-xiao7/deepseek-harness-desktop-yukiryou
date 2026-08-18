@@ -1,6 +1,7 @@
 import { autoUpdater, type Event } from 'electron';
 
 import { updateFeedUrl } from './update-config.js';
+import { updateRecoveryForError } from './update-error.js';
 import type { DesktopUpdateState } from '../../shared/update-bridge.js';
 
 export type UpdateCheckResult =
@@ -55,7 +56,9 @@ class ElectronAppUpdater implements AppUpdater {
   readonly #handleBackgroundError = (error: Error): void => {
     if (!this.#checking) {
       this.#setState({
-        status: 'error',
+        status: updateRecoveryForError(error) === 'manual-download'
+          ? 'manual'
+          : 'error',
         currentVersion: this.#options.currentVersion,
         message: safeErrorMessage(error),
       });
@@ -108,7 +111,9 @@ class ElectronAppUpdater implements AppUpdater {
         cleanup();
         this.#checking = false;
         this.#setState({
-          status: 'error',
+          status: updateRecoveryForError(error) === 'manual-download'
+            ? 'manual'
+            : 'error',
           currentVersion: this.#options.currentVersion,
           message: safeErrorMessage(error),
         });

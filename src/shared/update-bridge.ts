@@ -1,7 +1,7 @@
 export const UPDATE_COMMAND_CHANNEL = 'dsh-desktop:update-command';
 export const UPDATE_STATE_CHANNEL = 'dsh-desktop:update-state';
 
-export type UpdateCommand = 'check' | 'install';
+export type UpdateCommand = 'check' | 'install' | 'download';
 
 export type UpdateStatus =
   | 'disabled'
@@ -10,6 +10,7 @@ export type UpdateStatus =
   | 'latest'
   | 'downloading'
   | 'downloaded'
+  | 'manual'
   | 'error';
 
 export interface DesktopUpdateState {
@@ -24,11 +25,15 @@ export interface DesktopUpdateState {
 const VERSION = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/;
 
 export function validatedUpdateCommand(value: unknown): UpdateCommand | undefined {
-  return value === 'check' || value === 'install' ? value : undefined;
+  return value === 'check' || value === 'install' || value === 'download'
+    ? value
+    : undefined;
 }
 
 export function shouldShowHeaderUpdate(state: DesktopUpdateState): boolean {
-  return state.status === 'downloading' || state.status === 'downloaded';
+  return state.status === 'downloading' ||
+    state.status === 'downloaded' ||
+    state.status === 'manual';
 }
 
 export function validatedUpdateState(
@@ -45,6 +50,7 @@ export function validatedUpdateState(
     'latest',
     'downloading',
     'downloaded',
+    'manual',
     'error',
   ];
   if (
