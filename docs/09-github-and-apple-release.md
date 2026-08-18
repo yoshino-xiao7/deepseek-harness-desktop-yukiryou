@@ -51,6 +51,7 @@ Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Act
 6. 版本/tag 一旦存在，不允许覆盖或强推；任何修改都必须提升版本。
 
 面向用户的版本变化同时汇总到根目录 `CHANGELOG.md`。Release 正文由对应的 `docs/releases/v<version>.md` 自动生成，不在 GitHub 页面临时手写。
+版本说明正文不要再写一级标题；GitHub Release 页面已经使用版本名称作为页面标题。说明应聚焦相对上一公开版本的变化，只有仓库从未存在公开 Release 时才能使用“首个公开版本”。
 
 固定附件：
 

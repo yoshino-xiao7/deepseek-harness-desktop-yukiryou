@@ -49,6 +49,9 @@ describe('macOS release workflow contract', () => {
     expect(qualityCommands).toContain(
       'test -s "docs/releases/${RELEASE_TAG}.md"',
     );
+    expect(qualityCommands).toContain(
+      'Release notes must omit the H1 because GitHub already renders the release title',
+    );
     expect(releaseCommands).toContain(
       '--notes-file "docs/releases/${RELEASE_TAG}.md"',
     );
