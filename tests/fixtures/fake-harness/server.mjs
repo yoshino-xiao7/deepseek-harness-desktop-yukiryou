@@ -20,6 +20,9 @@ const server = createServer((_request, response) => {
       home: process.env.DSH_HOME,
       path: process.env.PATH,
       workspace: process.cwd(),
+      companionTokenConfigured:
+        typeof process.env.DSH_DESKTOP_COMPANION_TOKEN === 'string' &&
+        process.env.DSH_DESKTOP_COMPANION_TOKEN.length >= 32,
     }),
   );
 });

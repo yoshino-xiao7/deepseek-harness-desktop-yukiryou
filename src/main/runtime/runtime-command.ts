@@ -19,7 +19,7 @@ export function createHarnessRuntimeCommand(runtimeRoot: string): {
       '--profile',
       'web',
       '--patch',
-      join(runtimeRoot, 'desktop-settings.patch.yml'),
+      join(runtimeRoot, 'desktop-extensions.patch.yml'),
     ],
   };
 }

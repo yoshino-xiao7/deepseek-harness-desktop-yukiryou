@@ -1,16 +1,28 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 import {
+  HARNESS_REVIEW_INTENT_CHANNEL,
+  validatedChangedFileReviewIntent,
+} from '../shared/workspace-review.js';
+import {
+  HARNESS_CONTEXT_CHANNEL,
+  validatedHarnessContext,
+} from '../shared/desktop-companion.js';
+import {
+  ACCOUNT_BALANCE_REQUEST_CHANNEL,
+  ACCOUNT_BALANCE_STATE_CHANNEL,
+  type AccountBalanceSnapshot,
+  validatedAccountBalanceSnapshot,
+} from '../shared/account-balance.js';
+
+import {
   DESKTOP_CHROME_CONTENT_TOKEN,
   DESKTOP_CHROME_SIDEBAR_TOKEN,
   HARNESS_APPEARANCE_CHANNEL,
-  TOOLBAR_APPEARANCE_CHANNEL,
   type DesktopAppearanceSnapshot,
-  validatedAppearanceSnapshot,
 } from '../shared/appearance-sync.js';
 import {
   HARNESS_SIDEBAR_WIDTH_CHANNEL,
-  TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
   validatedSidebarWidth,
 } from '../shared/sidebar-width-sync.js';
 import {
@@ -22,14 +34,45 @@ import {
   validatedUpdateState,
 } from '../shared/update-bridge.js';
 
-const DEFAULT_SIDEBAR_WIDTH = 280;
-let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
-let pendingAppearance: DesktopAppearanceSnapshot | undefined;
 let updateState: DesktopUpdateState = {
   status: 'disabled',
   currentVersion: '0.0.0',
 };
 const updateListeners = new Set<(state: DesktopUpdateState) => void>();
+let balanceState: AccountBalanceSnapshot = { status: 'loading' };
+const balanceListeners = new Set<(state: AccountBalanceSnapshot) => void>();
+
+ipcRenderer.on(ACCOUNT_BALANCE_STATE_CHANNEL, (_event, value: unknown) => {
+  const snapshot = validatedAccountBalanceSnapshot(value);
+  if (snapshot === undefined) return;
+  balanceState = snapshot;
+  for (const listener of balanceListeners) listener(snapshot);
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouBalance', {
+  getSnapshot: (): AccountBalanceSnapshot => balanceState,
+  subscribe: (listener: (state: AccountBalanceSnapshot) => void): (() => void) => {
+    balanceListeners.add(listener);
+    return () => balanceListeners.delete(listener);
+  },
+  refresh: (force = false): void => {
+    ipcRenderer.send(ACCOUNT_BALANCE_REQUEST_CHANNEL, force === true);
+  },
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouContext', {
+  publish: (value: unknown): void => {
+    const snapshot = validatedHarnessContext(value);
+    if (snapshot !== undefined) ipcRenderer.send(HARNESS_CONTEXT_CHANNEL, snapshot);
+  },
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouReview', {
+  openChangedFile: (value: unknown): void => {
+    const intent = validatedChangedFileReviewIntent(value);
+    if (intent !== undefined) ipcRenderer.send(HARNESS_REVIEW_INTENT_CHANNEL, intent);
+  },
+});
 
 ipcRenderer.on(UPDATE_STATE_CHANNEL, (_event, value: unknown) => {
   const nextState = validatedUpdateState(value);
@@ -51,48 +94,6 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouUpdates', {
 
 function sendUpdateCommand(command: UpdateCommand): void {
   ipcRenderer.send(UPDATE_COMMAND_CHANNEL, command);
-}
-
-function applyToolbarWidth(): void {
-  document.documentElement?.style.setProperty(
-    '--harness-sidebar-width',
-    `${pendingToolbarWidth}px`,
-  );
-}
-
-ipcRenderer.on(TOOLBAR_SIDEBAR_WIDTH_CHANNEL, (_event, value: unknown) => {
-  const width = validatedSidebarWidth(value, window.innerWidth);
-  if (width === undefined) {
-    return;
-  }
-  pendingToolbarWidth = width;
-  applyToolbarWidth();
-});
-
-ipcRenderer.on(TOOLBAR_APPEARANCE_CHANNEL, (_event, value: unknown) => {
-  const appearance = validatedAppearanceSnapshot(value);
-  if (appearance === undefined) {
-    return;
-  }
-  pendingAppearance = appearance;
-  applyToolbarAppearance();
-});
-
-function applyToolbarAppearance(): void {
-  if (pendingAppearance === undefined || document.documentElement === null) {
-    return;
-  }
-  document.documentElement.dataset.appearanceScheme =
-    pendingAppearance.colorScheme;
-  document.documentElement.style.colorScheme = pendingAppearance.colorScheme;
-  document.documentElement.style.setProperty(
-    '--toolbar-sidebar-background',
-    pendingAppearance.sidebarBackground,
-  );
-  document.documentElement.style.setProperty(
-    '--toolbar-content-background',
-    pendingAppearance.contentBackground,
-  );
 }
 
 function findHarnessFrame(): HTMLElement | undefined {
@@ -330,8 +331,6 @@ function installHarnessUpdateButton(): void {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  applyToolbarWidth();
-  applyToolbarAppearance();
   installHarnessSidebarObserver();
   installHarnessAppearanceObserver();
   installHarnessUpdateButton();

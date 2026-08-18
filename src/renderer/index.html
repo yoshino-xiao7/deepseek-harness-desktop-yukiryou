@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self'; script-src 'self'"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DeepSeek YukiRyou</title>
@@ -16,7 +16,17 @@
       class="window-toolbar"
       data-testid="window-drag-region"
       aria-label="窗口拖动区域"
-    ></header>
+    >
+      <button
+        class="companion-toggle"
+        data-testid="companion-toggle"
+        type="button"
+        aria-label="切换桌面伴侣侧栏"
+        hidden
+      >
+        <span class="companion-toggle-glyph" aria-hidden="true"></span>
+      </button>
+    </header>
     <section class="window-content">
       <main class="loading-shell" aria-live="polite">
         <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -50,6 +60,43 @@
           <a href="dsh-desktop://action/export-diagnostics">导出诊断包</a>
         </nav>
       </main>
+      <aside class="companion-panel" data-testid="companion-panel" hidden>
+        <header class="companion-header">
+          <div>
+            <span class="companion-eyebrow">工作区</span>
+            <h2 data-testid="companion-workspace-title">当前工作区</h2>
+          </div>
+          <span class="companion-running" data-testid="companion-running" hidden>运行中</span>
+        </header>
+        <div class="companion-empty" data-testid="companion-empty">
+          <span class="companion-empty-icon" aria-hidden="true">⌘</span>
+          <strong>选择一个工作区会话</strong>
+          <small>文件、变更与预览会显示在这里</small>
+        </div>
+        <div class="review-browser" data-testid="review-browser" hidden>
+          <nav class="review-tabs" aria-label="工作区视图">
+            <button type="button" data-review-tab="changes" aria-selected="true">变更 <span data-testid="change-count">0</span></button>
+            <button type="button" data-review-tab="files" aria-selected="false">文件</button>
+            <button type="button" class="review-refresh" data-testid="review-refresh" title="刷新">↻</button>
+          </nav>
+          <section class="review-list" data-review-view="changes" aria-label="工作区变更"></section>
+          <section class="review-list file-tree" data-review-view="files" aria-label="文件树" hidden></section>
+          <p class="review-note" data-testid="review-note"></p>
+        </div>
+      </aside>
+      <section class="preview-panel" data-testid="preview-panel" hidden>
+        <header class="preview-toolbar">
+          <div>
+            <strong data-testid="preview-name">预览</strong>
+            <small data-testid="preview-path"></small>
+          </div>
+          <div class="preview-actions">
+            <button type="button" data-testid="preview-mode" hidden>源码</button>
+            <button type="button" data-testid="preview-close" aria-label="关闭预览">×</button>
+          </div>
+        </header>
+        <article class="preview-content" data-testid="preview-content"></article>
+      </section>
     </section>
   </body>
 </html>

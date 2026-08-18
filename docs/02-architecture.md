@@ -80,9 +80,12 @@ interface DesktopWindow {
 
 `showHarness()` 只接受 `RuntimeSupervisor` 返回的 origin；模块内部再次校验协议为 `http:`、主机为 `127.0.0.1`、端口为当前启动端口。
 
-### `Desktop Settings Extension`
+### `Desktop Runtime Extensions`
 
-桌面专属设置是随包、固定版本的 Harness 客户端扩展，不通过 DOM 覆盖实现。构建时将 `runtime/desktop-settings-plugin` 放入内置 dsh 依赖树；启动时在应用独立的 Runtime Home 中创建仅指向该随包目录的符号链接，并通过 `desktop-settings.patch.yml` 叠加到 `web` profile。
+桌面专属扩展是随包、固定版本的 Harness 客户端扩展，不通过 DOM 覆盖实现。构建时将 settings 与 companion 两个包放入内置 dsh 依赖树；启动时在应用独立的 Runtime Home 中创建只指向随包目录的符号链接，并通过 `desktop-extensions.patch.yml` 一次性叠加到 `web` profile。
+
+- `@dsh-desktop/companion` 的 `AccountBalance` 在 Runtime 内解析 `DEEPSEEK_API_KEY` 并调用固定官方余额 endpoint。主进程使用每次 Runtime 启动新生成的 256-bit token 调用固定 loopback route；Harness preload 只暴露经过 shared schema 校验的 snapshot/subscribe/refresh。
+- shell preload 与 Harness preload 是不同 Forge 产物。前者只处理本地 chrome 状态；后者只处理 Harness 观察与受限产品桥，余额 Key、Authorization header 和原始响应都不会跨越 Runtime 边界。
 
 - “外观”调用官方 `ctx.theme.getTheme()` / `setTheme()`，因此浅色、深色、跟随系统及持久化只有一个事实来源。
 - 隔离 preload 将 Harness 最终解析出的明暗模式和两个桌面 chrome 颜色归一化后转发给本地顶栏；后续风格按 [外观扩展契约](./08-appearance-extension.md) 同时提供 Harness 令牌与顶栏令牌。
@@ -159,14 +162,15 @@ interface AppUpdater {
 │   │   ├── update/
 │   │   │   └── app-updater.ts
 │   │   └── diagnostics/
-│   ├── preload/           # V1 默认不暴露接口；需要时保持最小
+│   ├── preload/           # shell/Harness 两份最小隔离 preload
 │   └── renderer/          # 仅 Loading / Failure 本地页面
 ├── resources/
 │   ├── runtime/           # 构建时生成，不手工修改
 │   └── icons/
 ├── runtime/
-│   ├── desktop-settings-plugin/ # 外观/关于 Harness 扩展源码
-│   └── desktop-settings.patch.yml
+│   ├── desktop-settings-plugin/  # 外观/关于 Harness 扩展源码
+│   ├── desktop-companion-plugin/ # 余额与后续 Companion seam
+│   └── desktop-extensions.patch.yml
 ├── scripts/
 │   ├── vendor-runtime.ts
 │   ├── verify-runtime.ts

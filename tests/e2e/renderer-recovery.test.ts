@@ -4,16 +4,9 @@ import { join } from 'node:path';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const targetArchitecture = process.env.DSH_E2E_ARCH ?? process.arch;
-const executablePath = join(
-  process.cwd(),
-  'out',
-  `DeepSeek YukiRyou-darwin-${targetArchitecture}`,
-  'DeepSeek YukiRyou.app',
-  'Contents',
-  'MacOS',
-  'DeepSeek YukiRyou',
-);
+import { resolveE2eExecutablePath } from './executable-path.js';
+
+const executablePath = resolveE2eExecutablePath();
 
 describe('renderer recovery', () => {
   let electronApp: ElectronApplication | undefined;
@@ -33,6 +26,7 @@ describe('renderer recovery', () => {
       electronApp = await electron.launch({
         executablePath,
         args: [`--user-data-dir=${userData}`],
+        env: { ...process.env, DSH_DESKTOP_E2E: '1' },
       });
       await withTimeout(electronApp.firstWindow(), 'open first window', 10_000);
 
@@ -143,7 +137,6 @@ async function rendererReadiness(
     }
   });
 }
-
 async function harnessRecovered(electronApp: ElectronApplication): Promise<boolean> {
   return electronApp.evaluate(async ({ webContents }) => {
     const harness = webContents

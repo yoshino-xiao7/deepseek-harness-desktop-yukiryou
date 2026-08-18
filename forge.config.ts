@@ -78,7 +78,12 @@ const config: ForgeConfig = {
           target: 'main',
         },
         {
-          entry: 'src/preload-entry.ts',
+          entry: 'src/shell-preload-entry.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
+        {
+          entry: 'src/harness-preload-entry.ts',
           config: 'vite.preload.config.ts',
           target: 'preload',
         },

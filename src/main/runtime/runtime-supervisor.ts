@@ -41,6 +41,7 @@ export interface RuntimeSupervisorOptions {
   readonly version: string;
   readonly startupTimeoutMs: number;
   readonly shutdownTimeoutMs: number;
+  readonly createCompanionToken?: () => string;
   readonly onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }
 
@@ -128,6 +129,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
         env: buildRuntimeEnvironment(
           this.#options.runtimeHome,
           this.#options.runtimeBinDirectories ?? [],
+          this.#options.createCompanionToken?.(),
         ),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
@@ -238,8 +240,12 @@ async function allocateLoopbackPort(): Promise<number> {
 function buildRuntimeEnvironment(
   runtimeHome: string,
   runtimeBinDirectories: readonly string[],
+  companionToken?: string,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { DSH_HOME: runtimeHome };
+  if (companionToken !== undefined) {
+    environment.DSH_DESKTOP_COMPANION_TOKEN = companionToken;
+  }
   for (const name of ['TMPDIR', 'LANG', 'LC_ALL'] as const) {
     const value = process.env[name];
     if (value !== undefined) {

@@ -12,6 +12,8 @@ interface WorkflowStep {
 }
 
 interface WorkflowJob {
+  needs?: string | string[];
+  'timeout-minutes'?: number;
   steps?: WorkflowStep[];
 }
 
@@ -92,6 +94,25 @@ describe('macOS release workflow contract', () => {
     expect(commands).not.toContain('--target "${SOURCE_SHA}"');
     expect(verifyDmgIndex).toBeGreaterThan(-1);
     expect(createDraftIndex).toBeGreaterThan(verifyDmgIndex);
+  });
+
+  it('soaks the installed candidate before spending an Apple submission', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const soak = workflow.jobs?.soak_candidate;
+    const commands = (soak?.steps ?? [])
+      .map((step) => step.run?.trim() ?? '')
+      .join('\n');
+
+    expect(soak?.needs).toBe('verify_candidate');
+    expect(soak?.['timeout-minutes']).toBe(330);
+    expect(commands).toContain('--require-notarized=false');
+    expect(commands).toContain('pnpm test:soak:app:release');
+    expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
   });
 
   it('publishes releases in the channel consumed by update.electronjs.org', async () => {

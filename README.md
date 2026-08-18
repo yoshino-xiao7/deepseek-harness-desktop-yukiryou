@@ -122,7 +122,7 @@ pnpm release:mac:candidate
 
 | 组件 | 当前版本 | 策略 |
 | --- | --- | --- |
-| DeepSeek Harness | `0.1.0-rc.6` | 随应用固定并验证 |
+| DeepSeek Harness | `0.1.0-rc.7` | 随应用固定并验证 |
 | Node.js | `24.19.0` | Apple Silicon 内置运行时 |
 | pnpm | `10.34.5` | 仅供内置 Harness 使用 |
 | Electron | `43.4.0` | 桌面壳运行时 |

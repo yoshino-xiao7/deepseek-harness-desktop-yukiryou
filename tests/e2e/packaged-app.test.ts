@@ -4,16 +4,9 @@ import { join } from 'node:path';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const targetArchitecture = process.env.DSH_E2E_ARCH ?? process.arch;
-const executablePath = join(
-  process.cwd(),
-  'out',
-  `DeepSeek YukiRyou-darwin-${targetArchitecture}`,
-  'DeepSeek YukiRyou.app',
-  'Contents',
-  'MacOS',
-  'DeepSeek YukiRyou',
-);
+import { resolveE2eExecutablePath } from './executable-path.js';
+
+const executablePath = resolveE2eExecutablePath();
 
 describe('packaged desktop application', () => {
   let electronApp: ElectronApplication | undefined;
@@ -29,6 +22,7 @@ describe('packaged desktop application', () => {
       electronApp = await electron.launch({
         executablePath,
         args: [`--user-data-dir=${userData}`],
+        env: { ...process.env, DSH_DESKTOP_E2E: '1' },
       });
       await electronApp.firstWindow();
       await expect
@@ -161,6 +155,72 @@ describe('packaged desktop application', () => {
         },
       );
       expect(expandedHarnessWidth).toBeCloseTo(280, 1);
+      await expect
+        .poll(
+          () => electronApp!.evaluate(async ({ webContents }) => {
+            const harness = webContents.getAllWebContents().find((contents) =>
+              contents.getURL().startsWith('http://127.0.0.1:'),
+            );
+            if (harness === undefined) return undefined;
+            return harness.executeJavaScript(`(() => {
+              const bridge = window.deepSeekYukiRyouBalance;
+              const card = document.querySelector('[data-testid="desktop-account-balance"]');
+              return {
+                text: card?.textContent,
+                hasCard: card !== null,
+                hasStyle: document.querySelector('style[data-dsh-balance-style]') !== null,
+                bridgeShape: {
+                  getSnapshot: typeof bridge?.getSnapshot,
+                  subscribe: typeof bridge?.subscribe,
+                  refresh: typeof bridge?.refresh,
+                },
+              };
+            })()`);
+          }),
+          { timeout: 10_000 },
+        )
+        .toMatchObject({
+          hasCard: true,
+          hasStyle: true,
+          text: expect.stringMatching(/账户余额|Account balance/),
+          bridgeShape: {
+            getSnapshot: 'function',
+            subscribe: 'function',
+            refresh: 'function',
+          },
+        });
+      expect(
+        await shellPage!.evaluate(
+          () => typeof (window as unknown as { deepSeekYukiRyouBalance?: unknown }).deepSeekYukiRyouBalance,
+        ),
+      ).toBe('undefined');
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-empty"]').textContent()).toContain('选择一个工作区会话');
+      const rejectedPath = await shellPage!.evaluate(async () => {
+        const bridge = (window as unknown as { deepSeekYukiRyouCompanion: { request(value: unknown): Promise<unknown> } }).deepSeekYukiRyouCompanion;
+        return bridge.request({ kind: 'file.preview', nodeId: '/Users/example/secret' });
+      });
+      expect(rejectedPath).toEqual({ kind: 'unavailable', reason: 'invalid-node' });
+      const readHarnessViewWidth = () => electronApp!.evaluate(async ({ BrowserWindow, WebContentsView }) => {
+        const window = BrowserWindow.getAllWindows()[0];
+        const harness = window?.contentView.children.find((view) => (
+          view instanceof WebContentsView
+          && view.webContents.getURL().startsWith('http://127.0.0.1:')
+        ));
+        return harness?.getBounds().width;
+      });
+      const openHarnessWidth = await readHarnessViewWidth();
+      await shellPage!.locator('[data-testid="companion-toggle"]').click();
+      await shellPage!.waitForTimeout(60);
+      const animatingHarnessWidth = await readHarnessViewWidth();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
+      const closedHarnessWidth = await readHarnessViewWidth();
+      expect(openHarnessWidth).toBeTypeOf('number');
+      expect(animatingHarnessWidth).toBeGreaterThan(openHarnessWidth!);
+      expect(animatingHarnessWidth).toBeLessThan(closedHarnessWidth!);
+      expect(closedHarnessWidth! - openHarnessWidth!).toBeCloseTo(340, -1);
+      await shellPage!.locator('[data-testid="companion-toggle"]').click();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
       await expect
         .poll(readToolbarSidebarWidth, { timeout: 5_000 })
         .toBeCloseTo(280, 1);
@@ -425,7 +485,7 @@ describe('packaged desktop application', () => {
         getSnapshot: 'function',
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
-      expect(settingsResult?.aboutText).toContain('0.1.0-rc.6');
+      expect(settingsResult?.aboutText).toContain('0.1.0-rc.7');
       expect(settingsResult?.aboutText).toMatch(/Apple Silicon.*arm64/);
 
       await electronApp.evaluate(({ webContents }) => {
