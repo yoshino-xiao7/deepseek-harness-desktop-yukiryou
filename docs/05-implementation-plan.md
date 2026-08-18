@@ -69,7 +69,7 @@
 
 ## 已接受的后续专题计划
 
-Desktop Companion 的完整产品语义、架构、安全 seam、文件落点、测试矩阵与阶段退出条件已冻结在 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。当前双 preload、统一扩展装配、余额鉴权 RPC、账户余额卡、Workspace Authority、右栏、文件树、Markdown/图片/文本预览和当前 worktree diff MVP 已实现；发布硬化正在进行，宠物按约定等待角色素材后最后实现。
+Desktop Companion 的完整产品语义、架构、安全 seam、文件落点、测试矩阵与阶段退出条件已冻结在 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。非宠物阶段已实现并随 `v0.2.1-beta.1` 完成签名、公证和异机发布验证；相对 Markdown 文件链接、64 MiB 有界预览缓存和 820px 最小窗口响应式矩阵也已收口。下一实施阶段是等待角色素材冻结后的宠物动画。
 
 实施顺序固定为：安全契约与双 preload → 账户余额 → 右栏与 Workspace Capability → 文件树和安全预览 → Git 变更与审阅 → 无宠物版本稳定性验收 → 用户提供角色素材后的宠物动画。该专题阶段不得反向改写上文已经完成的基础 Phase 0–4。
 

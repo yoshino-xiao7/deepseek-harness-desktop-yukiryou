@@ -32,6 +32,39 @@ describe('WorkspaceInspector', () => {
     expect(await inspector.listDirectory(docs!.id)).toMatchObject({ kind: 'directory', nodes: [{ name: 'note.txt' }] });
   });
 
+  it('resolves Markdown links relative to an opaque source node without escaping the workspace', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'workspace-inspector-relative-'));
+    const outside = await mkdtemp(join(tmpdir(), 'workspace-inspector-relative-outside-'));
+    await mkdir(join(root, 'docs'));
+    await writeFile(join(root, 'docs', 'index.md'), '[Guide](guide.md)');
+    await writeFile(join(root, 'docs', 'guide.md'), '# Guide');
+    await writeFile(join(outside, 'secret.md'), '# Secret');
+    const inspector = createWorkspaceInspector(root);
+    const overview = await inspector.overview();
+    if (overview.kind !== 'overview') throw new Error('overview unavailable');
+    const docs = overview.nodes.find((node) => node.name === 'docs');
+    const directory = await inspector.listDirectory(docs!.id);
+    if (directory.kind !== 'directory') throw new Error('directory unavailable');
+    const index = directory.nodes.find((node) => node.name === 'index.md');
+
+    expect(await inspector.previewRelative(index!.id, 'guide.md')).toMatchObject({
+      kind: 'preview', path: 'docs/guide.md', content: { kind: 'markdown', text: '# Guide' },
+    });
+    expect(await inspector.previewRelative(index!.id, '../../secret.md')).toEqual({ kind: 'unavailable', reason: 'invalid-node' });
+  });
+
+  it('invalidates a cached preview when the underlying file revision changes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'workspace-inspector-cache-'));
+    await writeFile(join(root, 'note.md'), '# Before');
+    const inspector = createWorkspaceInspector(root, 64 * 1024);
+    const overview = await inspector.overview();
+    if (overview.kind !== 'overview') throw new Error('overview unavailable');
+    const note = overview.nodes.find((node) => node.name === 'note.md');
+    expect(await inspector.preview(note!.id)).toMatchObject({ content: { text: '# Before' } });
+    await writeFile(join(root, 'note.md'), '# After changed');
+    expect(await inspector.preview(note!.id)).toMatchObject({ content: { text: '# After changed' } });
+  });
+
   it('rejects invalid UTF-8 instead of rendering replacement characters', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workspace-inspector-encoding-'));
     await writeFile(join(root, 'broken.md'), Buffer.from([0x23, 0x20, 0xc3, 0x28]));

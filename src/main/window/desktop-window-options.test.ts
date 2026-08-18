@@ -9,5 +9,7 @@ describe('desktop window chrome', () => {
     expect(options.frame).not.toBe(false);
     expect(options.titleBarStyle).toBe('hiddenInset');
     expect(options.trafficLightPosition).toEqual({ x: 14, y: 14 });
+    expect(options.minWidth).toBe(820);
+    expect(options.minHeight).toBe(600);
   });
 });

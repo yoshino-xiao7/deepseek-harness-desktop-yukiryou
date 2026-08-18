@@ -6,6 +6,16 @@
 
 ## [未发布]
 
+### 改进
+
+- Markdown 排版预览中的安全相对文件链接现在可以在当前工作区继续打开；协议 URL、绝对路径、越界路径和 symlink 仍被拒绝。
+- 文件预览新增按 revision 校验的 64 MiB LRU，Workspace 切换会随 Inspector 一起释放缓存。
+- 窗口最小宽度调整为 820px，并补齐 820/980/1180/1480px 的 overlay、docked、Review Focus 与宽屏审核布局验证。
+
+### 文档
+
+- 修正 Desktop Companion 和 `v0.2.1-beta.1` 发布门禁状态；明确非宠物阶段已经收口。
+
 ## [0.2.1-beta.1] - 2026-08-18
 
 ### 修复

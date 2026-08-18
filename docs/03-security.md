@@ -60,7 +60,7 @@ webPreferences: {
 - Workspace 文件只能通过 main 中的 opaque capability node 打开；renderer 与 Harness 不能提交 root 或绝对路径。
 - 普通文件使用 `O_NOFOLLOW` 打开句柄，读取前后比较 device、inode、size、mtime 与 ctime；symlink 换位拒绝，读取期间变化返回 `file-changed`。
 - 文本使用 fatal UTF-8 解码，拒绝非法编码和 NUL binary；常见图片在进入 renderer 前同时限制压缩字节、单边 16384px 与 32MP 总像素。
-- Markdown 只解析为 SafeMarkdown 的 heading、paragraph、blockquote、list、code 与文本节点；HTML、MDX、远程图片、URL 和事件属性没有可执行语义。
+- Markdown 只解析为 SafeMarkdown 的 heading、paragraph、blockquote、list、code、文本与受限 workspace-link 节点；HTML、MDX、远程图片、协议 URL 和事件属性没有可执行语义。workspace-link 只携带当前文件 opaque node 与经过长度、编码、协议和绝对路径校验的相对目标，主进程重新解析 containment 并拒绝越界、目录、特殊文件和 symlink。
 - Workspace capability 改变时，main 关闭旧预览，shell preload 清空可重放 preview，renderer 立即释放旧正文与图片 data URL。
 
 ### 供应链与更新

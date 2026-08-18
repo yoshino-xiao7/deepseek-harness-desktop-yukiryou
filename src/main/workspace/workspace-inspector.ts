@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { lstat, readdir } from 'node:fs/promises';
-import { basename, extname, join, relative } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
@@ -10,7 +10,8 @@ import type {
   WorkspaceNode,
   WorkspaceReviewResponse,
 } from '../../shared/workspace-review.js';
-import { readStableRegularFile, type StableFileRead } from './stable-file-reader.js';
+import { createBoundedLruCache } from './bounded-lru-cache.js';
+import { readStableRegularFile, stableRegularFileRevision, type StableFileRead } from './stable-file-reader.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_DIRECTORY_ENTRIES = 500;
@@ -18,6 +19,7 @@ const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_GIT_OUTPUT = 2 * 1024 * 1024;
 const MAX_TREE_DEPTH = 20;
+const MAX_PREVIEW_CACHE_BYTES = 64 * 1024 * 1024;
 const EXCLUDED_DIRECTORIES = new Set([
   '.git', '.astro', '.next', '.turbo', '.pnpm-store', '.codex-pet-runs',
   'node_modules', 'dist', 'build', 'coverage',
@@ -37,22 +39,27 @@ export interface WorkspaceInspector {
   overview(): Promise<WorkspaceReviewResponse>;
   listDirectory(nodeId: string): Promise<WorkspaceReviewResponse>;
   preview(nodeId: string): Promise<WorkspaceReviewResponse>;
+  previewRelative(nodeId: string, target: string): Promise<WorkspaceReviewResponse>;
   diff(nodeId: string): Promise<WorkspaceReviewResponse>;
   previewChangedPath(relativePath: string, historicalDiff?: HistoricalDiff): Promise<WorkspaceReviewResponse>;
 }
 
-export function createWorkspaceInspector(root: string): WorkspaceInspector {
-  return new NodeWorkspaceInspector(root);
+export function createWorkspaceInspector(root: string, previewCacheBytes = MAX_PREVIEW_CACHE_BYTES): WorkspaceInspector {
+  return new NodeWorkspaceInspector(root, previewCacheBytes);
 }
+
+type PreviewResponse = Extract<WorkspaceReviewResponse, { kind: 'preview' }>;
 
 class NodeWorkspaceInspector implements WorkspaceInspector {
   readonly #root: string;
   readonly #nodes = new Map<string, NodeRecord>();
   readonly #idsByPath = new Map<string, string>();
   readonly #rootNode: NodeRecord;
+  readonly #previewCache;
 
-  constructor(root: string) {
+  constructor(root: string, previewCacheBytes: number) {
     this.#root = root;
+    this.#previewCache = createBoundedLruCache<{ readonly revision: string; readonly response: PreviewResponse }>(previewCacheBytes);
     this.#rootNode = this.#register(root, '', basename(root), 'directory', 0);
   }
 
@@ -85,6 +92,14 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
     const node = this.#nodes.get(nodeId);
     if (node?.kind !== 'file') return { kind: 'unavailable', reason: 'invalid-node' };
     try {
+      const currentRevision = await stableRegularFileRevision(node.absolutePath);
+      if (currentRevision.kind !== 'revision') {
+        return currentRevision.kind === 'unsafe-type'
+          ? this.#unsupported(node, 'unsupported-type')
+          : { kind: 'unavailable', reason: 'io-error' };
+      }
+      const cached = this.#previewCache.get(node.id);
+      if (cached?.revision === currentRevision.revision) return cached.response;
       const extension = extname(node.name).toLowerCase();
       const mime = imageMime(extension);
       if (mime !== undefined) {
@@ -96,7 +111,7 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
         if (dimensions.width > 16_384 || dimensions.height > 16_384 || dimensions.width * dimensions.height > 32_000_000) {
           return this.#unsupported(node, 'too-large');
         }
-        return this.#preview(node, { kind: 'image', dataUrl: `data:${mime};base64,${data.toString('base64')}` });
+        return this.#cachePreview(node, read.revision, { kind: 'image', dataUrl: `data:${mime};base64,${data.toString('base64')}` });
       }
       const read = await readStableRegularFile(node.absolutePath, MAX_TEXT_BYTES);
       if (read.kind !== 'data') return this.#readFailure(node, read);
@@ -104,10 +119,24 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
       if (data.subarray(0, 8_192).includes(0)) return this.#unsupported(node, 'binary');
       const text = decodeUtf8(data);
       if (text === undefined) return this.#unsupported(node, 'invalid-encoding');
-      return this.#preview(node, { kind: extension === '.md' || extension === '.markdown' ? 'markdown' : 'text', text, truncated: false });
+      return this.#cachePreview(node, read.revision, { kind: extension === '.md' || extension === '.markdown' ? 'markdown' : 'text', text, truncated: false });
     } catch {
       return { kind: 'unavailable', reason: 'io-error' };
     }
+  }
+
+  async previewRelative(nodeId: string, target: string): Promise<WorkspaceReviewResponse> {
+    const source = this.#nodes.get(nodeId);
+    if (source?.kind !== 'file' || target === '' || target.includes('\\') || target.includes('\0')) {
+      return { kind: 'unavailable', reason: 'invalid-node' };
+    }
+    const absolutePath = resolve(dirname(source.absolutePath), target);
+    const relativePath = relative(this.#root, absolutePath);
+    if (!safeRelativePath(relativePath)) return { kind: 'unavailable', reason: 'invalid-node' };
+    const targetNodeId = await this.#registerExistingFile(relativePath);
+    return targetNodeId === undefined
+      ? { kind: 'unavailable', reason: 'invalid-node' }
+      : this.preview(targetNodeId);
   }
 
   async diff(nodeId: string): Promise<WorkspaceReviewResponse> {
@@ -253,6 +282,16 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
     return { kind: 'preview', nodeId: node.id, name: displayName(node.name), path: displayName(node.relativePath), content };
   }
 
+  #cachePreview(
+    node: NodeRecord,
+    revision: string,
+    content: PreviewResponse['content'],
+  ): PreviewResponse {
+    const response = this.#preview(node, content) as PreviewResponse;
+    this.#previewCache.set(node.id, { revision, response }, estimatedPreviewBytes(content));
+    return response;
+  }
+
   #unsupported(node: NodeRecord, reason: 'binary' | 'invalid-encoding' | 'too-large' | 'unsupported-type'): WorkspaceReviewResponse {
     return this.#preview(node, { kind: 'unsupported', reason });
   }
@@ -299,6 +338,12 @@ function decodeUtf8(data: Buffer): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function estimatedPreviewBytes(content: PreviewResponse['content']): number {
+  if (content.kind === 'image') return content.dataUrl.length * 2;
+  if ('text' in content) return content.text.length * 2;
+  return 256;
 }
 
 function parseNumstat(output: string): Map<string, { additions: number; deletions: number }> {

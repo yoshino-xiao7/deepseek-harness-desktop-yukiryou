@@ -286,6 +286,16 @@ async function openPreview(nodeId: string): Promise<void> {
   renderPreview();
 }
 
+async function openRelativePreview(nodeId: string, target: string): Promise<void> {
+  if (companionBridge === undefined) return;
+  const response = await companionBridge.request({ kind: 'file.preview-relative', nodeId, target });
+  if (response.kind !== 'preview') return;
+  currentPreview = response;
+  showingMarkdownSource = false;
+  companionBridge.setPreviewOpen(true);
+  renderPreview();
+}
+
 async function openDiff(nodeId: string): Promise<void> {
   if (companionBridge === undefined) return;
   const response = await companionBridge.request({ kind: 'change.diff', nodeId });
@@ -403,6 +413,17 @@ function appendSafeInline(parent: HTMLElement, content: readonly SafeMarkdownInl
       const code = document.createElement('code');
       code.textContent = part.text;
       parent.append(code);
+    } else if (part.kind === 'workspace-link') {
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'markdown-workspace-link';
+      link.textContent = part.text;
+      link.title = part.target;
+      link.addEventListener('click', () => {
+        const preview = currentPreview;
+        if (preview !== undefined) void openRelativePreview(preview.nodeId, part.target);
+      });
+      parent.append(link);
     } else parent.append(document.createTextNode(part.text));
   }
 }

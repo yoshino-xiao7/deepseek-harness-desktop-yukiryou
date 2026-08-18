@@ -13,10 +13,7 @@ import {
 } from '../../shared/workspace-review.js';
 import {
   COMPANION_COMMAND_CHANNEL,
-  COMPANION_PANEL_WIDTH,
-  COMPANION_PREVIEW_WIDTH,
   COMPANION_STATE_CHANNEL,
-  COMPANION_WIDE_REVIEW_MIN_WIDTH,
   HARNESS_CONTEXT_CHANNEL,
   type CompanionWorkspaceSnapshot,
   type DesktopCompanionSnapshot,
@@ -51,6 +48,7 @@ import {
 import { createDesktopWindowOptions } from './desktop-window-options.js';
 import {
   animatedReservedWidth,
+  companionLayout,
   COMPANION_LAYOUT_ANIMATION_MS,
   harnessContentBounds,
 } from './desktop-window-layout.js';
@@ -499,10 +497,12 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   #layoutHarnessView(animate = false): void {
     const { width, height } = this.#window.contentView.getBounds();
-    const reviewFocus = this.#showingHarness && this.#companionState.open && this.#companionState.previewOpen && width < COMPANION_WIDE_REVIEW_MIN_WIDTH;
-    const panel = this.#showingHarness && this.#companionState.open ? Math.min(COMPANION_PANEL_WIDTH, Math.max(0, width - 480)) : 0;
-    const preview = this.#showingHarness && this.#companionState.open && this.#companionState.previewOpen && !reviewFocus ? COMPANION_PREVIEW_WIDTH : 0;
-    const target = panel + preview;
+    const layout = companionLayout(
+      width,
+      this.#showingHarness && this.#companionState.open,
+      this.#showingHarness && this.#companionState.previewOpen,
+    );
+    const { reviewFocus, reservedWidth: target } = layout;
     if (!animate || reviewFocus || !this.#showingHarness) {
       this.#cancelLayoutAnimation();
       this.#applyHarnessLayout(target, reviewFocus, width, height);

@@ -212,6 +212,7 @@ export class AppCoordinator {
     if (request.kind === 'overview') return inspector.overview();
     if (request.kind === 'directory.list') return inspector.listDirectory(request.nodeId);
     if (request.kind === 'change.diff') return inspector.diff(request.nodeId);
+    if (request.kind === 'file.preview-relative') return inspector.previewRelative(request.nodeId, request.target);
     return inspector.preview(request.nodeId);
   }
 

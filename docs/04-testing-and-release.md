@@ -14,8 +14,10 @@
 - `AccountBalance`：官方 schema 映射、decimal string 保真、single-flight、TTL、超时、body/schema 上限、错误分类与 stale last-good。
 - `Workspace Authority`：只有属于注册 Workspace 的 Session 才返回 canonical root；错误 Workspace、畸形 ID 和非 ok 状态 fail closed。
 - `WorkspaceInspector`：opaque node、懒加载目录、深度/条目/字节/图片像素上限、fatal UTF-8、`O_NOFOLLOW` 稳定文件读取、symlink 换位拒绝、跨 capability ID 拒绝、Markdown 专用结果和相对 HEAD 的真实 diff。
-- `SafeMarkdown`：HTML、SVG/MathML、iframe/object、远程与 data 图片、`javascript:`/`file:` 链接、事件属性、深层列表和 fenced script 只产生安全结构和 inert text，不产生 URL、HTML 或执行节点。
+- `SafeMarkdown`：HTML、SVG/MathML、iframe/object、远程与 data 图片、`javascript:`/`file:` 链接、事件属性、深层列表和 fenced script 只产生安全结构和 inert text；只有受限相对文件链接产生 workspace-link，随后仍需 WorkspaceInspector containment 复核。
 - `ReviewTargetStore`：先到 preview 可重放；Workspace capability 改变后清空正文并通知当前 renderer 释放内存。
+- `BoundedLruCache`：按最近使用顺序维持 64 MiB preview 上限，单项超限不保留，文件 revision 改变后不得命中旧正文。
+- `companionLayout`：固定覆盖 820/980/1180/1480px，分别验证 overlay、docked、Review Focus 与 wide review，不允许最小窗口宽度令某个模式不可达。
 
 内部 I/O 使用 production adapter 与 fake adapter。fake 必须模拟失败和时间，不使用真实 `sleep`。
 

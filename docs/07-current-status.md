@@ -1,6 +1,6 @@
 # 当前实现状态
 
-更新时间：2026-08-18。
+更新时间：2026-08-19。
 
 ## 已完成
 
@@ -18,7 +18,7 @@
 - Harness “设置”上方已通过官方 `sidebar.footer.action` 插槽显示当前凭据所属账户余额；只显示官方 CNY/USD 账户余额，不显示今日消费。余额 Key 只在 Runtime credential service 内解析，主进程使用每次 Runtime 启动轮换的 token 拉取脱敏快照。
 - 本地 shell 与 Harness 已改为两个独立 preload 构建产物；余额桥只存在于 Harness，shell 页面 E2E 已验证检测不到该 bridge。
 - 本地顶栏已提供 Desktop Companion 开关；右栏使用官方 Session/Workspace store 识别当前上下文，再由 authenticated Runtime registry 复核归属。主进程只在复核成功后建立 Workspace Capability，renderer 仅能使用随机节点 ID，不能提交 root、绝对路径或 shell 命令。
-- Workspace Review MVP 已支持懒加载文件树、当前 worktree 相对 HEAD 的目录化变更树与增删行数、带双侧行号/hunk/未修改行折叠的单文件 diff，以及 Markdown 排版/源码、纯文本和 PNG/JPEG/GIF/WebP 预览；窗口足够宽时预览与右栏并排，窄窗口进入不 reload Harness 的 Review Focus。官方“产物”行保持不变，其下新增的逐轮变更卡消费 rc.7 成功 mutation 工具事件；升级前旧轮次只回填官方 deliverables 路径且不伪造增删统计。点击后由主进程重新核对当前 worktree 再打开只读 diff。宠物区尚未加入，因此文件区占满右栏。
+- Workspace Review 已支持懒加载文件树、当前 worktree 相对 HEAD 的目录化变更树与增删行数、带双侧行号/hunk/未修改行折叠的单文件 diff，以及 Markdown 排版/源码、纯文本和 PNG/JPEG/GIF/WebP 预览。Markdown 中受限的相对文件链接可通过当前文件 opaque node 重入 WorkspaceInspector，绝对路径、协议 URL、越界与 symlink 仍被拒绝；文件预览使用按 revision 校验的 64 MiB LRU。窗口在 820–979px 使用不挤压 Harness 的覆盖侧栏，打开文件进入不 reload Harness 的 Review Focus；980px 起使用 docked 模式，1320px 起并排显示 Harness、预览和右栏。官方“产物”行保持不变，其下新增的逐轮变更卡消费 rc.7 成功 mutation 工具事件；升级前旧轮次只回填官方 deliverables 路径且不伪造增删统计。宠物区尚未加入，因此文件区占满右栏。
 - 产品正式更名为 DeepSeek YukiRyou，使用白底 YukiRyou 鲸鱼女仆品牌图标、独立 Bundle ID、中英文双 README 和品牌化关于页。
 - 首次以新名称启动时会合并复制旧 `DSH Desktop` 用户数据，并写入迁移标记；旧目录保留为可恢复备份。
 - 关于页展示开发者 GitHub `yoshino-xiao7`，点击后由系统浏览器打开主页。
@@ -34,7 +34,7 @@
 ## 自动验证现状
 
 ```text
-Unit:        71 passed
+Unit:        81 passed
 Integration: 21 passed（fake Harness、真实 rc.7 dsh、内置 pnpm、双语发布说明、30分钟发布与独立5小时门禁契约、压力/soak 冒烟）
 E2E arm64:   3 passed（稳定启动 + 完整 UI 契约 + Harness/顶栏 renderer 独立强制崩溃恢复）
 Stress:      100/100 passed（启动、就绪、停止、端口回收）
@@ -53,19 +53,18 @@ Artifacts:   arm64 DMG + ZIP generated
 - `out/make/DeepSeek YukiRyou-0.2.1-beta.1-arm64.dmg`
 - `out/make/zip/darwin/arm64/DeepSeek YukiRyou-darwin-arm64-0.2.1-beta.1.zip`
 
-本地产物只适合开发验证，不应直接作为公开下载版本。已发布标签均不可覆盖；本次发布目标为 `v0.2.1-beta.1`。
+本地产物只适合开发验证，不应直接作为公开下载版本。`v0.2.1-beta.1` 已通过签名、异机安装、30 分钟真实打包应用 soak、Apple 公证、staple 和最终 DMG/ZIP 异机复验并公开发布；已发布标签不可覆盖。
 
-## 继续执行前需要的 CI 配置
+## 已完成的 CI 发布配置
 
 1. 将 Developer ID Application 证书导出为带强密码的 `.p12`，以 Base64 和密码分别写入 GitHub Actions Secrets。
 2. 将 App Store Connect API `.p8` 以 Base64 写入 GitHub Actions Secrets，同时配置 Key ID 与 Issuer ID。
 3. 通过 `Release macOS` 生成并验收新版本 Draft；通过独立 `Publish verified macOS draft` 工作流公开。
 
-本机已具备 Developer ID 与公证 API 凭据，但 CI Secrets 尚需按 `docs/09-github-and-apple-release.md` 配置。配置前不执行新的公证或 GitHub 发布。
+上述 CI Secrets 与发布链已完成实际验证；后续版本继续按 `docs/09-github-and-apple-release.md` 执行，不在本地直接公开产物。
 
 ## 尚未完成的非发布项
 
-- 发布候选冻结后的30分钟打包应用 soak 实际运行；60秒资格 soak 已通过，正式门禁位于异机安装与 Apple 公证之间。独立5小时扩展 soak 已支持手动触发和每周低峰运行，不阻塞普通发布。
 - Harness 缺少已验证的稳定任务事件接口，因此通知功能按方案延期，不使用 DOM 文本猜测。
 - Intel 原生机器上的 x64 E2E；当前用户设备与交付目标为 Apple Silicon。
-- Desktop Companion 完整方案已进入实施，详见 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。账户余额、安全 seam、Workspace Authority、右栏和 Workspace Review 核心 MVP 已完成；当前剩余发布硬化、完整兼容矩阵与素材提供后的宠物动画。
+- Desktop Companion 非宠物阶段已完成，详见 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。下一阶段是产品所有者冻结角色素材后的宠物动画；宠物失败必须继续与余额、Workspace Review、Harness 和更新隔离。
