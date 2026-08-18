@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouUpdates', {
   },
   check: (): void => sendUpdateCommand('check'),
   install: (): void => sendUpdateCommand('install'),
+  download: (): void => sendUpdateCommand('download'),
 });
 
 function sendUpdateCommand(command: UpdateCommand): void {
@@ -250,9 +251,10 @@ function reconcileHarnessUpdateButton(): void {
     return;
   }
   const sidebar = findHarnessSidebar();
-  const logoRow = sidebar?.firstElementChild;
-  const brand = logoRow?.querySelector('button');
-  if (!(logoRow instanceof HTMLElement) || !(brand instanceof HTMLButtonElement)) {
+  const logoRow = sidebar === undefined
+    ? undefined
+    : findHarnessBrandRow(sidebar);
+  if (logoRow === undefined) {
     existing?.remove();
     return;
   }
@@ -263,24 +265,64 @@ function reconcileHarnessUpdateButton(): void {
   button.dataset.dshDesktopUpdateButton = '';
   button.type = 'button';
   button.className = 'dsh-desktop-header-update';
-  const ready = updateState.status === 'downloaded';
+  button.dataset.updateStatus = updateState.status;
+  const downloaded = updateState.status === 'downloaded';
+  const manual = updateState.status === 'manual';
   const language = document.documentElement.lang.toLowerCase();
-  const label = ready
+  const label = downloaded
     ? language.startsWith('en')
       ? 'Restart to update'
       : '重启更新'
+    : manual
+      ? language.startsWith('en')
+        ? 'Download update manually'
+        : '手动下载更新'
     : language.startsWith('en')
       ? 'Downloading update'
       : '正在更新';
-  const buttonText = ready ? label : '•••';
+  const buttonText = downloaded ? label : manual ? (language.startsWith('en') ? 'Download' : '下载') : '•••';
   if (button.textContent !== buttonText) button.textContent = buttonText;
   button.title = label;
   button.setAttribute('aria-label', label);
-  button.disabled = !ready;
-  button.onclick = ready ? () => sendUpdateCommand('install') : null;
+  button.disabled = !downloaded && !manual;
+  button.onclick = downloaded
+    ? () => sendUpdateCommand('install')
+    : manual
+      ? () => sendUpdateCommand('download')
+      : null;
   if (button.parentElement !== logoRow) {
     logoRow.insertBefore(button, logoRow.lastElementChild);
   }
+}
+
+function findHarnessBrandRow(sidebar: HTMLElement): HTMLElement | undefined {
+  const sidebarBounds = sidebar.getBoundingClientRect();
+  const brand = [...sidebar.querySelectorAll<HTMLElement>('*')]
+    .filter((candidate) => {
+      const text = candidate.textContent?.replaceAll(/\s+/g, ' ').trim() ?? '';
+      const bounds = candidate.getBoundingClientRect();
+      return /deepseek/i.test(text) && /harness/i.test(text) &&
+        bounds.width > 0 && bounds.height > 0 && bounds.height <= 72;
+    })
+    .sort((left, right) => {
+      const leftBounds = left.getBoundingClientRect();
+      const rightBounds = right.getBoundingClientRect();
+      return leftBounds.width * leftBounds.height - rightBounds.width * rightBounds.height;
+    })[0];
+  if (brand === undefined) return undefined;
+  let candidate: HTMLElement | null = brand;
+  while (candidate !== null && candidate !== sidebar) {
+    const bounds = candidate.getBoundingClientRect();
+    if (
+      candidate.children.length >= 2 &&
+      bounds.width >= sidebarBounds.width * 0.72 &&
+      bounds.height <= 96
+    ) {
+      return candidate;
+    }
+    candidate = candidate.parentElement;
+  }
+  return undefined;
 }
 
 function installHarnessUpdateButton(): void {
@@ -310,6 +352,13 @@ function installHarnessUpdateButton(): void {
       .dsh-desktop-header-update:disabled {
         cursor: default;
         letter-spacing: 1px;
+      }
+      .dsh-desktop-header-update[data-update-status="downloading"] {
+        animation: dsh-desktop-header-update-pulse 1.1s ease-in-out infinite;
+      }
+      @keyframes dsh-desktop-header-update-pulse {
+        0%, 100% { opacity: .5; }
+        50% { opacity: 1; }
       }
     `;
     document.head.append(style);

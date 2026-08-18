@@ -28,10 +28,13 @@ window.__ModuleLoader__.load({
         'about.updateLatest': '当前已是最新版本。',
         'about.updateDownloading': '发现新版本，正在后台下载。',
         'about.updateDownloaded': '新版本已准备好，重启即可完成安装。',
+        'about.updateManual': 'macOS 无法验证自动更新，请改用已公证的 DMG 安装包。',
         'about.updateError': '暂时无法检查，请稍后重试。',
         'about.check': '检查更新',
         'about.checking': '检查中…',
         'about.install': '重启并更新',
+        'about.downloading': '下载中…',
+        'about.manualDownload': '下载 DMG',
         'about.retry': '重新检查',
         'about.details': '版本信息',
         'about.application': '桌面应用',
@@ -65,10 +68,13 @@ window.__ModuleLoader__.load({
         'about.updateLatest': 'You are running the latest version.',
         'about.updateDownloading': 'A new version was found and is downloading.',
         'about.updateDownloaded': 'The new version is ready. Restart to install it.',
+        'about.updateManual': 'macOS could not validate the automatic update. Use the notarized DMG instead.',
         'about.updateError': 'Unable to check right now. Please try again.',
         'about.check': 'Check for updates',
         'about.checking': 'Checking…',
         'about.install': 'Restart and update',
+        'about.downloading': 'Downloading…',
+        'about.manualDownload': 'Download DMG',
         'about.retry': 'Check again',
         'about.details': 'Version information',
         'about.application': 'Desktop application',
@@ -252,6 +258,29 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-label-secondary);
         font-size: 12px;
         line-height: 18px;
+      }
+      .dsh-desktop-update-progress {
+        position: relative;
+        display: block;
+        width: min(240px, 100%);
+        height: 3px;
+        margin-top: 7px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgb(77 107 254 / 13%);
+      }
+      .dsh-desktop-update-progress::after {
+        position: absolute;
+        inset: 0 auto 0 -42%;
+        width: 42%;
+        border-radius: inherit;
+        background: var(--dsw-static-deepseek-500, #4d6bfe);
+        animation: dsh-desktop-update-progress 1.1s ease-in-out infinite;
+        content: '';
+      }
+      @keyframes dsh-desktop-update-progress {
+        from { transform: translateX(0); }
+        to { transform: translateX(340%); }
       }
       .dsh-desktop-update-button {
         height: 34px;
@@ -444,6 +473,7 @@ window.__ModuleLoader__.load({
         latest: 'about.updateLatest',
         downloading: 'about.updateDownloading',
         downloaded: 'about.updateDownloaded',
+        manual: 'about.updateManual',
         error: 'about.updateError',
       };
       return {
@@ -451,8 +481,12 @@ window.__ModuleLoader__.load({
         button:
           state.status === 'downloaded'
             ? t('about.install')
-            : state.status === 'checking' || state.status === 'downloading'
+            : state.status === 'downloading'
+              ? t('about.downloading')
+              : state.status === 'checking'
               ? t('about.checking')
+              : state.status === 'manual'
+                ? t('about.manualDownload')
               : state.status === 'error'
                 ? t('about.retry')
                 : t('about.check'),
@@ -521,6 +555,13 @@ window.__ModuleLoader__.load({
               { className: 'dsh-desktop-update-status', role: 'status' },
               update.description,
             ),
+            state.status === 'downloading'
+              ? React.createElement('span', {
+                  className: 'dsh-desktop-update-progress',
+                  role: 'progressbar',
+                  'aria-label': t('about.downloading'),
+                })
+              : null,
           ),
           React.createElement(
             'button',
@@ -530,6 +571,7 @@ window.__ModuleLoader__.load({
               disabled: update.disabled,
               onClick: () => {
                 if (state.status === 'downloaded') updateApi()?.install();
+                else if (state.status === 'manual') updateApi()?.download();
                 else updateApi()?.check();
               },
             },

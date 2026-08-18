@@ -440,6 +440,7 @@ describe('packaged desktop application', () => {
                 updateBridgeShape: {
                   check: typeof window.deepSeekYukiRyouUpdates?.check,
                   install: typeof window.deepSeekYukiRyouUpdates?.install,
+                  download: typeof window.deepSeekYukiRyouUpdates?.download,
                   subscribe: typeof window.deepSeekYukiRyouUpdates?.subscribe,
                   getSnapshot: typeof window.deepSeekYukiRyouUpdates?.getSnapshot,
                 },
@@ -475,18 +476,101 @@ describe('packaged desktop application', () => {
         'https://github.com/yoshino-xiao7',
       );
       expect(settingsResult?.updateButtonText).toMatch(
-        /^(检查更新|检查中…|重新检查|重启并更新|Check for updates|Checking…|Check again|Restart and update)$/,
+        /^(检查更新|检查中…|下载中…|下载 DMG|重新检查|重启并更新|Check for updates|Checking…|Downloading…|Download DMG|Check again|Restart and update)$/,
       );
       expect(settingsResult?.updateStatusText).toBeTruthy();
       expect(settingsResult?.updateBridgeShape).toEqual({
         check: 'function',
         install: 'function',
+        download: 'function',
         subscribe: 'function',
         getSnapshot: 'function',
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
       expect(settingsResult?.aboutText).toContain('0.1.0-rc.7');
       expect(settingsResult?.aboutText).toMatch(/Apple Silicon.*arm64/);
+
+      await electronApp.evaluate(({ webContents }) => {
+        const harness = webContents
+          .getAllWebContents()
+          .find((contents) =>
+            contents.getURL().startsWith('http://127.0.0.1:'),
+          );
+        void harness?.executeJavaScript(`
+          document.querySelector('button[aria-label="打开侧边栏"], button[aria-label="Open sidebar"]')?.click()
+        `);
+      });
+
+      await electronApp.evaluate(({ webContents }) => {
+        const harness = webContents
+          .getAllWebContents()
+          .find((contents) =>
+            contents.getURL().startsWith('http://127.0.0.1:'),
+          );
+        harness?.send('dsh-desktop:update-state', {
+          status: 'downloading',
+          currentVersion: '0.1.0',
+          checkedAt: new Date().toISOString(),
+        });
+      });
+      await expect
+        .poll(() =>
+          electronApp!.evaluate(async ({ webContents }) => {
+            const harness = webContents
+              .getAllWebContents()
+              .find((contents) =>
+                contents.getURL().startsWith('http://127.0.0.1:'),
+              );
+            return harness?.executeJavaScript(`(() => {
+              const update = document.querySelector('[data-dsh-desktop-update-button]');
+              return {
+                header: update?.textContent?.trim(),
+                brandRow: update?.parentElement?.textContent?.replaceAll(/\\s+/g, ' ').trim(),
+                card: document.querySelector('.dsh-desktop-update-button')?.textContent?.trim(),
+                progress: document.querySelector('.dsh-desktop-update-progress')?.getAttribute('role'),
+              };
+            })()`);
+          }),
+        )
+        .toMatchObject({
+          header: '•••',
+          brandRow: expect.stringMatching(/deepseek.*harness/i),
+          card: expect.stringMatching(/^(下载中…|Downloading…)$/),
+          progress: 'progressbar',
+        });
+
+      await electronApp.evaluate(({ webContents }) => {
+        const harness = webContents
+          .getAllWebContents()
+          .find((contents) =>
+            contents.getURL().startsWith('http://127.0.0.1:'),
+          );
+        harness?.send('dsh-desktop:update-state', {
+          status: 'manual',
+          currentVersion: '0.1.0',
+          message: 'Code signature did not pass validation',
+        });
+      });
+      await expect
+        .poll(() =>
+          electronApp!.evaluate(async ({ webContents }) => {
+            const harness = webContents
+              .getAllWebContents()
+              .find((contents) =>
+                contents.getURL().startsWith('http://127.0.0.1:'),
+              );
+            return harness?.executeJavaScript(`({
+              header: document.querySelector('[data-dsh-desktop-update-button]')?.textContent?.trim(),
+              card: document.querySelector('.dsh-desktop-update-button')?.textContent?.trim(),
+              status: document.querySelector('.dsh-desktop-update-status')?.textContent?.trim(),
+            })`);
+          }),
+        )
+        .toMatchObject({
+          header: expect.stringMatching(/^(下载|Download)$/),
+          card: expect.stringMatching(/^(下载 DMG|Download DMG)$/),
+          status: expect.stringMatching(/(macOS|DMG)/),
+        });
 
       await electronApp.evaluate(({ webContents }) => {
         const harness = webContents
