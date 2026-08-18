@@ -38,7 +38,7 @@ import type { WorkspaceReviewRequest, WorkspaceReviewResponse } from '../shared/
 
 const moduleDirectory = __dirname;
 const RELEASE_DOWNLOAD_URL =
-  'https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/latest';
+  'https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest';
 
 export class AppCoordinator {
   #window: DesktopWindow | undefined;

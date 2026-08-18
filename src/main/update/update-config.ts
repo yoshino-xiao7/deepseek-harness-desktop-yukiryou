@@ -1,6 +1,6 @@
 const UPDATE_SERVER = 'https://update.electronjs.org';
 const REPOSITORY_OWNER = 'yoshino-xiao7';
-const REPOSITORY_NAME = 'deepseek-yukiryou';
+const REPOSITORY_NAME = 'deepseek-harness-desktop-yukiryou';
 
 export function updateFeedUrl(options: {
   readonly currentVersion: string;

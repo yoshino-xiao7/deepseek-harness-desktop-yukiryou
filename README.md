@@ -2,15 +2,15 @@
   <img src="resources/icons/deepseek-yukiryou.png" width="168" alt="DeepSeek YukiRyou">
 </p>
 
-<h1 align="center">DeepSeek YukiRyou</h1>
+<h1 align="center">DeepSeek YukiRyou — DeepSeek Harness Desktop for macOS</h1>
 
 <p align="center">
   <strong>让 DeepSeek Harness 真正像一个 Mac 应用。</strong><br>
-  为 Apple Silicon 打造的独立桌面开发环境，打开即可工作，无需手动维护 Node、端口或终端进程。
+  为 Apple Silicon 打造的独立桌面工作台：内置运行时、账户余额、工作区审阅、文件预览与可信更新，打开即可工作。
 </p>
 
 <p align="center">
-  <a href="https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
@@ -21,20 +21,22 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yoshino-xiao7/deepseek-yukiryou/releases">下载应用</a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases">下载应用</a>
   ·
   <a href="docs/README.md">开发文档</a>
   ·
-  <a href="https://github.com/yoshino-xiao7/deepseek-yukiryou/issues">反馈问题</a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues">反馈问题</a>
 </p>
 
 ---
 
-## 它解决什么问题
+## 项目定位
 
 官方 DeepSeek Harness 提供 Web UI，但日常使用仍需要准备运行环境、启动命令、管理本地端口和处理异常退出。DeepSeek YukiRyou 把这些工作收进一个可安装的 macOS 应用：应用启动时拉起内置 Harness，退出时回收自己创建的进程，并用原生窗口承载完整 Web UI。
 
-它不是 Harness 的重写版本，也不会改变 Agent 的工作方式。它专注于把 Harness 稳定、安全、可恢复地交付到桌面。
+它不是 Harness 的重写版本，也不会改变 Agent 的工作方式。它专注于把 Harness 稳定、安全、可恢复地交付到桌面，并在官方界面之外补足账户状态、工作区文件和变更审核等桌面能力。
+
+> 当前为 Apple Silicon Beta。已经上线的能力与后续路线图在本文中分开列出；标记为“开发中”或“规划中”的功能不包含在当前安装包中。
 
 | 打开即用 | 原生体验 | 可诊断 | 安全更新 |
 | --- | --- | --- | --- |
@@ -42,7 +44,7 @@
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-yukiryou/releases)，下载适用于 Apple Silicon 的 DMG：
+前往 [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases)，下载适用于 Apple Silicon 的 DMG：
 
 ```text
 DeepSeek.YukiRyou-<version>-arm64.dmg
@@ -57,18 +59,38 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 
 每个正式版本同时提供 SHA-256 校验文件。应用和更新包均使用 Developer ID 签名并经过 Apple 公证；不要从 GitHub Releases 以外的非可信来源下载安装包。
 
-## 桌面体验
+## 当前可用功能
+
+### 桌面与运行时
 
 - **一体化窗口**：本地顶栏与 Harness 共享视觉状态，浅色、深色和跟随系统主题会同步生效。
-- **账户余额**：在“设置”上方显示当前 DeepSeek 凭据所属账户的余额，不展示无法由官方接口精确提供的今日消费。
-- **工作区审阅**：Desktop Companion 提供文件树、相对 HEAD 的 Git 变更、增删行统计和只读 diff。
-- **适合阅读的预览**：Markdown 可在排版与源码之间切换，常见文本和图片也可在应用内预览。
-- **逐轮变更入口**：在 Harness 原生“产物”行下方展示本轮确认变更，点击即可进入对应文件审核。
+- **内置固定运行时**：Node.js、pnpm 与 DeepSeek Harness 随应用交付，不读取用户全局安装，也不会在首次启动时联网安装依赖。
 - **安静的生命周期**：单实例运行，关闭窗口时可隐藏，重新点击 Dock 图标即可恢复。
 - **故障自恢复**：Harness 或本地界面异常退出时分别恢复，不让一个区域的故障拖垮整个窗口。
+
+### 账户与工作区
+
+- **账户余额**：在“设置”上方显示当前 DeepSeek 凭据所属账户的余额，不展示无法由官方接口精确提供的今日消费。
+- **Desktop Companion**：可收起右栏提供当前工作区文件树、相对 HEAD 的 Git 变更、增删行统计和只读 diff。
+- **适合阅读的预览**：Markdown 可在排版与源码之间切换，纯文本和常见图片也可在应用内预览。
+- **逐轮变更入口**：在 Harness 原生“产物”行下方展示本轮确认变更，点击即可进入对应文件审核。
+
+### 设置、安全与发布
+
 - **真正有用的设置**：“外观”负责桌面壳风格注入；“关于”展示版本、开发者信息，并可直接检查和安装更新。
 - **更新不打扰**：应用定时后台检查；只有发现可安装版本时，主界面才显示更新入口。
 - **隐私友好的诊断**：导出包只包含脱敏后的环境摘要和有界日志，不打包项目源码、会话或凭据。
+- **可信发布链**：候选包经过 Developer ID 签名、异机安装、真实应用稳定性测试、Apple 公证和最终产物复验后才会公开。
+
+## 后续路线图
+
+| 功能 | 状态 | 计划范围 |
+| --- | --- | --- |
+| DeepSeek 宠物 | **开发中** | 在 Companion 宠物活动区实现稳定角色形象、待机眨眼、打瞌睡/睡眠/唤醒，以及运行时“疯狂进食 token”状态。动作不会越出活动区；角色素材冻结后进入高帧率动画制作与视觉验收。 |
+| 手机远程控制 | **规划中** | 通过明确配对和权限边界，在手机端查看任务状态、接收必要提醒，并在用户确认后继续任务；不会直接暴露本机 Harness 端口。 |
+| 插件市场 | **规划中** | 提供插件发现、详情、安装、更新、移除和权限说明；在设计签名、来源验证、兼容性与回滚边界后再开放安装能力。 |
+
+路线图表示产品方向，不承诺具体发布日期。安全模型、上游 Harness 接口或素材准备不足时，相关功能会继续保持不可用，而不是通过不稳定的 DOM 注入或降低系统安全要求提前上线。
 
 ## 它如何运行
 
@@ -163,7 +185,7 @@ pnpm release:mac:candidate
 <details>
 <summary><strong>遇到启动问题怎么办？</strong></summary>
 
-先使用应用菜单导出诊断包，再到 [Issues](https://github.com/yoshino-xiao7/deepseek-yukiryou/issues) 描述 macOS 版本、应用版本和复现步骤。提交前请自行确认附件中没有不希望公开的信息。
+先使用应用菜单导出诊断包，再到 [Issues](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues) 描述 macOS 版本、应用版本和复现步骤。提交前请自行确认附件中没有不希望公开的信息。
 
 </details>
 
@@ -183,4 +205,4 @@ pnpm release:mac:candidate
 
 由 [YukiRyou / yoshino-xiao7](https://github.com/yoshino-xiao7) 开发和维护，项目代码采用 [MIT License](LICENSE)。随包第三方运行时与依赖遵循各自许可证。
 
-YukiRyou 角色视觉为本项目品牌资产。DeepSeek 与 DeepSeek Harness 名称归其各自权利人所有。
+DeepSeek 与 DeepSeek Harness 名称归其各自权利人所有。

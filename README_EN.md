@@ -2,15 +2,15 @@
   <img src="resources/icons/deepseek-yukiryou.png" width="168" alt="DeepSeek YukiRyou">
 </p>
 
-<h1 align="center">DeepSeek YukiRyou</h1>
+<h1 align="center">DeepSeek YukiRyou — DeepSeek Harness Desktop for macOS</h1>
 
 <p align="center">
   <strong>DeepSeek Harness, delivered as a real Mac app.</strong><br>
-  A self-contained Apple Silicon desktop workspace that starts ready to use—without managing Node.js, ports, or background terminal processes.
+  A self-contained Apple Silicon workspace with a bundled runtime, account balance, workspace review, file previews, and trusted updates.
 </p>
 
 <p align="center">
-  <a href="https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
@@ -21,20 +21,22 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yoshino-xiao7/deepseek-yukiryou/releases">Download</a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases">Download</a>
   ·
   <a href="docs/README.md">Developer docs</a>
   ·
-  <a href="https://github.com/yoshino-xiao7/deepseek-yukiryou/issues">Report an issue</a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues">Report an issue</a>
 </p>
 
 ---
 
-## What it solves
+## Project positioning
 
 DeepSeek Harness provides a local Web UI, but routine use still involves preparing a runtime, starting commands, managing ports, and recovering failed processes. DeepSeek YukiRyou packages those responsibilities into an installable macOS app. It starts the pinned Harness runtime, cleans up only the processes it owns, and presents the complete Web UI in a native window.
 
-This is not a rewrite of Harness and does not change how the agent works. Its job is to deliver Harness to the desktop with predictable startup, recovery, isolation, and updates.
+This is not a rewrite of Harness and does not change how the agent works. Its job is to deliver Harness to the desktop with predictable startup, recovery, isolation, and updates, while adding desktop capabilities for account status, workspace files, and change review.
+
+> The current release is an Apple Silicon Beta. Available features and the roadmap are listed separately below. Features marked “In development” or “Planned” are not included in the current installer.
 
 | Ready to open | Native desktop | Inspectable | Trusted releases |
 | --- | --- | --- | --- |
@@ -42,7 +44,7 @@ This is not a rewrite of Harness and does not change how the agent works. Its jo
 
 ## Download and install
 
-Open [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-yukiryou/releases) and download the Apple Silicon DMG:
+Open [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases) and download the Apple Silicon DMG:
 
 ~~~text
 DeepSeek.YukiRyou-<version>-arm64.dmg
@@ -57,17 +59,38 @@ Requirements: an Apple Silicon Mac (M1 or newer) running macOS 14 or later.
 
 Every public release includes SHA-256 checksums. The app and update artifacts are Developer ID signed and Apple-notarized. Download only from this repository's GitHub Releases page.
 
-## Core experience
+## Available today
+
+### Desktop and runtime
 
 - **Integrated desktop window:** the local title bar follows Harness light, dark, and system themes.
-- **Account balance:** a compact row above Settings shows the balance of the account associated with the active DeepSeek credential. It does not claim a daily-spend value that the public API cannot provide precisely.
-- **Workspace review:** Desktop Companion shows the workspace tree, Git changes relative to HEAD, line statistics, and read-only diffs.
-- **Readable previews:** Markdown switches between rendered and source views; common text and image formats can be previewed in the app.
-- **Per-turn change entry:** confirmed changes appear below Harness's native artifact row and open directly in review mode.
+- **Pinned bundled runtime:** Node.js, pnpm, and DeepSeek Harness ship with the app. Global installations are not used, and first launch does not install dependencies online.
 - **Quiet lifecycle:** the app is single-instance, can hide on close, and restores from the Dock.
 - **Independent recovery:** the Harness view and local shell recover separately, so one failure does not take down the other.
+
+### Account and workspace
+
+- **Account balance:** a compact row above Settings shows the balance of the account associated with the active DeepSeek credential. It does not claim a daily-spend value that the public API cannot provide precisely.
+- **Desktop Companion:** a collapsible panel shows the current workspace tree, Git changes relative to HEAD, line statistics, and read-only diffs.
+- **Readable previews:** Markdown switches between rendered and source views; plain text and common image formats can be previewed in the app.
+- **Per-turn change entry:** confirmed changes appear below Harness's native artifact row and open directly in review mode.
+
+### Settings, security, and releases
+
 - **Useful settings:** Appearance controls desktop styling; About exposes versions, developer details, and the update center.
+- **Quiet updates:** background checks do not add a main-window entry unless an installable update is available.
 - **Private diagnostics:** exported diagnostics contain bounded, redacted environment and log data—not source files, sessions, or credentials.
+- **Trusted release pipeline:** candidates are Developer ID signed, installed on a fresh runner, exercised in a real-app soak, Apple-notarized, and verified again before publication.
+
+## Roadmap
+
+| Feature | Status | Planned scope |
+| --- | --- | --- |
+| DeepSeek pet | **In development** | A bounded Companion activity area with a consistent character, idle blinking, drowsy/sleep/wake sequences, and a “devouring tokens” running state. High-frame-rate animation and visual QA begin after the character assets are finalized. |
+| Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
+| Plugin marketplace | **Planned** | Plugin discovery, details, install, update, removal, and permission disclosure, opened only after source verification, signing, compatibility, and recovery boundaries are designed. |
+
+The roadmap describes direction, not committed dates. If the security model, upstream Harness contracts, or required assets are not ready, the feature remains unavailable instead of shipping through brittle DOM injection or weakened system protections.
 
 ## How it works
 
@@ -155,7 +178,7 @@ For offline startup and reproducible versions, the app bundles its verified Node
 <details>
 <summary><strong>How should I report a startup problem?</strong></summary>
 
-Export a diagnostics archive from the app, then open a [GitHub Issue](https://github.com/yoshino-xiao7/deepseek-yukiryou/issues) with the macOS version, app version, and reproduction steps. Review attachments before publishing them.
+Export a diagnostics archive from the app, then open a [GitHub Issue](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues) with the macOS version, app version, and reproduction steps. Review attachments before publishing them.
 
 </details>
 
@@ -175,4 +198,4 @@ Export a diagnostics archive from the app, then open a [GitHub Issue](https://gi
 
 Developed and maintained by [YukiRyou / yoshino-xiao7](https://github.com/yoshino-xiao7). Project source is available under the [MIT License](LICENSE); bundled third-party runtimes and dependencies retain their respective licenses.
 
-The YukiRyou character artwork is a project brand asset. DeepSeek and DeepSeek Harness are names and marks of their respective owners.
+DeepSeek and DeepSeek Harness are names and marks of their respective owners.

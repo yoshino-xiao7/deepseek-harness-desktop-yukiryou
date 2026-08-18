@@ -11,7 +11,7 @@ describe('application updater configuration', () => {
         architecture: 'arm64',
       }),
     ).toBe(
-      'https://update.electronjs.org/yoshino-xiao7/deepseek-yukiryou/darwin-arm64/0.1.0',
+      'https://update.electronjs.org/yoshino-xiao7/deepseek-harness-desktop-yukiryou/darwin-arm64/0.1.0',
     );
   });
 
