@@ -139,10 +139,10 @@ jobs:
           retention-days: 7
 
   soak_candidate:
-    name: Five-hour installed candidate soak
+    name: Thirty-minute installed candidate soak
     needs: verify_candidate
     runs-on: macos-15
-    timeout-minutes: 330
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -167,7 +167,7 @@ jobs:
             --require-notarized=false \
             --candidate-manifest=out/release-candidate/candidate-manifest.json \
             --receipt=out/release-candidate/soak-install-verification.json
-      - name: Keep shell and Harness healthy for five hours
+      - name: Keep shell and Harness healthy for thirty minutes
         env:
           DSH_E2E_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
         run: pnpm test:soak:app:release

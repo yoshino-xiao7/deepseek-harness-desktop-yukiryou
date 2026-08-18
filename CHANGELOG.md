@@ -29,7 +29,7 @@
 - Markdown 预览改为只消费 SafeMarkdown 结构；HTML、远程图片、iframe 与 `javascript:` 链接均作为普通文本显示。
 - Workspace 切换会主动清空 preload 中缓存的旧预览正文和图片 data URL；文件读取改为 `O_NOFOLLOW` 句柄读取并校验读取前后文件身份。
 - 新增打包应用长会话内存、上一版本 Runtime Home 保留和 shell/Harness 持续健康门禁。
-- 发布流水线在异机安装候选后、公证前新增 5 小时真实应用 soak，避免把不可执行的 8 小时任务放进最长 6 小时的 GitHub 托管 job。
+- 发布流水线在异机安装候选后、公证前执行30分钟真实应用 soak；独立5小时扩展 soak 支持手动和每周低峰运行，不再阻塞普通 Beta 发布。
 
 ### 已知限制
 

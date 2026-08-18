@@ -96,7 +96,7 @@ describe('macOS release workflow contract', () => {
     expect(createDraftIndex).toBeGreaterThan(verifyDmgIndex);
   });
 
-  it('soaks the installed candidate before spending an Apple submission', async () => {
+  it('soaks the installed candidate for thirty minutes before an Apple submission', async () => {
     const workflow = parse(
       await readFile(
         join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
@@ -109,10 +109,28 @@ describe('macOS release workflow contract', () => {
       .join('\n');
 
     expect(soak?.needs).toBe('verify_candidate');
-    expect(soak?.['timeout-minutes']).toBe(330);
+    expect(soak?.['timeout-minutes']).toBe(60);
     expect(commands).toContain('--require-notarized=false');
     expect(commands).toContain('pnpm test:soak:app:release');
     expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
+  });
+
+  it('keeps the five-hour soak in an independent scheduled workflow', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'extended-macos-soak.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const soak = workflow.jobs?.extended_soak;
+    const commands = (soak?.steps ?? [])
+      .map((step) => step.run?.trim() ?? '')
+      .join('\n');
+
+    expect(soak?.['timeout-minutes']).toBe(340);
+    expect(commands).toContain('pnpm runtime:vendor -- --arch=arm64');
+    expect(commands).toContain('pnpm package:mac -- --arch=arm64');
+    expect(commands).toContain('pnpm test:soak:app:extended');
   });
 
   it('publishes releases in the channel consumed by update.electronjs.org', async () => {
