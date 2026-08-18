@@ -26,6 +26,12 @@
   <a href="docs/README.md">开发文档</a>
   ·
   <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues">反馈问题</a>
+  ·
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou">⭐ Star 支持</a>
+</p>
+
+<p align="center">
+  如果这个项目对你有帮助，欢迎点一个 Star。它能帮助更多正在寻找 DeepSeek Harness macOS 客户端的人发现本项目。
 </p>
 
 ---
@@ -81,6 +87,13 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 - **更新不打扰**：应用定时后台检查；只有发现可安装版本时，主界面才显示更新入口。
 - **隐私友好的诊断**：导出包只包含脱敏后的环境摘要和有界日志，不打包项目源码、会话或凭据。
 - **可信发布链**：候选包经过 Developer ID 签名、异机安装、真实应用稳定性测试、Apple 公证和最终产物复验后才会公开。
+
+## 为什么选择 YukiRyou
+
+- **面向 Apple Silicon 交付**：不是网页快捷方式，而是带固定 Node.js、pnpm 和 DeepSeek Harness 运行时的独立 macOS 应用。
+- **工作区审阅闭环**：在对话之外直接查看文件树、当前 Git 变更、逐轮变更、增删行和 Markdown 渲染结果。
+- **融入 Harness 的桌面能力**：账户余额、Companion 侧栏、设置与更新入口遵循现有界面节奏，不取代或篡改 Harness 的核心工作流。
+- **发布结果可验证**：公开包经过 Developer ID 签名、Apple 公证、全新环境安装和真实应用稳定性验证，并附带 SHA-256 校验文件。
 
 ## 后续路线图
 
@@ -200,6 +213,13 @@ pnpm release:mac:candidate
 - [外观扩展契约](docs/08-appearance-extension.md)
 - [GitHub 与 Apple 发布 Runbook](docs/09-github-and-apple-release.md)
 - [English README](README_EN.md)
+
+## 参与项目
+
+- 如果项目解决了你的问题，可以通过 [Star](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou) 支持它。
+- 遇到可复现问题，请使用 [Bug 反馈表单](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=bug-report.yml)。
+- 有明确使用场景或产品建议，请使用 [功能建议表单](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=feature-request.yml)。
+- 反馈前建议先安装[最新版本](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest)，并附上应用版本、macOS 版本和 Apple 芯片型号。
 
 ## 开发者与许可
 

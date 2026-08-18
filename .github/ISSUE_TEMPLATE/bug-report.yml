@@ -1,0 +1,78 @@
+name: Bug report / Bug 反馈
+description: Report a reproducible problem / 反馈可复现的问题
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你帮助改进 DeepSeek YukiRyou。请先确认问题可以复现，并在上传日志或截图前移除凭据、项目源码和其他敏感信息。
+
+        Thank you for helping improve DeepSeek YukiRyou. Please confirm that the problem is reproducible and remove credentials, source code, and other sensitive information before uploading logs or screenshots.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version / 应用版本
+      description: Find this in Settings → About / 可在“设置 → 关于”中查看
+      placeholder: 0.2.1-beta.1
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version / macOS 版本
+      placeholder: macOS 15.6
+    validations:
+      required: true
+
+  - type: input
+    id: mac-model
+    attributes:
+      label: Mac model and chip / Mac 型号与芯片
+      placeholder: MacBook Pro, Apple M3 Pro
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      description: Use a minimal, numbered sequence / 请提供最小化的编号步骤
+      placeholder: |
+        1. Open ... / 打开……
+        2. Click ... / 点击……
+        3. Observe ... / 看到……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 预期结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 实际结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or diagnostics / 截图或诊断信息
+      description: Export diagnostics from the app when relevant. Review every attachment before publishing it. / 如有需要可从应用导出诊断包，公开前请检查所有附件。
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmation / 确认
+      options:
+        - label: I tested the latest available release. / 我已使用当前最新版本复现。
+          required: true
+        - label: I removed secrets, credentials, and private source code from the report. / 我已移除密钥、凭据和私有源码。
+          required: true
+

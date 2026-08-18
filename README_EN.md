@@ -26,6 +26,12 @@
   <a href="docs/README.md">Developer docs</a>
   ·
   <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues">Report an issue</a>
+  ·
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou">⭐ Star this project</a>
+</p>
+
+<p align="center">
+  If this project helps you, consider giving it a Star. It helps other people looking for a DeepSeek Harness macOS client discover the project.
 </p>
 
 ---
@@ -81,6 +87,13 @@ Every public release includes SHA-256 checksums. The app and update artifacts ar
 - **Quiet updates:** background checks do not add a main-window entry unless an installable update is available.
 - **Private diagnostics:** exported diagnostics contain bounded, redacted environment and log data—not source files, sessions, or credentials.
 - **Trusted release pipeline:** candidates are Developer ID signed, installed on a fresh runner, exercised in a real-app soak, Apple-notarized, and verified again before publication.
+
+## Why YukiRyou
+
+- **Delivered for Apple Silicon:** not a website shortcut, but a standalone macOS app with pinned Node.js, pnpm, and DeepSeek Harness runtimes.
+- **A complete workspace review loop:** inspect the file tree, current Git changes, per-turn changes, line statistics, and rendered Markdown without leaving the conversation workflow.
+- **Desktop capabilities that fit Harness:** account balance, the Companion sidebar, settings, and updates follow the existing interface instead of replacing or rewriting Harness's core workflow.
+- **Verifiable releases:** public artifacts are Developer ID signed, Apple-notarized, installed in clean environments, exercised as real apps, and accompanied by SHA-256 checksums.
 
 ## Roadmap
 
@@ -193,6 +206,13 @@ Export a diagnostics archive from the app, then open a [GitHub Issue](https://gi
 - [Appearance extension contract](docs/08-appearance-extension.md)
 - [GitHub and Apple release runbook](docs/09-github-and-apple-release.md)
 - [中文 README](README.md)
+
+## Get involved
+
+- If the project solves a problem for you, support it with a [Star](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou).
+- For reproducible problems, use the [bug report form](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=bug-report.yml).
+- For a concrete workflow or product idea, use the [feature request form](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=feature-request.yml).
+- Before reporting, try the [latest release](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest) and include the app version, macOS version, and Apple chip model.
 
 ## Maintainer and license
 

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Latest release / 最新版本
+    url: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest
+    about: Download and test the latest signed build before reporting / 反馈前请先下载并测试最新签名版本
+  - name: Documentation / 开发文档
+    url: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/tree/main/docs
+    about: Read architecture, security, development, and release documentation / 查看架构、安全、开发与发布文档
