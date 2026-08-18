@@ -43,10 +43,12 @@ for (const binary of binaries) {
 for (const bundle of bundles) {
   codesign(bundle, true);
 }
-codesign(absoluteAppPath, true);
-// A second outer-bundle pass avoids a stale CMS result after the main
-// executable was signed earlier in the sequential traversal. The first inode
-// can otherwise verify from the local cache while a byte-identical copy fails.
+// Electron Forge leaves an outer signature on the main executable. Replacing
+// it with `--force` alone can leave a CMS blob that only verifies through the
+// local code-signing cache; a copied app then fails with "invalid signature".
+// Removing the outer signature first makes the new Developer ID signature
+// portable across ZIP extraction and normal /Applications copies.
+removeSignature(absoluteAppPath);
 codesign(absoluteAppPath, true);
 
 run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', absoluteAppPath]);
@@ -105,6 +107,10 @@ function codesign(path: string, includeEntitlements: boolean): void {
   }
   arguments_.push(path);
   run('codesign', arguments_);
+}
+
+function removeSignature(path: string): void {
+  run('codesign', ['--remove-signature', path]);
 }
 
 function run(command: string, arguments_: string[]): void {
