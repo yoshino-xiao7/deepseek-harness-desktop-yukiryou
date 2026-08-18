@@ -30,6 +30,7 @@
 - Workspace 切换会主动清空 preload 中缓存的旧预览正文和图片 data URL；文件读取改为 `O_NOFOLLOW` 句柄读取并校验读取前后文件身份。
 - 新增打包应用长会话内存、上一版本 Runtime Home 保留和 shell/Harness 持续健康门禁。
 - 发布流水线在异机安装候选后、公证前执行30分钟真实应用 soak；独立5小时扩展 soak 支持手动和每周低峰运行，不再阻塞普通 Beta 发布。
+- Runtime 只有在 Harness 首页与受保护的 Companion RPC 同时就绪后才允许界面发起请求，避免慢速启动时短暂返回 `405`。
 
 ### 已知限制
 
