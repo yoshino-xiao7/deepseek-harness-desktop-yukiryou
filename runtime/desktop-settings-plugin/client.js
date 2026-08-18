@@ -19,10 +19,7 @@ window.__ModuleLoader__.load({
         'about.nav': '关于',
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Apple Silicon 原生应用',
-        'about.description':
-          '面向 Apple Silicon 的社区独立 DeepSeek Harness 桌面工作台，内置运行时、账户余额与只读工作区审核。',
-        'about.descriptionSecondary':
-          'An independent community DeepSeek Harness desktop workspace for Apple Silicon, with a bundled runtime, account balance, and read-only workspace review.',
+        'about.description': '专为 Apple Silicon 打造的 DeepSeek Harness 桌面工作空间。',
         'about.version': '版本',
         'about.updateTitle': '软件更新',
         'about.updateIdle': '自动检查已开启，也可以立即检查。',
@@ -62,9 +59,7 @@ window.__ModuleLoader__.load({
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Native for Apple Silicon',
         'about.description':
-          'An independent community DeepSeek Harness desktop workspace for Apple Silicon, with a bundled runtime, account balance, and read-only workspace review.',
-        'about.descriptionSecondary':
-          '面向 Apple Silicon 的社区独立 DeepSeek Harness 桌面工作台，内置运行时、账户余额与只读工作区审核。',
+          'A focused DeepSeek Harness workspace built for Apple Silicon.',
         'about.version': 'Version',
         'about.updateTitle': 'Software update',
         'about.updateIdle': 'Automatic checks are on, or check now.',
@@ -227,12 +222,6 @@ window.__ModuleLoader__.load({
       .dsh-desktop-about-copy .dsh-desktop-settings-description {
         max-width: 480px;
         margin: 10px 0 0;
-      }
-      .dsh-desktop-about-copy .dsh-desktop-about-description-secondary {
-        margin-top: 4px;
-        color: var(--dsw-alias-label-tertiary);
-        font-size: 13px;
-        line-height: 20px;
       }
       .dsh-desktop-update-card {
         display: grid;
@@ -540,14 +529,6 @@ window.__ModuleLoader__.load({
               'p',
               { className: 'dsh-desktop-settings-description' },
               t('about.description'),
-            ),
-            React.createElement(
-              'p',
-              {
-                className:
-                  'dsh-desktop-settings-description dsh-desktop-about-description-secondary',
-              },
-              t('about.descriptionSecondary'),
             ),
           ),
         ),
