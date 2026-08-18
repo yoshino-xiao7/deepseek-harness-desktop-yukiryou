@@ -35,6 +35,7 @@ export type WorkspaceReviewRequest =
   | { readonly kind: 'overview' }
   | { readonly kind: 'directory.list'; readonly nodeId: string }
   | { readonly kind: 'file.preview'; readonly nodeId: string }
+  | { readonly kind: 'file.preview-relative'; readonly nodeId: string; readonly target: string }
   | { readonly kind: 'change.diff'; readonly nodeId: string };
 
 export type WorkspaceReviewResponse =
@@ -91,10 +92,33 @@ const NODE_ID = /^[A-Za-z0-9_-]{16,128}$/;
 export function validatedWorkspaceReviewRequest(value: unknown): WorkspaceReviewRequest | undefined {
   if (!isRecord(value)) return undefined;
   if (value.kind === 'overview') return { kind: 'overview' };
+  if (value.kind === 'file.preview-relative' && typeof value.nodeId === 'string' && NODE_ID.test(value.nodeId)) {
+    const target = validatedWorkspaceLinkTarget(value.target);
+    return target === undefined ? undefined : { kind: value.kind, nodeId: value.nodeId, target };
+  }
   if ((value.kind === 'directory.list' || value.kind === 'file.preview' || value.kind === 'change.diff') && typeof value.nodeId === 'string' && NODE_ID.test(value.nodeId)) {
     return { kind: value.kind, nodeId: value.nodeId };
   }
   return undefined;
+}
+
+export function validatedWorkspaceLinkTarget(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2_048) return undefined;
+  const withoutSuffix = value.split(/[?#]/, 1)[0];
+  if (withoutSuffix === undefined || withoutSuffix === '') return undefined;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(withoutSuffix);
+  } catch {
+    return undefined;
+  }
+  if (
+    decoded.length === 0 || decoded.length > 1_024
+    || decoded.startsWith('/') || decoded.startsWith('\\') || decoded.includes('\\')
+    || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(decoded)
+    || Array.from(decoded).some(isControlCharacter)
+  ) return undefined;
+  return decoded;
 }
 
 export function validatedChangedFilePath(value: unknown): string | undefined {

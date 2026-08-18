@@ -6,7 +6,7 @@ export function createDesktopWindowOptions(
   return {
     width: 1440,
     height: 900,
-    minWidth: 980,
+    minWidth: 820,
     minHeight: 600,
     backgroundColor: '#f5f7fb',
     titleBarStyle: 'hiddenInset',

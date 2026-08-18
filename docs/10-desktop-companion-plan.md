@@ -578,8 +578,8 @@ type InspectorDocument =
 
 | 可用内容宽度 | Panel 状态 | 打开文件后的行为                                                                       |
 | ------------ | ---------- | -------------------------------------------------------------------------------------- |
-| `>= 1480px`  | docked     | `Harness                                                                               | Preview                           | Inspector` 宽屏 split   |
-| `980-1479px` | docked     | 默认 `Harness                                                                          | Inspector`；打开文件进入 `Preview | Inspector` Review Focus |
+| `>= 1320px`  | docked     | `Harness                                                                               | Preview                           | Inspector` 宽屏 split   |
+| `980-1319px` | docked     | 默认 `Harness                                                                          | Inspector`；打开文件进入 `Preview | Inspector` Review Focus |
 | `< 980px`    | overlay    | Inspector 覆盖在 Harness 右侧；打开文件进入单栏 Review Focus，可在 preview/tree 间切换 |
 
 Review Focus 只隐藏 Harness view，不 reload、不停止任务。退出 review 后恢复原会话、焦点和滚动状态。窗口缩放跨阈值时保留 selection，但必须经过纯 layout state transition，不允许 renderer 直接操纵 `WebContentsView`。
@@ -758,7 +758,7 @@ runtime/
 └── desktop-extensions.patch.yml      # 组合 settings + companion
 ```
 
-需要调整：
+已落地调整：
 
 - `src/main/runtime/runtime-extension.ts`：深化为 `ensureBundledRuntimeExtensions()`，按清单复制/链接多个随包 extension。
 - `src/main/runtime/runtime-extension.test.ts`：多 extension、幂等、错误 symlink/non-link、目标校验。
@@ -865,7 +865,7 @@ src/renderer/companion/
 
 ### Phase 1：账户余额
 
-状态：**已实现，待随下一版本发布**。官方 `sidebar.footer.action` 卡片、宽栏/rail、缺少凭据与失败状态、手动刷新、single-flight、TTL、超时、body/schema 上限、last-good stale 以及打包 E2E 已落地；不包含今日消费。
+状态：**已实现并随 `v0.2.0-beta.1` 发布**。官方 `sidebar.footer.action` 卡片、宽栏/rail、缺少凭据与失败状态、手动刷新、single-flight、TTL、超时、body/schema 上限、last-good stale 以及打包 E2E 已落地；不包含今日消费。
 
 目标：独立交付设置上方账户余额，不依赖右栏。
 
@@ -884,7 +884,7 @@ src/renderer/companion/
 
 ### Phase 2：Desktop Companion 空壳与 Workspace Capability
 
-状态：**已实现，待随下一版本发布**。本地 toolbar 入口、右栏、wide review/Review Focus 布局、官方 Session/Workspace snapshot、Runtime registry 复核和 opaque Workspace Capability 已落地；浏览器不能选择 root 或传绝对路径。
+状态：**已实现并随 `v0.2.0-beta.1` 发布**。本地 toolbar 入口、右栏、wide review/Review Focus 布局、官方 Session/Workspace snapshot、Runtime registry 复核和 opaque Workspace Capability 已落地；浏览器不能选择 root 或传绝对路径。宠物前收尾把窗口最小宽度调整为 820px，使 `<980px` overlay 模式真实可达并纳入固定布局矩阵。
 
 目标：建立面板、响应式布局和当前 Workspace Authority，暂不读取文件。
 
@@ -903,7 +903,7 @@ src/renderer/companion/
 
 ### Phase 3：文件树与安全预览
 
-状态：**核心 MVP 已实现，硬化项继续在 Phase 5 收口**。已提供 500 条上限的懒加载树、深度/缓存目录限制、2 MiB 文本/10 MiB 图片限制、非法 UTF-8 拒绝、常见图片 16384px 单边/32MP 像素门、Markdown 默认排版与源码切换、常见图片和纯文本预览。文件通过 `O_NOFOLLOW` 句柄读取并校验读取前后 identity/revision，拒绝 symlink 换位并报告并发变化；SafeMarkdown hostile corpus 已覆盖 HTML、SVG/MathML、iframe/object、远程/data 图片、脚本/file 链接、事件属性、深层列表与 fenced script 的 inert-text 语义。Workspace 切换会清理重放 preview 及 renderer 内容。相对链接重入仍属于后续增强；当前单 preview 模型不保留多文件 LRU。
+状态：**已实现**。已提供 500 条上限的懒加载树、深度/缓存目录限制、2 MiB 文本/10 MiB 图片限制、非法 UTF-8 拒绝、常见图片 16384px 单边/32MP 像素门、Markdown 默认排版与源码切换、常见图片和纯文本预览。文件通过 `O_NOFOLLOW` 句柄读取并校验读取前后 identity/revision，拒绝 symlink 换位并报告并发变化；SafeMarkdown hostile corpus 已覆盖 HTML、SVG/MathML、iframe/object、远程/data 图片、脚本/file 链接、事件属性、深层列表与 fenced script 的 inert-text 语义。安全的 Markdown 相对文件链接使用当前文件 opaque node 作为解析锚点，主进程重新执行 containment 和文件类型检查；预览按文件 revision 缓存到 64 MiB LRU，Workspace Authority 替换即随 Inspector 释放。Workspace 切换同时清理重放 preview 及 renderer 内容。
 
 目标：完成 Workspace Review 的核心价值。
 
@@ -941,7 +941,7 @@ src/renderer/companion/
 
 ### Phase 5：稳定性、发布与文档收口
 
-状态：**发布候选收口中**。预览硬化已完成非法 UTF-8、图片像素门、SafeMarkdown 扩展 hostile corpus、`O_NOFOLLOW` 稳定文件读取、Workspace 切换重放缓存/renderer 内容清理；100 次审核/工作区切换/面板收放状态压力、2500 次长会话 working-set profile、真实 0.1.0 产物与旧 Runtime Home 布局升级、60 秒打包应用资格 soak、完整单元/集成和 arm64 打包 E2E 已通过。正式流水线在异机候选安装后、公证前执行30分钟打包应用 soak；独立5小时扩展 soak 支持手动和每周低峰运行，不阻塞普通发布。仅正式候选30分钟门禁与后续 CI 公证/最终异机矩阵仍待真实执行。
+状态：**已实现并随 `v0.2.1-beta.1` 公开发布**。预览硬化、100 次审核/工作区切换/面板收放状态压力、2500 次长会话 working-set profile、旧 Runtime Home 升级、完整单元/集成、arm64 打包 E2E、异机候选安装、30 分钟真实打包应用 soak、Apple 公证与最终 DMG/ZIP 异机复验均已通过。独立 5 小时扩展 soak 保留为手动和每周低峰非阻塞门禁。宠物前收尾进一步完成 820/980/1180/1480 响应式矩阵、Markdown 相对链接安全重入和 64 MiB revision-aware preview LRU。
 
 目标：让前四阶段可以独立作为无宠物版本发布。
 
@@ -958,6 +958,8 @@ src/renderer/companion/
 - 余额、Workspace Review 可在不含宠物的 App Version 中公开交付。
 
 ### Phase 6：宠物素材与动画
+
+状态：**等待产品所有者提供并冻结角色素材，尚未开始实现**。
 
 目标：在核心能力稳定后增加完整宠物体验。
 

@@ -4,6 +4,7 @@ export const COMPANION_COMMAND_CHANNEL = 'deepseek-yukiryou:companion:command';
 
 export const COMPANION_PANEL_WIDTH = 340;
 export const COMPANION_PREVIEW_WIDTH = 520;
+export const COMPANION_DOCKED_MIN_WIDTH = 980;
 export const COMPANION_WIDE_REVIEW_MIN_WIDTH = 1_320;
 
 export interface HarnessContextSnapshot {

@@ -198,6 +198,9 @@ body[data-companion-open="true"] .companion-panel { box-shadow: -8px 0 24px rgb(
 .preview-content ul { padding-left: 1.5em; }.preview-content li { margin: .28em 0; }
 .preview-content blockquote { margin: 1em 0; padding: .1em 0 .1em 1em; border-left: 3px solid #6b7ee0; color: #687084; }
 .preview-content :not(pre) > code { padding: .12em .36em; border-radius: 5px; background: rgb(127 127 127 / 10%); font: .9em ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.markdown-workspace-link { display: inline; margin: 0; padding: 0; border: 0; color: #315fd4; background: transparent; cursor: pointer; font: inherit; text-decoration: underline; text-decoration-color: rgb(49 95 212 / 35%); text-underline-offset: 2px; }
+.markdown-workspace-link:hover { text-decoration-color: currentColor; }
+.markdown-workspace-link:focus-visible { border-radius: 3px; outline: 2px solid rgb(49 95 212 / 35%); outline-offset: 2px; }
 .diff-view { min-width: 100%; margin: -8px -20px; overflow: auto; border: 1px solid rgb(127 127 127 / 13%); border-radius: 10px; font: 10.5px/1.65 ui-monospace, "SFMono-Regular", Menlo, monospace; white-space: pre; }
 .diff-row { display: grid; min-width: max-content; grid-template-columns: 42px 42px 22px minmax(300px, 1fr); }
 .diff-row > span { min-height: 20px; }

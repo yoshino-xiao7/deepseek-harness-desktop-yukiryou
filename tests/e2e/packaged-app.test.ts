@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _electron as electron, type ElectronApplication } from 'playwright';
@@ -10,15 +10,17 @@ const executablePath = resolveE2eExecutablePath();
 
 describe('packaged desktop application', () => {
   let electronApp: ElectronApplication | undefined;
+  let userData: string | undefined;
 
   afterEach(async () => {
     await electronApp?.close();
-  });
+    if (userData !== undefined) await rm(userData, { recursive: true, force: true });
+  }, 30_000);
 
   it(
     'opens the bundled Harness UI without exposing Electron privileges',
     async () => {
-      const userData = await mkdtemp(join(tmpdir(), 'dsh-desktop-e2e-'));
+      userData = await mkdtemp(join(tmpdir(), 'dsh-desktop-e2e-'));
       electronApp = await electron.launch({
         executablePath,
         args: [`--user-data-dir=${userData}`],
@@ -201,6 +203,18 @@ describe('packaged desktop application', () => {
         return bridge.request({ kind: 'file.preview', nodeId: '/Users/example/secret' });
       });
       expect(rejectedPath).toEqual({ kind: 'unavailable', reason: 'invalid-node' });
+      const rejectedRelativeTarget = await shellPage!.evaluate(async () => {
+        const bridge = (window as unknown as { deepSeekYukiRyouCompanion: { request(value: unknown): Promise<unknown> } }).deepSeekYukiRyouCompanion;
+        return bridge.request({
+          kind: 'file.preview-relative',
+          nodeId: 'Abcdefghijklmnop_1',
+          target: 'file:///Users/example/secret',
+        });
+      });
+      expect(rejectedRelativeTarget).toEqual({ kind: 'unavailable', reason: 'invalid-node' });
+      expect(await electronApp!.evaluate(({ BrowserWindow }) => (
+        BrowserWindow.getAllWindows()[0]?.getMinimumSize()
+      ))).toEqual([820, 600]);
       const readHarnessViewWidth = () => electronApp!.evaluate(async ({ BrowserWindow, WebContentsView }) => {
         const window = BrowserWindow.getAllWindows()[0];
         const harness = window?.contentView.children.find((view) => (

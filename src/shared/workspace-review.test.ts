@@ -4,6 +4,7 @@ import {
   createReviewTargetStore,
   validatedChangedFileReviewIntent,
   validatedChangedFilePath,
+  validatedWorkspaceLinkTarget,
   validatedWorkspaceReviewRequest,
 } from './workspace-review.js';
 
@@ -13,6 +14,22 @@ describe('workspace review request boundary', () => {
     expect(validatedWorkspaceReviewRequest({ kind: 'change.diff', nodeId: 'Abcdefghijklmnop_1' })).toEqual({ kind: 'change.diff', nodeId: 'Abcdefghijklmnop_1' });
     expect(validatedWorkspaceReviewRequest({ kind: 'file.preview', nodeId: '/Users/example/secret' })).toBeUndefined();
     expect(validatedWorkspaceReviewRequest({ kind: 'directory.list', nodeId: '../escape' })).toBeUndefined();
+    expect(validatedWorkspaceReviewRequest({
+      kind: 'file.preview-relative', nodeId: 'Abcdefghijklmnop_1', target: '../guide/setup.md#install',
+    })).toEqual({ kind: 'file.preview-relative', nodeId: 'Abcdefghijklmnop_1', target: '../guide/setup.md' });
+    expect(validatedWorkspaceReviewRequest({
+      kind: 'file.preview-relative', nodeId: 'Abcdefghijklmnop_1', target: 'file:///etc/passwd',
+    })).toBeUndefined();
+  });
+
+  it('accepts only local relative Markdown targets', () => {
+    expect(validatedWorkspaceLinkTarget('./notes%20one.md#heading')).toBe('./notes one.md');
+    expect(validatedWorkspaceLinkTarget('../README.md')).toBe('../README.md');
+    expect(validatedWorkspaceLinkTarget('#heading')).toBeUndefined();
+    expect(validatedWorkspaceLinkTarget('/etc/passwd')).toBeUndefined();
+    expect(validatedWorkspaceLinkTarget('https://example.com')).toBeUndefined();
+    expect(validatedWorkspaceLinkTarget('..\\secret.md')).toBeUndefined();
+    expect(validatedWorkspaceLinkTarget('%00secret.md')).toBeUndefined();
   });
 
   it('accepts only bounded workspace-relative changed-file paths', () => {

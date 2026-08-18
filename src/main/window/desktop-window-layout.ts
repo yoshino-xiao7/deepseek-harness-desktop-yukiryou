@@ -1,7 +1,30 @@
 import type { Rectangle } from 'electron';
 
+import {
+  COMPANION_DOCKED_MIN_WIDTH,
+  COMPANION_PANEL_WIDTH,
+  COMPANION_PREVIEW_WIDTH,
+  COMPANION_WIDE_REVIEW_MIN_WIDTH,
+} from '../../shared/desktop-companion.js';
+
 export const DESKTOP_TOOLBAR_HEIGHT = 44;
 export const COMPANION_LAYOUT_ANIMATION_MS = 220;
+
+export interface CompanionLayout {
+  readonly overlay: boolean;
+  readonly reviewFocus: boolean;
+  readonly reservedWidth: number;
+}
+
+export function companionLayout(width: number, open: boolean, previewOpen: boolean): CompanionLayout {
+  const overlay = open && width < COMPANION_DOCKED_MIN_WIDTH;
+  const reviewFocus = open && previewOpen && width < COMPANION_WIDE_REVIEW_MIN_WIDTH;
+  const panel = open && !overlay
+    ? Math.min(COMPANION_PANEL_WIDTH, Math.max(0, width - 480))
+    : 0;
+  const preview = open && previewOpen && !reviewFocus ? COMPANION_PREVIEW_WIDTH : 0;
+  return { overlay, reviewFocus, reservedWidth: panel + preview };
+}
 
 export function harnessContentBounds(
   contentSize: Pick<Rectangle, 'width' | 'height'>,

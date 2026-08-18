@@ -46,6 +46,21 @@ describe('SafeMarkdown', () => {
       new Set(['paragraph', 'list']),
     );
   });
+
+  it('creates navigable nodes only for safe relative workspace links', () => {
+    expect(parseSafeMarkdown(
+      '[guide](docs/guide.md#start) and [parent](../README.md) and [web](https://example.com)',
+    )).toEqual([{
+      kind: 'paragraph',
+      content: [
+        { kind: 'workspace-link', text: 'guide', target: 'docs/guide.md' },
+        { kind: 'text', text: ' and ' },
+        { kind: 'workspace-link', text: 'parent', target: '../README.md' },
+        { kind: 'text', text: ' and [web](https://example.com)' },
+      ],
+    }]);
+    expect(collectText(parseSafeMarkdown('![image](local.png)'))).toContain('![image](local.png)');
+  });
 });
 
 function collectText(value: unknown): string[] {
