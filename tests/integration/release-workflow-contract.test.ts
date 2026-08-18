@@ -141,8 +141,17 @@ describe('macOS release workflow contract', () => {
       ),
     ) as ReleaseWorkflow;
     const steps = workflow.jobs?.verify_and_publish?.steps ?? [];
+    const requireDraft = steps.find(
+      (step) => step.name === 'Require an unpublished prerelease draft',
+    );
+    const checkout = steps.find((step) =>
+      step.uses?.startsWith('actions/checkout@'),
+    );
     const publish = steps.find((step) => step.name === 'Publish release');
 
+    expect(requireDraft?.run).toContain('targetCommitish');
+    expect(requireDraft?.run).not.toContain('/git/ref/tags/');
+    expect(checkout?.with?.ref).toBe('${{ steps.draft.outputs.target }}');
     expect(publish?.run).toContain('--draft=false');
     expect(publish?.run).toContain('--prerelease=false');
   });
