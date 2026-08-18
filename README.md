@@ -41,7 +41,7 @@
 前往 [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-yukiryou/releases)，下载适用于 Apple Silicon 的 DMG：
 
 ```text
-DeepSeek YukiRyou-<version>-arm64.dmg
+DeepSeek.YukiRyou-<version>-arm64.dmg
 ```
 
 1. 打开 DMG。
@@ -116,7 +116,7 @@ export MACOS_SIGN_IDENTITY="Developer ID Application: ... (...)"
 pnpm release:mac:candidate
 ```
 
-工作流使用多个全新 Apple Silicon runner：先验证候选复制到 `/Applications` 后仍能验签和启动，才允许提交 Apple；公证后的 DMG 与 ZIP 还会在另一个 runner 上重新安装、Gatekeeper 验证并启动。全部通过后只创建 Draft，显式允许后才发布 prerelease。详见 [发布规则](docs/09-github-and-apple-release.md)。
+工作流使用多个全新 Apple Silicon runner：先验证候选复制到 `/Applications` 后仍能验签和启动，才允许提交 Apple；公证后的 DMG 与 ZIP 还会在另一个 runner 上重新安装、Gatekeeper 验证并启动。全部通过后只创建 Draft，显式允许后才公开 Release。详见 [发布规则](docs/09-github-and-apple-release.md)和[更新日志](CHANGELOG.md)。
 
 ## 固定运行时
 

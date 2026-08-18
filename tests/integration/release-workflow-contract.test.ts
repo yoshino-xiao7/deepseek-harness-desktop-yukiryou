@@ -28,6 +28,12 @@ describe('macOS release workflow contract', () => {
       ),
     ) as ReleaseWorkflow;
     const steps = workflow.jobs?.build_candidate?.steps ?? [];
+    const qualityCommands = (workflow.jobs?.quality?.steps ?? [])
+      .map((step) => step.run?.trim() ?? '')
+      .join('\n');
+    const releaseCommands = (workflow.jobs?.release?.steps ?? [])
+      .map((step) => step.run?.trim() ?? '')
+      .join('\n');
     const commands = steps.map((step) => step.run?.trim() ?? '');
     const vendorIndex = commands.indexOf(
       'pnpm runtime:vendor -- --arch=arm64',
@@ -40,6 +46,12 @@ describe('macOS release workflow contract', () => {
     expect(vendorIndex).toBeGreaterThan(-1);
     expect(integrationIndex).toBeGreaterThan(vendorIndex);
     expect(certificateIndex).toBeGreaterThan(integrationIndex);
+    expect(qualityCommands).toContain(
+      'test -s "docs/releases/${RELEASE_TAG}.md"',
+    );
+    expect(releaseCommands).toContain(
+      '--notes-file "docs/releases/${RELEASE_TAG}.md"',
+    );
   });
 
   it('can resume from accepted notarized artifacts without resubmitting to Apple', async () => {
@@ -69,6 +81,9 @@ describe('macOS release workflow contract', () => {
     expect(download?.with?.['run-id']).toBe('${{ inputs.source_run_id }}');
     expect(commands).not.toContain('release:mac');
     expect(commands).not.toContain('notarytool submit');
+    expect(commands).toContain(
+      '--notes-file "docs/releases/${RELEASE_TAG}.md"',
+    );
     expect(commands).toContain('tag_sha=');
     expect(commands).toContain('"${tag_sha}" != "${source_sha}"');
     expect(commands).not.toContain('--target "${SOURCE_SHA}"');

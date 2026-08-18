@@ -109,7 +109,7 @@ jobs:
           gh release create "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "DeepSeek YukiRyou ${RELEASE_VERSION}" \
-            --generate-notes \
+            --notes-file "docs/releases/${RELEASE_TAG}.md" \
             --draft \
             --prerelease \
             out/release/*

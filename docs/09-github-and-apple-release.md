@@ -43,12 +43,14 @@ Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Act
 
 ## 发版步骤
 
-1. 将 `package.json` 版本提升到从未使用的新版本，例如 `0.1.1-beta.1`，提交并推送。
+1. 将 `package.json` 版本提升到从未使用的新版本，例如 `0.1.1-beta.1`，并创建对应的 `docs/releases/v0.1.1-beta.1.md`；缺少或内容为空会直接阻止发布。
 2. 打开 GitHub → Actions → **Release macOS** → **Run workflow**。
 3. `version` 必须与 `package.json` 一致。
 4. 前五个自动门禁全部通过后，GitHub 中会出现带 DMG、ZIP、校验文件、manifest 和 Apple 公证日志的 Draft。
 5. 审阅 Draft 后运行 **Publish verified macOS draft**，输入相同版本；它会重新下载和安装验证附件，通过后才公开。
 6. 版本/tag 一旦存在，不允许覆盖或强推；任何修改都必须提升版本。
+
+面向用户的版本变化同时汇总到根目录 `CHANGELOG.md`。Release 正文由对应的 `docs/releases/v<version>.md` 自动生成，不在 GitHub 页面临时手写。
 
 固定附件：
 

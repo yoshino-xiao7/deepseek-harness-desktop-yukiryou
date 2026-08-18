@@ -42,6 +42,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           node -e "const p=require('./package.json'); if (p.version !== process.env.RELEASE_VERSION) throw new Error('package.json version does not match workflow input')"
+          test -s "docs/releases/${RELEASE_TAG}.md"
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_TAG} already exists; versions are immutable."
             exit 1
@@ -254,6 +255,7 @@ jobs:
     needs: verify_final
     runs-on: macos-15
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v5
         with:
           name: macos-notarized-artifacts
@@ -266,7 +268,7 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
             --title "DeepSeek YukiRyou ${RELEASE_VERSION}" \
-            --generate-notes \
+            --notes-file "docs/releases/${RELEASE_TAG}.md" \
             --draft \
             --prerelease \
             release-assets/*
