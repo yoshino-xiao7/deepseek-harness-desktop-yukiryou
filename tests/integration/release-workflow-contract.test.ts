@@ -75,4 +75,18 @@ describe('macOS release workflow contract', () => {
     expect(verifyDmgIndex).toBeGreaterThan(-1);
     expect(createDraftIndex).toBeGreaterThan(verifyDmgIndex);
   });
+
+  it('publishes releases in the channel consumed by update.electronjs.org', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'publish-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const steps = workflow.jobs?.verify_and_publish?.steps ?? [];
+    const publish = steps.find((step) => step.name === 'Publish release');
+
+    expect(publish?.run).toContain('--draft=false');
+    expect(publish?.run).toContain('--prerelease=false');
+  });
 });

@@ -23,7 +23,7 @@ Apple 明确说明：成功公证的软件仍可能因为签名问题无法运�
 3. **候选异机安装**：第二个全新 runner 下载候选 ZIP，复制到 `/Applications`，执行严格签名/证书链/架构检查，并用 `--release-smoke-test` 实际启动。全部通过后生成与候选 SHA-256、版本、架构和 Git commit 绑定的验证回执。候选尚未公证，因此 quarantine/Gatekeeper 模拟只在最终产物阶段执行。
 4. **精确候选公证**：第三个 runner 只有在验证回执与候选字节完全匹配时才允许提交 Apple。Accepted 后保存并检查公证日志、staple App/DMG，生成最终 DMG、ZIP、SHA-256 和 manifest。
 5. **最终异机安装**：第四个全新 runner 分别下载最终 ZIP 和 DMG，再次模拟 quarantine、复制到 `/Applications`、验证 `codesign`、Gatekeeper、ticket 和启动冒烟。只有此门禁通过，才创建 GitHub Draft。
-6. **公开前复验**：审阅 Draft 后，独立的 **Publish verified macOS draft** 工作流从 Draft 重新下载附件，在又一个全新 runner 上复验校验和、DMG/ZIP 安装、Gatekeeper、ticket 和启动；全部通过才发布 prerelease。
+6. **公开前复验**：审阅 Draft 后，独立的 **Publish verified macOS draft** 工作流从 Draft 重新下载附件，在又一个全新 runner 上复验校验和、DMG/ZIP 安装、Gatekeeper、ticket 和启动；全部通过才公开 Release。
 
 任一步失败都会阻止后续阶段。公证前的签名问题只消耗 CI 构建时间，不产生 Apple Submission。
 
@@ -59,6 +59,8 @@ Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Act
 - `notarization-log.json`
 
 更新 ZIP 的 `darwin-arm64` 命名不可改变，否则 `update.electronjs.org` 无法选择 Apple Silicon 资源。
+
+GitHub 的 `prerelease` 标记必须为 `false`，因为 `update.electronjs.org` 会忽略所有标记为 prerelease 的 Release。Beta 身份由 SemVer 后缀（例如 `0.1.1-beta.1`）和标题表达；这不代表该版本已经成为稳定版。
 
 ## 本机诊断入口
 
