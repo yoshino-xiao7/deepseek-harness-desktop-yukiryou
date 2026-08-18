@@ -53,10 +53,11 @@ pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
 pnpm test:memory # 打包应用 2500 次侧栏/标签变化与 working-set 门禁
 pnpm test:upgrade # 真实 0.1.0 产物版本 + 旧 Runtime Home 保留门禁
 pnpm test:soak:app # 打包应用 60 秒 shell/Harness/进程/内存资格测试
-pnpm test:soak:app:release # GitHub 托管候选 5 小时打包应用 soak
+pnpm test:soak:app:release # 正式候选 30 分钟打包应用 soak
+pnpm test:soak:app:extended # 独立工作流 5 小时扩展 soak
 ```
 
-日常 `test:integration` 会执行一次压力循环和 100ms soak 冒烟；本机发布资格使用 60 秒真实打包应用 soak。GitHub 托管 runner 的单 job 上限为 6 小时，因此正式流水线在异机安装后、公证前执行 5 小时真实候选 soak，并为安装与收尾预留 30 分钟。8 小时只作为本机或自托管 runner 的扩展矩阵，不作为不可执行的托管 CI 要求。
+日常 `test:integration` 会执行一次压力循环和 100ms soak 冒烟；本机发布资格使用 60 秒真实打包应用 soak。正式流水线在异机安装后、公证前执行 30 分钟真实候选 soak，避免普通 Beta 发布被长时间阻塞。5 小时扩展 soak 由独立工作流手动触发并每周低峰执行，不阻塞签名、公证或发布。
 
 ### 手工发布矩阵
 

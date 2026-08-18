@@ -941,7 +941,7 @@ src/renderer/companion/
 
 ### Phase 5：稳定性、发布与文档收口
 
-状态：**发布候选收口中**。预览硬化已完成非法 UTF-8、图片像素门、SafeMarkdown 扩展 hostile corpus、`O_NOFOLLOW` 稳定文件读取、Workspace 切换重放缓存/renderer 内容清理；100 次审核/工作区切换/面板收放状态压力、2500 次长会话 working-set profile、真实 0.1.0 产物与旧 Runtime Home 布局升级、60 秒打包应用资格 soak、完整单元/集成和 arm64 打包 E2E 已通过。正式流水线已在异机候选安装后、公证前加入 5 小时打包应用 soak；仅该长门禁与后续 CI 异机安装/公证矩阵仍待真实执行。8 小时扩展 soak 只适用于本机或自托管 runner，因为 GitHub 托管 job 上限为 6 小时。
+状态：**发布候选收口中**。预览硬化已完成非法 UTF-8、图片像素门、SafeMarkdown 扩展 hostile corpus、`O_NOFOLLOW` 稳定文件读取、Workspace 切换重放缓存/renderer 内容清理；100 次审核/工作区切换/面板收放状态压力、2500 次长会话 working-set profile、真实 0.1.0 产物与旧 Runtime Home 布局升级、60 秒打包应用资格 soak、完整单元/集成和 arm64 打包 E2E 已通过。正式流水线在异机候选安装后、公证前执行30分钟打包应用 soak；独立5小时扩展 soak 支持手动和每周低峰运行，不阻塞普通发布。仅正式候选30分钟门禁与后续 CI 公证/最终异机矩阵仍待真实执行。
 
 目标：让前四阶段可以独立作为无宠物版本发布。
 

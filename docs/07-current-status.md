@@ -35,7 +35,7 @@
 
 ```text
 Unit:        69 passed
-Integration: 18 passed（fake Harness、真实 rc.7 dsh、内置 pnpm、打包与 5 小时候选门禁契约、压力/soak 冒烟）
+Integration: 19 passed（fake Harness、真实 rc.7 dsh、内置 pnpm、30分钟发布与独立5小时门禁契约、压力/soak 冒烟）
 E2E arm64:   3 passed（稳定启动 + 完整 UI 契约 + Harness/顶栏 renderer 独立强制崩溃恢复）
 Stress:      100/100 passed（启动、就绪、停止、端口回收）
 Companion:   100/100 passed（审核、工作区切换、面板收起/展开状态循环）
@@ -65,7 +65,7 @@ Artifacts:   arm64 DMG + ZIP generated
 
 ## 尚未完成的非发布项
 
-- 发布候选冻结后的 5 小时打包应用 soak 实际运行；60 秒资格 soak 已通过，正式门禁已接入异机安装与 Apple 公证之间。GitHub 托管 job 最长 6 小时，8 小时仅能在本机或自托管 runner 执行。
+- 发布候选冻结后的30分钟打包应用 soak 实际运行；60秒资格 soak 已通过，正式门禁位于异机安装与 Apple 公证之间。独立5小时扩展 soak 已支持手动触发和每周低峰运行，不阻塞普通发布。
 - Harness 缺少已验证的稳定任务事件接口，因此通知功能按方案延期，不使用 DOM 文本猜测。
 - Intel 原生机器上的 x64 E2E；当前用户设备与交付目标为 Apple Silicon。
 - Desktop Companion 完整方案已进入实施，详见 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。账户余额、安全 seam、Workspace Authority、右栏和 Workspace Review 核心 MVP 已完成；当前剩余发布硬化、完整兼容矩阵与素材提供后的宠物动画。

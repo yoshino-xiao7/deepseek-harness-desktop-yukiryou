@@ -1,0 +1,40 @@
+name: Extended macOS soak
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 17 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extended-macos-soak-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.34.5'
+
+jobs:
+  extended_soak:
+    name: Five-hour packaged application soak
+    runs-on: macos-15
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm runtime:vendor -- --arch=arm64
+      - run: pnpm runtime:verify
+      - run: pnpm package:mac -- --arch=arm64
+      - name: Keep shell and Harness healthy for five hours
+        env:
+          DSH_E2E_ARCH: arm64
+        run: pnpm test:soak:app:extended

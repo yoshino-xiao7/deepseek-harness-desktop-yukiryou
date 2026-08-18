@@ -20,7 +20,7 @@ Apple 明确说明：成功公证的软件仍可能因为签名问题无法运�
 
 1. **质量与版本**：版本必须与 `package.json` 完全一致；目标 GitHub tag/Release 必须不存在；运行 lint、类型检查、单元和集成测试。
 2. **签名候选**：在 Apple Silicon GitHub runner 上装配固定运行时，由 Electron Forge 的 `osxSign` / `@electron/osx-sign` 标准流程签名并生成候选 ZIP。仓库不再维护自制递归 `codesign` 脚本。
-3. **候选异机安装与 soak**：第二个全新 runner 下载候选 ZIP，复制到 `/Applications`，执行严格签名/证书链/架构检查，并用 `--release-smoke-test` 实际启动；随后另一个全新 macOS runner 安装同一候选，连续 5 小时每秒验证 shell/Harness 健康、进程数和 working set。全部通过才允许提交 Apple。候选尚未公证，因此 quarantine/Gatekeeper 模拟只在最终产物阶段执行。GitHub 托管 job 最长 6 小时，5 小时为可执行的正式门禁；8 小时只用于本机或自托管 runner 扩展测试。
+3. **候选异机安装与 soak**：第二个全新 runner 下载候选 ZIP，复制到 `/Applications`，执行严格签名/证书链/架构检查，并用 `--release-smoke-test` 实际启动；随后另一个全新 macOS runner 安装同一候选，连续30分钟每秒验证 shell/Harness 健康、进程数和 working set。全部通过才允许提交 Apple。候选尚未公证，因此 quarantine/Gatekeeper 模拟只在最终产物阶段执行。独立5小时扩展 soak 每周低峰运行或按需手动触发，但不阻塞普通 Beta 发布。
 4. **精确候选公证**：第三个 runner 只有在验证回执与候选字节完全匹配时才允许提交 Apple。Accepted 后保存并检查公证日志、staple App/DMG，生成最终 DMG、ZIP、SHA-256 和 manifest。
 5. **最终异机安装**：第四个全新 runner 分别下载最终 ZIP 和 DMG，再次模拟 quarantine、复制到 `/Applications`、验证 `codesign`、Gatekeeper、ticket 和启动冒烟。只有此门禁通过，才创建 GitHub Draft。
 6. **公开前复验**：审阅 Draft 后，独立的 **Publish verified macOS draft** 工作流从 Draft 重新下载附件，在又一个全新 runner 上复验校验和、DMG/ZIP 安装、Gatekeeper、ticket 和启动；全部通过才公开 Release。
