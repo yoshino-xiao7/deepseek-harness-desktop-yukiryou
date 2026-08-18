@@ -19,7 +19,7 @@
 - 本地 shell 与 Harness 已改为两个独立 preload 构建产物；余额桥只存在于 Harness，shell 页面 E2E 已验证检测不到该 bridge。
 - 本地顶栏已提供 Desktop Companion 开关；右栏使用官方 Session/Workspace store 识别当前上下文，再由 authenticated Runtime registry 复核归属。主进程只在复核成功后建立 Workspace Capability，renderer 仅能使用随机节点 ID，不能提交 root、绝对路径或 shell 命令。
 - Workspace Review MVP 已支持懒加载文件树、当前 worktree 相对 HEAD 的目录化变更树与增删行数、带双侧行号/hunk/未修改行折叠的单文件 diff，以及 Markdown 排版/源码、纯文本和 PNG/JPEG/GIF/WebP 预览；窗口足够宽时预览与右栏并排，窄窗口进入不 reload Harness 的 Review Focus。官方“产物”行保持不变，其下新增的逐轮变更卡消费 rc.7 成功 mutation 工具事件；升级前旧轮次只回填官方 deliverables 路径且不伪造增删统计。点击后由主进程重新核对当前 worktree 再打开只读 diff。宠物区尚未加入，因此文件区占满右栏。
-- 产品正式更名为 DeepSeek YukiRyou，使用白底 YukiRyou 鲸鱼女仆品牌图标、独立 Bundle ID、重写后的 README 和品牌化关于页。
+- 产品正式更名为 DeepSeek YukiRyou，使用白底 YukiRyou 鲸鱼女仆品牌图标、独立 Bundle ID、中英文双 README 和品牌化关于页。
 - 首次以新名称启动时会合并复制旧 `DSH Desktop` 用户数据，并写入迁移标记；旧目录保留为可恢复备份。
 - 关于页展示开发者 GitHub `yoshino-xiao7`，点击后由系统浏览器打开主页。
 - 运行时意外退出最多自动重启两次；失败页支持手动重试、打开日志和复制脱敏诊断。
@@ -34,8 +34,8 @@
 ## 自动验证现状
 
 ```text
-Unit:        69 passed
-Integration: 19 passed（fake Harness、真实 rc.7 dsh、内置 pnpm、30分钟发布与独立5小时门禁契约、压力/soak 冒烟）
+Unit:        71 passed
+Integration: 21 passed（fake Harness、真实 rc.7 dsh、内置 pnpm、双语发布说明、30分钟发布与独立5小时门禁契约、压力/soak 冒烟）
 E2E arm64:   3 passed（稳定启动 + 完整 UI 契约 + Harness/顶栏 renderer 独立强制崩溃恢复）
 Stress:      100/100 passed（启动、就绪、停止、端口回收）
 Companion:   100/100 passed（审核、工作区切换、面板收起/展开状态循环）
@@ -50,10 +50,10 @@ Artifacts:   arm64 DMG + ZIP generated
 ## 当前产物
 
 - `out/DeepSeek YukiRyou-darwin-arm64/DeepSeek YukiRyou.app`
-- `out/make/DeepSeek YukiRyou-0.2.0-beta.1-arm64.dmg`
-- `out/make/zip/darwin/arm64/DeepSeek YukiRyou-darwin-arm64-0.2.0-beta.1.zip`
+- `out/make/DeepSeek YukiRyou-0.2.1-beta.1-arm64.dmg`
+- `out/make/zip/darwin/arm64/DeepSeek YukiRyou-darwin-arm64-0.2.1-beta.1.zip`
 
-本地产物只适合开发验证，不应直接作为公开下载版本。`v0.1.0`、`v0.1.0-beta.1` 与 `v0.1.1-beta.1` 标签均不可覆盖；本次发布目标为 `v0.2.0-beta.1`。
+本地产物只适合开发验证，不应直接作为公开下载版本。已发布标签均不可覆盖；本次发布目标为 `v0.2.1-beta.1`。
 
 ## 继续执行前需要的 CI 配置
 

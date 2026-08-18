@@ -17,6 +17,10 @@
 </p>
 
 <p align="center">
+  <strong>简体中文</strong> · <a href="README_EN.md">English</a>
+</p>
+
+<p align="center">
   <a href="https://github.com/yoshino-xiao7/deepseek-yukiryou/releases">下载应用</a>
   ·
   <a href="docs/README.md">开发文档</a>
@@ -56,6 +60,10 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 ## 桌面体验
 
 - **一体化窗口**：本地顶栏与 Harness 共享视觉状态，浅色、深色和跟随系统主题会同步生效。
+- **账户余额**：在“设置”上方显示当前 DeepSeek 凭据所属账户的余额，不展示无法由官方接口精确提供的今日消费。
+- **工作区审阅**：Desktop Companion 提供文件树、相对 HEAD 的 Git 变更、增删行统计和只读 diff。
+- **适合阅读的预览**：Markdown 可在排版与源码之间切换，常见文本和图片也可在应用内预览。
+- **逐轮变更入口**：在 Harness 原生“产物”行下方展示本轮确认变更，点击即可进入对应文件审核。
 - **安静的生命周期**：单实例运行，关闭窗口时可隐藏，重新点击 Dock 图标即可恢复。
 - **故障自恢复**：Harness 或本地界面异常退出时分别恢复，不让一个区域的故障拖垮整个窗口。
 - **真正有用的设置**：“外观”负责桌面壳风格注入；“关于”展示版本、开发者信息，并可直接检查和安装更新。
@@ -169,6 +177,7 @@ pnpm release:mac:candidate
 - [当前实现状态](docs/07-current-status.md)
 - [外观扩展契约](docs/08-appearance-extension.md)
 - [GitHub 与 Apple 发布 Runbook](docs/09-github-and-apple-release.md)
+- [English README](README_EN.md)
 
 ## 开发者与许可
 

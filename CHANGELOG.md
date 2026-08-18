@@ -6,11 +6,19 @@
 
 ## [未发布]
 
+## [0.2.1-beta.1] - 2026-08-18
+
 ### 修复
 
 - 软件更新下载阶段新增不定进度动画与“下载中”状态，不再误显示为“检查中”。
 - macOS 无法验证自动更新签名时不再停留在失败状态，改为明确提示并提供官方已公证 DMG 下载入口；不会绕过系统签名验证。
 - 主页面更新提示固定在展开后的 DeepSeek Harness 品牌行中，不再出现在交通灯下方的空白工具栏。
+
+### 文档
+
+- 新增独立英文 README，并在中英文首页提供互相切换入口。
+- 补充账户余额、Desktop Companion、文件预览、变更审核、安全边界和发布流程说明。
+- GitHub Release Notes 改为同一文件内同时提供简体中文与英文。
 
 ## [0.2.0-beta.1] - 2026-08-18
 
@@ -77,6 +85,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[0.2.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.2.1-beta.1
 [0.2.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.2.0-beta.1
 [0.1.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.1.1-beta.1
 [0.1.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.1.0-beta.1

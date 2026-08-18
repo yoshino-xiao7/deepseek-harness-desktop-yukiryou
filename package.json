@@ -1,7 +1,7 @@
 {
   "name": "deepseek-yukiryou",
   "productName": "DeepSeek YukiRyou",
-  "version": "0.2.0-beta.1",
+  "version": "0.2.1-beta.1",
   "description": "A personalized Apple Silicon desktop experience for DeepSeek Harness",
   "author": "YukiRyou <https://github.com/yoshino-xiao7>",
   "homepage": "https://github.com/yoshino-xiao7/deepseek-yukiryou",
