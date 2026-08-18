@@ -43,7 +43,7 @@ jobs:
         run: |
           node -e "const p=require('./package.json'); if (p.version !== process.env.RELEASE_VERSION) throw new Error('package.json version does not match workflow input')"
           test -s "docs/releases/${RELEASE_TAG}.md"
-          node -e "const fs=require('node:fs'); const notes=fs.readFileSync('docs/releases/'+process.env.RELEASE_TAG+'.md','utf8'); if (/^# /m.test(notes)) throw new Error('Release notes must omit the H1 because GitHub already renders the release title')"
+          node -e "const fs=require('node:fs'); const notes=fs.readFileSync('docs/releases/'+process.env.RELEASE_TAG+'.md','utf8'); if (/^# /m.test(notes)) throw new Error('Release notes must omit the H1 because GitHub already renders the release title'); if (!/^## 简体中文$/m.test(notes) || !/^## English$/m.test(notes)) throw new Error('Release notes must contain Simplified Chinese and English in the same file')"
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_TAG} already exists; versions are immutable."
             exit 1

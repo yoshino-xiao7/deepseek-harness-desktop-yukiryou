@@ -22,6 +22,31 @@ interface ReleaseWorkflow {
 }
 
 describe('macOS release workflow contract', () => {
+  it('keeps both READMEs linked and the current release notes bilingual', async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(process.cwd(), 'package.json'), 'utf8'),
+    ) as { version: string };
+    const [chineseReadme, englishReadme, releaseNotes] = await Promise.all([
+      readFile(join(process.cwd(), 'README.md'), 'utf8'),
+      readFile(join(process.cwd(), 'README_EN.md'), 'utf8'),
+      readFile(
+        join(
+          process.cwd(),
+          'docs',
+          'releases',
+          'v' + packageJson.version + '.md',
+        ),
+        'utf8',
+      ),
+    ]);
+
+    expect(chineseReadme).toContain('href="README_EN.md"');
+    expect(englishReadme).toContain('href="README.md"');
+    expect(releaseNotes).toMatch(/^## 简体中文$/m);
+    expect(releaseNotes).toMatch(/^## English$/m);
+    expect(releaseNotes).not.toMatch(/^# /m);
+  });
+
   it('vendors the bundled runtime before running integration tests', async () => {
     const workflow = parse(
       await readFile(
@@ -53,6 +78,9 @@ describe('macOS release workflow contract', () => {
     );
     expect(qualityCommands).toContain(
       'Release notes must omit the H1 because GitHub already renders the release title',
+    );
+    expect(qualityCommands).toContain(
+      'Release notes must contain Simplified Chinese and English in the same file',
     );
     expect(releaseCommands).toContain(
       '--notes-file "docs/releases/${RELEASE_TAG}.md"',
