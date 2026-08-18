@@ -18,6 +18,7 @@
 
 - 新增独立英文 README，并在中英文首页提供互相切换入口。
 - 补充账户余额、Desktop Companion、文件预览、变更审核、安全边界和发布流程说明。
+- 新增产品路线图，明确 DeepSeek 宠物处于开发中，手机远程控制与插件市场处于规划阶段。
 - GitHub Release Notes 改为同一文件内同时提供简体中文与英文。
 
 ## [0.2.0-beta.1] - 2026-08-18
@@ -85,7 +86,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
-[0.2.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.2.1-beta.1
-[0.2.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.2.0-beta.1
-[0.1.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.1.1-beta.1
-[0.1.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-yukiryou/releases/tag/v0.1.0-beta.1
+[0.2.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.1
+[0.2.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.0-beta.1
+[0.1.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.1.1-beta.1
+[0.1.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.1.0-beta.1

@@ -1,13 +1,13 @@
 {
-  "name": "deepseek-yukiryou",
+  "name": "deepseek-harness-desktop-yukiryou",
   "productName": "DeepSeek YukiRyou",
   "version": "0.2.1-beta.1",
-  "description": "A personalized Apple Silicon desktop experience for DeepSeek Harness",
+  "description": "An independent DeepSeek Harness desktop workspace for Apple Silicon macOS",
   "author": "YukiRyou <https://github.com/yoshino-xiao7>",
-  "homepage": "https://github.com/yoshino-xiao7/deepseek-yukiryou",
+  "homepage": "https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yoshino-xiao7/deepseek-yukiryou.git"
+    "url": "git+https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou.git"
   },
   "license": "MIT",
   "private": true,

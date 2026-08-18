@@ -19,7 +19,8 @@ window.__ModuleLoader__.load({
         'about.nav': '关于',
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Apple Silicon 原生应用',
-        'about.description': '专为 Apple Silicon 打造的 DeepSeek Harness 桌面工作空间。',
+        'about.description':
+          '面向 Apple Silicon 的社区独立 DeepSeek Harness 桌面工作台，内置运行时、账户余额与只读工作区审核。',
         'about.version': '版本',
         'about.updateTitle': '软件更新',
         'about.updateIdle': '自动检查已开启，也可以立即检查。',
@@ -59,7 +60,7 @@ window.__ModuleLoader__.load({
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Native for Apple Silicon',
         'about.description':
-          'A focused DeepSeek Harness workspace built for Apple Silicon.',
+          'An independent community DeepSeek Harness desktop workspace for Apple Silicon, with a bundled runtime, account balance, and read-only workspace review.',
         'about.version': 'Version',
         'about.updateTitle': 'Software update',
         'about.updateIdle': 'Automatic checks are on, or check now.',

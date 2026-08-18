@@ -100,7 +100,7 @@ pnpm test:soak:app:extended # 独立工作流 5 小时扩展 soak
 ## 发布与回滚
 
 - 更新默认分批：先手动下载验证，再开放自动检查。
-- V1 使用 `https://update.electronjs.org/yoshino-xiao7/deepseek-yukiryou/darwin-arm64/<version>` 读取公开 GitHub Release；ZIP 文件名必须同时包含 `darwin` 与 `arm64`。
+- V1 使用 `https://update.electronjs.org/yoshino-xiao7/deepseek-harness-desktop-yukiryou/darwin-arm64/<version>` 读取公开 GitHub Release；ZIP 文件名必须同时包含 `darwin` 与 `arm64`。
 - 更新 feed 保留上一个稳定版本下载链接和校验值。
 - 桌面偏好迁移采用“读取旧版、写入新临时文件、原子替换”；失败则回退默认偏好。
 - 不自动降级 Harness 数据格式。若新版 dsh 写入不可逆格式，发布前必须提供备份/恢复策略，否则不升级该运行时。
