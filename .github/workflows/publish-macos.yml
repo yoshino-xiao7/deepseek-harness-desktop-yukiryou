@@ -33,12 +33,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          release_json=$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,isPrerelease,tagName)
-          node -e "const r=JSON.parse(process.argv[1]); if (!r.isDraft || !r.isPrerelease || r.tagName !== process.env.RELEASE_TAG) throw new Error('Release must be the matching prerelease draft')" "${release_json}"
-          target=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')
-          test -n "${target}"
+          release_json=$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,isPrerelease,tagName,targetCommitish)
+          target=$(node -e "const r=JSON.parse(process.argv[1]); if (!r.isDraft || !r.isPrerelease || r.tagName !== process.env.RELEASE_TAG) throw new Error('Release must be the matching prerelease draft'); if (!/^[0-9a-f]{40}$/.test(r.targetCommitish)) throw new Error('Draft must target an immutable commit SHA'); process.stdout.write(r.targetCommitish)" "${release_json}")
           echo "target=${target}" >> "${GITHUB_OUTPUT}"
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.draft.outputs.target }}
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
