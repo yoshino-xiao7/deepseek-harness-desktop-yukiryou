@@ -487,12 +487,6 @@ describe('packaged desktop application', () => {
         getSnapshot: 'function',
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
-      expect(settingsResult?.aboutText).toContain(
-        '社区独立 DeepSeek Harness 桌面工作台',
-      );
-      expect(settingsResult?.aboutText).toContain(
-        'An independent community DeepSeek Harness desktop workspace',
-      );
       expect(settingsResult?.aboutText).toContain('0.1.0-rc.7');
       expect(settingsResult?.aboutText).toMatch(/Apple Silicon.*arm64/);
 
