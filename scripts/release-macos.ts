@@ -53,6 +53,7 @@ interface PortableVerificationReceipt {
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const productName = 'DeepSeek YukiRyou';
+const releaseAssetName = 'DeepSeek.YukiRyou';
 const architecture = 'arm64' as const;
 const outputDirectory = resolve(
   process.env.MACOS_RELEASE_OUTPUT ?? join(projectRoot, 'out', 'release'),
@@ -234,11 +235,11 @@ async function finishRelease(): Promise<void> {
 
   const finalDmg = join(
     outputDirectory,
-    `${productName}-${state.productVersion}-${state.architecture}.dmg`,
+    `${releaseAssetName}-${state.productVersion}-${state.architecture}.dmg`,
   );
   const finalZip = join(
     outputDirectory,
-    `${productName}-darwin-${state.architecture}-${state.productVersion}.zip`,
+    `${releaseAssetName}-darwin-${state.architecture}-${state.productVersion}.zip`,
   );
   const checksumPath = join(outputDirectory, 'SHA256SUMS.txt');
   const manifestPath = join(outputDirectory, 'release-manifest.json');

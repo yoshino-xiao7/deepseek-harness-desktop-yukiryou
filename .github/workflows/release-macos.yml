@@ -19,6 +19,7 @@ env:
   NODE_VERSION: '24'
   PNPM_VERSION: '10.34.5'
   PRODUCT_NAME: DeepSeek YukiRyou
+  ARTIFACT_NAME: DeepSeek.YukiRyou
   RELEASE_VERSION: ${{ inputs.version }}
   RELEASE_TAG: v${{ inputs.version }}
   MACOS_SIGN_IDENTITY: 'Developer ID Application: HanTao Cao (7G6J4S76PN)'
@@ -199,8 +200,8 @@ jobs:
         with:
           name: macos-notarized-artifacts
           path: |
-            out/release/${{ env.PRODUCT_NAME }}-${{ inputs.version }}-arm64.dmg
-            out/release/${{ env.PRODUCT_NAME }}-darwin-arm64-${{ inputs.version }}.zip
+            out/release/${{ env.ARTIFACT_NAME }}-${{ inputs.version }}-arm64.dmg
+            out/release/${{ env.ARTIFACT_NAME }}-darwin-arm64-${{ inputs.version }}.zip
             out/release/SHA256SUMS.txt
             out/release/release-manifest.json
             out/release/notarization-log.json
@@ -232,7 +233,7 @@ jobs:
         run: |
           pnpm verify:distribution -- \
             --kind=zip \
-            --archive="out/release/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
+            --archive="out/release/${ARTIFACT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
             --install-app="/Applications/${PRODUCT_NAME}.app" \
             --expect-version="${RELEASE_VERSION}" \
             --require-notarized=true \
@@ -242,7 +243,7 @@ jobs:
         run: |
           pnpm verify:distribution -- \
             --kind=dmg \
-            --archive="out/release/${PRODUCT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
+            --archive="out/release/${ARTIFACT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
             --install-app="/Applications/${PRODUCT_NAME}.app" \
             --expect-version="${RELEASE_VERSION}" \
             --require-notarized=true \

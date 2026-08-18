@@ -19,6 +19,7 @@ env:
   NODE_VERSION: '24'
   PNPM_VERSION: '10.34.5'
   PRODUCT_NAME: DeepSeek YukiRyou
+  ARTIFACT_NAME: DeepSeek.YukiRyou
   RELEASE_VERSION: ${{ inputs.version }}
   RELEASE_TAG: v${{ inputs.version }}
 
@@ -64,7 +65,7 @@ jobs:
         run: |
           pnpm verify:distribution -- \
             --kind=zip \
-            --archive="release-assets/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
+            --archive="release-assets/${ARTIFACT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
             --install-app="/Applications/${PRODUCT_NAME}.app" \
             --expect-version="${RELEASE_VERSION}" \
             --require-notarized=true \
@@ -74,7 +75,7 @@ jobs:
         run: |
           pnpm verify:distribution -- \
             --kind=dmg \
-            --archive="release-assets/${PRODUCT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
+            --archive="release-assets/${ARTIFACT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
             --install-app="/Applications/${PRODUCT_NAME}.app" \
             --expect-version="${RELEASE_VERSION}" \
             --require-notarized=true \

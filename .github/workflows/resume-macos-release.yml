@@ -24,6 +24,7 @@ env:
   NODE_VERSION: '24'
   PNPM_VERSION: '10.34.5'
   PRODUCT_NAME: DeepSeek YukiRyou
+  ARTIFACT_NAME: DeepSeek.YukiRyou
   RELEASE_VERSION: ${{ inputs.version }}
   RELEASE_TAG: v${{ inputs.version }}
 
@@ -77,6 +78,8 @@ jobs:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           node -e "const fs=require('node:fs'); const m=JSON.parse(fs.readFileSync('out/release/release-manifest.json','utf8')); if (m.schemaVersion !== 1 || m.version !== process.env.RELEASE_VERSION || m.architecture !== 'arm64' || m.gitCommit !== process.env.SOURCE_SHA || m.dirtyWorktree !== false || typeof m.notarizationSubmissionId !== 'string') throw new Error('Notarized artifact provenance does not match the source run')"
+      - name: Normalize GitHub release asset names
+        run: node scripts/normalize-release-asset-names.ts --directory=out/release
       - name: Verify checksums
         working-directory: out/release
         run: shasum -a 256 -c SHA256SUMS.txt
@@ -84,7 +87,7 @@ jobs:
         run: |
           pnpm verify:distribution -- \
             --kind=zip \
-            --archive="out/release/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
+            --archive="out/release/${ARTIFACT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
             --install-app="/Applications/${PRODUCT_NAME}.app" \
             --expect-version="${RELEASE_VERSION}" \
             --require-notarized=true \
@@ -94,7 +97,7 @@ jobs:
         run: |
           pnpm verify:distribution -- \
             --kind=dmg \
-            --archive="out/release/${PRODUCT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
+            --archive="out/release/${ARTIFACT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
             --install-app="/Applications/${PRODUCT_NAME}.app" \
             --expect-version="${RELEASE_VERSION}" \
             --require-notarized=true \

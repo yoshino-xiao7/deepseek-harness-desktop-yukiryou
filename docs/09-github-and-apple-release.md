@@ -52,8 +52,8 @@ Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Act
 
 固定附件：
 
-- `DeepSeek YukiRyou-<version>-arm64.dmg`
-- `DeepSeek YukiRyou-darwin-arm64-<version>.zip`
+- `DeepSeek.YukiRyou-<version>-arm64.dmg`
+- `DeepSeek.YukiRyou-darwin-arm64-<version>.zip`
 - `SHA256SUMS.txt`
 - `release-manifest.json`
 - `notarization-log.json`
