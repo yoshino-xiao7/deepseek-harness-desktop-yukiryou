@@ -3,6 +3,8 @@ import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 
+const signingIdentity = process.env.MACOS_SIGN_IDENTITY?.trim();
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -15,6 +17,14 @@ const config: ForgeConfig = {
     extendInfo: {
       LSMinimumSystemVersion: '14.0',
     },
+    ...(signingIdentity === undefined || signingIdentity === ''
+      ? {}
+      : {
+          osxSign: {
+            identity: signingIdentity,
+            strictVerify: true,
+          },
+        }),
   },
   rebuildConfig: {},
   makers: [

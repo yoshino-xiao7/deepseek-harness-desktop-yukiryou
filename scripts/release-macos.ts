@@ -24,6 +24,10 @@ interface NotaryResult {
   readonly status?: string;
 }
 
+interface NotaryLog {
+  readonly issues?: ReadonlyArray<{ readonly severity?: string }> | null;
+}
+
 interface NotarizationState {
   readonly schemaVersion: 1;
   readonly submissionId: string;
@@ -36,6 +40,15 @@ interface NotarizationState {
   readonly signedApp: string;
   readonly diskImage: string;
   readonly submittedAt: string;
+}
+
+interface PortableVerificationReceipt {
+  readonly schemaVersion: 1;
+  readonly verifiedArchiveSha256: string;
+  readonly version: string;
+  readonly architecture: 'arm64';
+  readonly gitCommit: string;
+  readonly smokeTest: 'passed';
 }
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -87,6 +100,29 @@ async function submitRelease(): Promise<void> {
       'Release builds require a clean Git worktree. Commit the changes or set MACOS_RELEASE_ALLOW_DIRTY=true for a non-publishable rehearsal.',
     );
   }
+  if (process.env.MACOS_RELEASE_SKIP_PACKAGE !== 'true') {
+    throw new Error(
+      'Direct packaging and notarization is disabled. Build a candidate, verify it on a fresh runner, then submit that exact candidate with MACOS_RELEASE_SKIP_PACKAGE=true.',
+    );
+  }
+
+  const candidateArchive = resolve(
+    requiredEnvironment('MACOS_RELEASE_CANDIDATE'),
+  );
+  const receipt = await readPortableReceipt(
+    resolve(requiredEnvironment('MACOS_RELEASE_PORTABLE_RECEIPT')),
+  );
+  if (
+    receipt.verifiedArchiveSha256 !== (await sha256(candidateArchive)) ||
+    receipt.version !== version ||
+    receipt.architecture !== architecture ||
+    receipt.gitCommit !== gitCommit ||
+    receipt.smokeTest !== 'passed'
+  ) {
+    throw new Error(
+      'Portable verification receipt does not match this candidate, version, architecture, and Git commit.',
+    );
+  }
 
   const appSource = resolve(
     process.env.MACOS_RELEASE_APP ??
@@ -105,19 +141,9 @@ async function submitRelease(): Promise<void> {
   let submissionRecorded = false;
 
   try {
-    if (process.env.MACOS_RELEASE_SKIP_PACKAGE !== 'true') {
-      run('pnpm', ['package:mac', '--', '--arch=arm64'], projectRoot);
-    }
-
     await mkdir(outputDirectory, { recursive: true });
     run('ditto', [appSource, signedApp]);
-    run('xattr', ['-cr', signedApp]);
-    run(process.execPath, [
-      join(projectRoot, 'scripts', 'sign-macos-app.ts'),
-      `--app=${signedApp}`,
-      `--identity=${identity}`,
-      `--entitlements=${join(projectRoot, 'resources', 'entitlements.mac.plist')}`,
-    ]);
+    verifyApplicationSignature(signedApp);
 
     await mkdir(diskImageRoot, { recursive: true });
     const stagedApp = join(diskImageRoot, `${productName}.app`);
@@ -186,6 +212,18 @@ async function finishRelease(): Promise<void> {
   if (result.status !== 'Accepted') {
     throw new Error(
       `Apple notarization ${state.submissionId} returned ${result.status ?? 'an unknown status'}. The preserved workspace is ${state.temporaryRoot}`,
+    );
+  }
+
+  const notarizationLogPath = join(outputDirectory, 'notarization-log.json');
+  const notarizationLog = await downloadNotarizationLog(state.submissionId);
+  await writeFile(notarizationLogPath, `${JSON.stringify(notarizationLog, null, 2)}\n`);
+  const warnings = (notarizationLog.issues ?? []).filter((issue) =>
+    ['warning', 'error'].includes(issue.severity?.toLowerCase() ?? ''),
+  );
+  if (warnings.length > 0) {
+    throw new Error(
+      `Apple notarization log contains ${String(warnings.length)} warning/error issue(s); review ${notarizationLogPath} before continuing.`,
     );
   }
 
@@ -268,7 +306,7 @@ async function readState(): Promise<NotarizationState> {
 }
 
 async function submitForNotarization(path: string): Promise<NotaryResult> {
-  const output = await runStreaming('xcrun', [
+  const arguments_ = [
     'notarytool',
     'submit',
     path,
@@ -276,8 +314,31 @@ async function submitForNotarization(path: string): Promise<NotaryResult> {
     '--no-s3-acceleration',
     '--output-format',
     'json',
-  ]);
+  ];
+  if (process.env.MACOS_RELEASE_WAIT === 'true') {
+    arguments_.push('--wait');
+  }
+  const output = await runStreaming('xcrun', arguments_);
   return JSON.parse(output) as NotaryResult;
+}
+
+async function readPortableReceipt(
+  path: string,
+): Promise<PortableVerificationReceipt> {
+  const receipt = JSON.parse(
+    await readFile(path, 'utf8'),
+  ) as PortableVerificationReceipt;
+  if (
+    receipt.schemaVersion !== 1 ||
+    typeof receipt.verifiedArchiveSha256 !== 'string' ||
+    typeof receipt.version !== 'string' ||
+    receipt.architecture !== 'arm64' ||
+    typeof receipt.gitCommit !== 'string' ||
+    receipt.smokeTest !== 'passed'
+  ) {
+    throw new Error(`Invalid portable verification receipt: ${path}`);
+  }
+  return receipt;
 }
 
 async function notarizationInfo(submissionId: string): Promise<NotaryResult> {
@@ -290,6 +351,18 @@ async function notarizationInfo(submissionId: string): Promise<NotaryResult> {
     'json',
   ]);
   return JSON.parse(output) as NotaryResult;
+}
+
+async function downloadNotarizationLog(
+  submissionId: string,
+): Promise<NotaryLog> {
+  const output = await runStreaming('xcrun', [
+    'notarytool',
+    'log',
+    submissionId,
+    ...notaryCredentials,
+  ]);
+  return JSON.parse(output) as NotaryLog;
 }
 
 function notaryCredentialArguments(): string[] {

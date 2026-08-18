@@ -109,13 +109,14 @@ pnpm test:e2e
 pnpm package:mac -- --arch=arm64
 ```
 
-正式签名、公证和发行只使用：
+正式签名、公证和发行只通过 GitHub Actions 的 **Release macOS** 工作流执行。本机只能生成不可发布的签名候选：
 
 ```bash
-pnpm release:mac
+export MACOS_SIGN_IDENTITY="Developer ID Application: ... (...)"
+pnpm release:mac:candidate
 ```
 
-该命令要求干净的 Git 工作区以及仓库外注入的 Apple 凭据。它完成 App/DMG 签名并只提交一次公证，把待处理文件保存在 Application Support 的持久目录，保存 Submission ID 后立即退出，不维持长连接。之后运行 `pnpm release:mac:finish` 查询同一个 ID：处理中会立即返回，Accepted 后才执行 staple、Gatekeeper 验证、更新 ZIP、校验值和可追溯 manifest。不要手工重提文件。
+工作流使用多个全新 Apple Silicon runner：先验证候选复制到 `/Applications` 后仍能验签和启动，才允许提交 Apple；公证后的 DMG 与 ZIP 还会在另一个 runner 上重新安装、Gatekeeper 验证并启动。全部通过后只创建 Draft，显式允许后才发布 prerelease。详见 [发布规则](docs/09-github-and-apple-release.md)。
 
 ## 固定运行时
 

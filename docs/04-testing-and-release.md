@@ -67,15 +67,13 @@ pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
 
 ### Release tag
 
-1. 在对应架构的 macOS runner 上装配并验证 runtime。
-2. 运行唯一入口 `pnpm release:mac`：构建 arm64 App、Developer ID 签名、制作并签名 DMG。
-3. 只提交 DMG 一次并持久化 Submission ID，不维持等待长连接；使用 `pnpm release:mac:finish` 按同一 ID 查询。
-4. Accepted 后 staple App/DMG，并强制执行 `codesign`、`spctl`、`hdiutil` 与 ticket 验证。
-5. 从已 staple 的 App 生成更新 ZIP，同时生成 SHA-256 和记录 Git commit/Submission ID 的 manifest。
-6. 完成安装后冒烟、SBOM、第三方许可证和 release notes。
-7. 发布到 draft；核对 tag、manifest 和附件哈希后再公开并更新 feed。
+1. 第一台 Apple Silicon runner 使用 Electron Forge 官方 `osxSign` 生成签名候选。
+2. 第二台全新 runner 下载候选、模拟 quarantine、复制到 `/Applications`，执行签名/证书链/架构验证和真实启动冒烟，并产生绑定 SHA-256 与 commit 的回执。
+3. 只有回执与候选完全匹配，第三台 runner 才提交 Apple 一次；Accepted 后检查公证日志、staple 并生成最终 DMG/ZIP。
+4. 第四台全新 runner 分别安装最终 DMG/ZIP，执行 `codesign`、`spctl`、ticket、架构、校验和与启动冒烟。
+5. 全部通过后创建 Draft；独立发布工作流从 Draft 重新下载并再次安装验收，通过后才发布 prerelease。任何失败都不得创建公开 Release。
 
-正式发布必须从干净 tag 构建。CI 不允许在签名后修改 `.app` 内容。
+正式发布必须从干净 commit 构建。CI 不允许在签名后修改 `.app` 内容，也不允许覆盖已经存在的版本或 tag。
 
 ## 版本策略
 

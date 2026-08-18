@@ -1,6 +1,6 @@
 # 当前实现状态
 
-更新时间：2026-08-17。
+更新时间：2026-08-18。
 
 ## 已完成
 
@@ -23,13 +23,13 @@
 - 本地顶栏与 Harness renderer 使用独立的 30 秒有界恢复预算；真实打包应用已分别强制崩溃并验证互不重启，顶栏恢复后会重放侧栏宽度和主题快照。
 - 正式签名的 Apple Silicon 版本启动 15 秒后自动检查更新，此后每 6 小时复查；关于页可随时手动检查并在下载完成后直接重启安装。仅在下载或等待安装时，Harness 品牌行显示紧凑更新入口；最新版、空闲和错误状态均隐藏。开发包明确禁用更新。
 - Apple Silicon `.app`、DMG 和 ZIP 构建成功；打包应用真实启动官方 Harness 的 Playwright 测试通过。
-- 正式发布已固化为可恢复的 `release:mac` / `release:mac:finish` 流程：只提交一次签名 DMG，持久化 Submission ID 后断开长连接；Accepted 后 staple App/DMG，从已 staple App 派生更新 ZIP，并生成哈希与可追溯 manifest。
+- 正式发布改为 GitHub Actions 多 runner 强制门禁：Forge 官方签名候选必须先在全新 runner 复制到 `/Applications` 并启动成功，才允许公证；最终 DMG/ZIP 还要在另一个全新 runner 重复安装、Gatekeeper、ticket 与启动验收，之后才创建 Draft。
 - 运行时生产依赖审计为 0 个已知漏洞；内置 pnpm 已从存在高危公告的 10.33.2 升级到 10.34.5。
 
 ## 自动验证现状
 
 ```text
-Unit:        38 passed
+Unit:        39 passed
 Integration: 6 passed（fake Harness、真实 dsh、内置 pnpm、打包契约、压力/soak 冒烟）
 E2E arm64:   2 passed（完整 UI 契约 + Harness/顶栏 renderer 独立强制崩溃恢复）
 Stress:      100/100 passed（启动、就绪、停止、端口回收）
@@ -44,15 +44,15 @@ Artifacts:   arm64 DMG + ZIP generated
 - `out/make/DeepSeek YukiRyou-0.1.0-arm64.dmg`
 - `out/make/zip/darwin/arm64/DeepSeek YukiRyou-darwin-arm64-0.1.0.zip`
 
-这些是未签名开发产物，适合本机验证，不应直接作为公开下载版本。
+这些本地产物只适合开发验证，不应直接作为公开下载版本。原 `v0.1.0` GitHub Release 是 Draft、下载次数为 0，已判定无效且不得覆盖；下一次发布必须提升版本。
 
-## 继续执行前需要的发布资料
+## 继续执行前需要的 CI 配置
 
-1. Apple Developer Team 与 Developer ID Application 证书。
-2. App Store Connect API Key 或 Keychain notarization profile。
-3. 更新包托管地址与签名更新 feed。
+1. 将 Developer ID Application 证书导出为带强密码的 `.p12`，以 Base64 和密码分别写入 GitHub Actions Secrets。
+2. 将 App Store Connect API `.p8` 以 Base64 写入 GitHub Actions Secrets，同时配置 Key ID 与 Issuer ID。
+3. 通过 `Release macOS` 生成并验收新版本 Draft；通过独立 `Publish verified macOS draft` 工作流公开。
 
-拿到以上资料后执行 Phase 4：Hardened Runtime 签名、Apple 公证/staple、Gatekeeper 验证、更新器、SBOM/许可证与正式 release runbook。
+本机已具备 Developer ID 与公证 API 凭据，但 CI Secrets 尚需按 `docs/09-github-and-apple-release.md` 配置。配置前不执行新的公证或 GitHub 发布。
 
 ## 尚未完成的非发布项
 

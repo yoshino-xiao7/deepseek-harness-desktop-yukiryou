@@ -1,83 +1,90 @@
-# GitHub 与 Apple 发布准备
+# GitHub 与 Apple 发布规则
 
-## GitHub
+## 不可绕过的原则
 
-目标仓库：`https://github.com/yoshino-xiao7/deepseek-yukiryou`
+正式版本只能由 `.github/workflows/release-macos.yml` 创建。本机命令用于开发和诊断，不得直接上传 GitHub Release。
 
-每个 GitHub Release 的附件固定包含：
+```text
+同机验签通过 != 可发布
+Apple Accepted != 可安装
+DMG 内验签通过 != 复制到 Applications 后有效
+两个全新 runner 完成安装与启动验收 = 才允许创建 Release
+```
+
+Apple 明确说明：成功公证的软件仍可能因为签名问题无法运行，并建议尽可能在不同于开发机的 Mac 上测试最终分发物：
+
+- [Notarizing macOS software before distribution](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+- [Packaging Mac software for distribution](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)
+
+## 六阶段门禁
+
+1. **质量与版本**：版本必须与 `package.json` 完全一致；目标 GitHub tag/Release 必须不存在；运行 lint、类型检查、单元和集成测试。
+2. **签名候选**：在 Apple Silicon GitHub runner 上装配固定运行时，由 Electron Forge 的 `osxSign` / `@electron/osx-sign` 标准流程签名并生成候选 ZIP。仓库不再维护自制递归 `codesign` 脚本。
+3. **候选异机安装**：第二个全新 runner 下载候选 ZIP，复制到 `/Applications`，执行严格签名/证书链/架构检查，并用 `--release-smoke-test` 实际启动。全部通过后生成与候选 SHA-256、版本、架构和 Git commit 绑定的验证回执。候选尚未公证，因此 quarantine/Gatekeeper 模拟只在最终产物阶段执行。
+4. **精确候选公证**：第三个 runner 只有在验证回执与候选字节完全匹配时才允许提交 Apple。Accepted 后保存并检查公证日志、staple App/DMG，生成最终 DMG、ZIP、SHA-256 和 manifest。
+5. **最终异机安装**：第四个全新 runner 分别下载最终 ZIP 和 DMG，再次模拟 quarantine、复制到 `/Applications`、验证 `codesign`、Gatekeeper、ticket 和启动冒烟。只有此门禁通过，才创建 GitHub Draft。
+6. **公开前复验**：审阅 Draft 后，独立的 **Publish verified macOS draft** 工作流从 Draft 重新下载附件，在又一个全新 runner 上复验校验和、DMG/ZIP 安装、Gatekeeper、ticket 和启动；全部通过才发布 prerelease。
+
+任一步失败都会阻止后续阶段。公证前的签名问题只消耗 CI 构建时间，不产生 Apple Submission。
+
+## GitHub Actions Secrets
+
+在仓库 **Settings → Secrets and variables → Actions** 配置：
+
+| Secret | 内容 | 获取方式 |
+| --- | --- | --- |
+| `MACOS_CERTIFICATE_P12_BASE64` | Developer ID Application 证书和私钥导出的 `.p12`，整体 Base64 | 钥匙串访问导出 `.p12`，本机执行 `openssl base64 -A -in certificate.p12` |
+| `MACOS_CERTIFICATE_PASSWORD` | 导出 `.p12` 时设置的强密码 | 仅存 GitHub Secret/密码管理器 |
+| `APPLE_API_KEY_P8_BASE64` | App Store Connect API `.p8` 整体 Base64 | `openssl base64 -A -in AuthKey_XXXXXXXXXX.p8` |
+| `APPLE_API_KEY_ID` | API Key ID | App Store Connect → 用户和访问 → 集成 → 团队密钥 |
+| `APPLE_API_ISSUER` | Issuer ID | 同一 API 页面 |
+
+Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Actions artifact、日志或 `.env`。
+
+## 发版步骤
+
+1. 将 `package.json` 版本提升到从未使用的新版本，例如 `0.1.1-beta.1`，提交并推送。
+2. 打开 GitHub → Actions → **Release macOS** → **Run workflow**。
+3. `version` 必须与 `package.json` 一致。
+4. 前五个自动门禁全部通过后，GitHub 中会出现带 DMG、ZIP、校验文件、manifest 和 Apple 公证日志的 Draft。
+5. 审阅 Draft 后运行 **Publish verified macOS draft**，输入相同版本；它会重新下载和安装验证附件，通过后才公开。
+6. 版本/tag 一旦存在，不允许覆盖或强推；任何修改都必须提升版本。
+
+固定附件：
 
 - `DeepSeek YukiRyou-<version>-arm64.dmg`
 - `DeepSeek YukiRyou-darwin-arm64-<version>.zip`
 - `SHA256SUMS.txt`
 - `release-manifest.json`
+- `notarization-log.json`
 
-Release 必须在签名、公证与 staple 完成后创建，避免把当前未签名开发包误标成正式下载。
+更新 ZIP 的 `darwin-arm64` 命名不可改变，否则 `update.electronjs.org` 无法选择 Apple Silicon 资源。
 
-## Apple 开发者资料
+## 本机诊断入口
 
-本机已经完成 Developer ID 与 App Store Connect 公证凭据准备。发布构建通过环境变量注入凭据，任何私钥都不得写入仓库：
-
-1. `MACOS_SIGN_IDENTITY`：登录 Keychain 中的 `Developer ID Application` 完整名称。
-2. `APPLE_API_KEY`：仓库外 `.p8` 私钥的绝对路径。
-3. `APPLE_API_KEY_ID`：团队 API Key ID。
-4. `APPLE_API_ISSUER`：团队 Issuer ID。
-
-内置 Harness Runtime 包含大量原生二进制与依赖文件。Electron Packager 的默认并发签名遍历可能触发 `EMFILE`，所以发布流程使用 `scripts/sign-macos-app.ts` 顺序识别并签署 Mach-O，再按从深到浅的顺序封装 Electron bundles。Hardened Runtime 使用 `resources/entitlements.mac.plist`，不包含调试专用的 `get-task-allow`。
-
-## 唯一正式发布流程
-
-正式发布只运行一个入口。实际值仅在当前 shell、Keychain 或安全 CI Secret 中注入：
+本机可构建签名候选，但候选不能直接发布：
 
 ```bash
-export MACOS_SIGN_IDENTITY="Developer ID Application: ... (...)"
-export APPLE_API_KEY="/absolute/path/outside/repository/AuthKey_XXXXXXXXXX.p8"
-export APPLE_API_KEY_ID="XXXXXXXXXX"
-export APPLE_API_ISSUER="00000000-0000-0000-0000-000000000000"
-pnpm release:mac
+export MACOS_SIGN_IDENTITY="Developer ID Application: HanTao Cao (7G6J4S76PN)"
+pnpm release:mac:candidate
 ```
 
-也可以用 `xcrun notarytool store-credentials` 将凭据保存到 Keychain，然后只设置 `APPLE_NOTARY_KEYCHAIN_PROFILE`，不再导出三项 API Key 环境变量。
-
-`scripts/release-macos.ts` 固定执行以下顺序，任一步失败都会停止：
-
-1. 验证版本号、Developer ID、公证凭据和干净 Git 工作区。
-2. 构建 arm64 App，并在系统临时目录中顺序签署所有嵌套 Mach-O 与 App bundle。
-3. 制作并签署 DMG；使用标准 S3 端点（`--no-s3-acceleration`）只提交一次，避免当前网络连接 Transfer Acceleration 端点时长时间无响应。
-4. Apple 返回 Submission ID 后立即写入 `out/release/notarization-state.json` 并退出，不保持 `--wait` 长连接。
-5. 随时运行 `pnpm release:mac:finish` 查询同一个 ID；仍在处理就立即返回，不会重新提交。
-6. Apple 返回 `Accepted` 后，对 App 和 DMG 分别 staple，再执行 `codesign`、`spctl`、`hdiutil` 和 `stapler validate`。
-7. DMG staging 中的复制 App 必须再次通过签名验证；从已 staple 的 App 生成更新 ZIP 后，必须重新解包并通过签名、Gatekeeper 与 ticket 验证。外层 App 签名前必须先明确移除 Forge 遗留签名，再生成一次 Developer ID 签名，不能依赖连续 `--force` 重签。
-8. 输出 DMG、ZIP、SHA-256 与包含 Git commit/公证 Submission ID 的 manifest。
-
-Apple 公证服务会为提交容器及其中的嵌套代码生成 ticket，所以不需要把 App、ZIP、DMG 分别排队提交。ZIP 本身不能 staple，因此必须在 App staple 完成后重新生成。签名和公证均在非 File Provider 管理的系统临时目录完成，避免 Documents 同步服务添加 FinderInfo/resource-fork 属性。
-
-流程依据：[Apple 公证工作流定制](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)与[分发前公证 macOS 软件](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)。
-
-默认输出目录是 `out/release/`。只有排障演练可以使用以下覆盖项：
-
-- `MACOS_RELEASE_SKIP_PACKAGE=true`：复用 `MACOS_RELEASE_APP` 指向的现有 App。
-- `MACOS_RELEASE_OUTPUT=/absolute/path`：改变最终输出目录。
-- `MACOS_RELEASE_WORK_ROOT=/absolute/path`：改变等待公证期间的持久化工作目录。
-- `MACOS_RELEASE_ALLOW_DIRTY=true`：允许脏工作区；manifest 会明确标记，禁止将这种产物公开发布。
-
-提交成功后，状态文件和 `~/Library/Application Support/DeepSeek YukiRyou/Release Work/` 中的签名 App/DMG 会保留到 `release:mac:finish` 完成，不依赖可能被系统清理的临时目录。DMG 生成后会立即删除重复的 staging 副本以节省磁盘。断网、关闭终端或重启电脑均不需要重提；成功生成最终产物后才自动清理对应工作目录。不要绕过脚本手工补做另一份公证。
-
-GitHub Release 中的更新 ZIP 必须保持 `DeepSeek YukiRyou-darwin-arm64-<version>.zip` 命名，以便 `update.electronjs.org` 按 `darwin-arm64` 精确选择。更新器只消费经过 Developer ID 签名与 Apple 公证的 ZIP，不上传开发构建。
-
-若账号不是 Account Holder，需要 Account Holder 创建 Developer ID 证书，或为管理员授予 cloud-managed Developer ID certificate access。
-
-## 发布验证
+验证某个归档复制后的真实应用：
 
 ```bash
-security find-identity -v -p codesigning
-codesign --verify --deep --strict --verbose=2 "DeepSeek YukiRyou.app"
-spctl --assess --type execute --verbose=4 "DeepSeek YukiRyou.app"
-xcrun stapler validate "DeepSeek YukiRyou.app"
-pnpm verify:release -- --app="out/DeepSeek YukiRyou-darwin-arm64/DeepSeek YukiRyou.app" --expect-arch=arm64 --require-signed=true --require-notarized=true
+pnpm verify:distribution -- \
+  --kind=zip \
+  --archive="/absolute/path/candidate.zip" \
+  --install-app="/absolute/new/path/DeepSeek YukiRyou.app" \
+  --require-notarized=false
 ```
 
-上述命令用于单独诊断 App。正常发布无需重复运行，因为 `pnpm release:mac` 已将相同验证作为强制门槛。发布 GitHub Release 前还要确认 tag 指向 `release-manifest.json` 的 `gitCommit`，并使用 `shasum -a 256 -c out/release/SHA256SUMS.txt` 复核附件。
+`pnpm release:mac` 已禁止直接构建并公证。它只接受另一个环境生成的候选、候选 manifest 和可移植验证回执；SHA-256、版本、架构、Git commit 或启动结果任一不匹配都会终止。
 
-## 品牌发布检查
+## 当前 v0.1.0
 
-公开发布前确认 YukiRyou 角色图的使用与再分发权，并审阅应用名称中使用 DeepSeek 商标是否符合其品牌规则。README 已明确项目不是 DeepSeek 官方发行或背书的客户端。
+原 `v0.1.0` Release 保持 Draft，附件下载次数为 0，不作为有效 Beta。不得覆盖该 tag 或复用该版本；下一次发布必须使用新版本号。
+
+## 品牌检查
+
+公开发布前确认 YukiRyou 角色图的使用与再分发权，并审阅应用名称中使用 DeepSeek 商标是否符合品牌规则。README 已声明本项目不是 DeepSeek 官方发行或背书的客户端。

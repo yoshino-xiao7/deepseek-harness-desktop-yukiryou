@@ -1,9 +1,26 @@
 import { app } from 'electron';
 
 import { AppCoordinator } from './app-coordinator.js';
+import {
+  isReleaseSmokeTest,
+  releaseSmokeMarker,
+} from './release-smoke.js';
 import { prepareUserDataLocation } from './user-data-location.js';
 
 async function run(): Promise<void> {
+  if (isReleaseSmokeTest(process.argv)) {
+    await app.whenReady();
+    process.stdout.write(
+      `${releaseSmokeMarker} ${JSON.stringify({
+        version: app.getVersion(),
+        architecture: process.arch,
+        packaged: app.isPackaged,
+      })}\n`,
+    );
+    app.quit();
+    return;
+  }
+
   const hasExplicitUserData = process.argv.some((argument) =>
     argument.startsWith('--user-data-dir='),
   );

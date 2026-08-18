@@ -1,0 +1,268 @@
+name: Release macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact package.json version, for example 0.1.1-beta.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-macos-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.34.5'
+  PRODUCT_NAME: DeepSeek YukiRyou
+  RELEASE_VERSION: ${{ inputs.version }}
+  RELEASE_TAG: v${{ inputs.version }}
+  MACOS_SIGN_IDENTITY: 'Developer ID Application: HanTao Cao (7G6J4S76PN)'
+
+jobs:
+  quality:
+    name: Quality and version gate
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - name: Require a new matching version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node -e "const p=require('./package.json'); if (p.version !== process.env.RELEASE_VERSION) throw new Error('package.json version does not match workflow input')"
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists; versions are immutable."
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists; tags are immutable."
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  build_candidate:
+    name: Sign and build candidate
+    needs: quality
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm runtime:vendor -- --arch=arm64
+      - name: Import Developer ID certificate into an ephemeral keychain
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          test -n "${CERTIFICATE_P12_BASE64}"
+          test -n "${CERTIFICATE_PASSWORD}"
+          CERTIFICATE_PATH="${RUNNER_TEMP}/developer-id.p12"
+          KEYCHAIN_PATH="${RUNNER_TEMP}/release.keychain-db"
+          printf '%s' "${CERTIFICATE_P12_BASE64}" | openssl base64 -d -A -out "${CERTIFICATE_PATH}"
+          security create-keychain -p temporary-ci-keychain "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p temporary-ci-keychain "${KEYCHAIN_PATH}"
+          security import "${CERTIFICATE_PATH}" -P "${CERTIFICATE_PASSWORD}" -A -t cert -f pkcs12 -k "${KEYCHAIN_PATH}"
+          security set-key-partition-list -S apple-tool:,apple: -s -k temporary-ci-keychain "${KEYCHAIN_PATH}"
+          security list-keychains -d user -s "${KEYCHAIN_PATH}"
+          security find-identity -v -p codesigning "${KEYCHAIN_PATH}"
+      - run: pnpm release:mac:candidate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-candidate
+          path: out/release-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  verify_candidate:
+    name: Fresh-runner install and smoke gate
+    needs: build_candidate
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-release-candidate
+          path: out/release-candidate
+      - name: Install candidate into Applications and verify portability
+        run: |
+          pnpm verify:distribution -- \
+            --kind=zip \
+            --archive="out/release-candidate/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}-candidate.zip" \
+            --install-app="/Applications/${PRODUCT_NAME}.app" \
+            --expect-version="${RELEASE_VERSION}" \
+            --require-notarized=false \
+            --candidate-manifest=out/release-candidate/candidate-manifest.json \
+            --receipt=out/release-candidate/portable-verification.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-portable-verification
+          path: out/release-candidate/portable-verification.json
+          if-no-files-found: error
+          retention-days: 7
+
+  notarize:
+    name: Notarize the exact verified candidate
+    needs: verify_candidate
+    runs-on: macos-15
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-release-candidate
+          path: out/release-candidate
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-portable-verification
+          path: out/release-candidate
+      - name: Import Developer ID certificate into an ephemeral keychain
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          test -n "${CERTIFICATE_P12_BASE64}"
+          test -n "${CERTIFICATE_PASSWORD}"
+          CERTIFICATE_PATH="${RUNNER_TEMP}/developer-id.p12"
+          KEYCHAIN_PATH="${RUNNER_TEMP}/release.keychain-db"
+          printf '%s' "${CERTIFICATE_P12_BASE64}" | openssl base64 -d -A -out "${CERTIFICATE_PATH}"
+          security create-keychain -p temporary-ci-keychain "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p temporary-ci-keychain "${KEYCHAIN_PATH}"
+          security import "${CERTIFICATE_PATH}" -P "${CERTIFICATE_PASSWORD}" -A -t cert -f pkcs12 -k "${KEYCHAIN_PATH}"
+          security set-key-partition-list -S apple-tool:,apple: -s -k temporary-ci-keychain "${KEYCHAIN_PATH}"
+          security list-keychains -d user -s "${KEYCHAIN_PATH}"
+      - name: Extract the verified candidate
+        run: |
+          mkdir -p "${RUNNER_TEMP}/candidate"
+          ditto -x -k "out/release-candidate/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}-candidate.zip" "${RUNNER_TEMP}/candidate"
+      - name: Prepare App Store Connect API key
+        env:
+          API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          test -n "${API_KEY_P8_BASE64}"
+          printf '%s' "${API_KEY_P8_BASE64}" | openssl base64 -d -A -out "${RUNNER_TEMP}/AuthKey.p8"
+          chmod 600 "${RUNNER_TEMP}/AuthKey.p8"
+      - name: Submit once and wait inside CI
+        env:
+          APPLE_API_KEY: ${{ runner.temp }}/AuthKey.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          MACOS_RELEASE_APP: ${{ runner.temp }}/candidate/DeepSeek YukiRyou.app
+          MACOS_RELEASE_CANDIDATE: ${{ github.workspace }}/out/release-candidate/DeepSeek YukiRyou-darwin-arm64-${{ inputs.version }}-candidate.zip
+          MACOS_RELEASE_PORTABLE_RECEIPT: ${{ github.workspace }}/out/release-candidate/portable-verification.json
+          MACOS_RELEASE_SKIP_PACKAGE: 'true'
+          MACOS_RELEASE_WAIT: 'true'
+        run: |
+          test -n "${APPLE_API_KEY_ID}"
+          test -n "${APPLE_API_ISSUER}"
+          pnpm release:mac
+          pnpm release:mac:finish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-notarized-artifacts
+          path: |
+            out/release/${{ env.PRODUCT_NAME }}-${{ inputs.version }}-arm64.dmg
+            out/release/${{ env.PRODUCT_NAME }}-darwin-arm64-${{ inputs.version }}.zip
+            out/release/SHA256SUMS.txt
+            out/release/release-manifest.json
+            out/release/notarization-log.json
+          if-no-files-found: error
+          retention-days: 14
+
+  verify_final:
+    name: Fresh-runner final DMG and ZIP gate
+    needs: notarize
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-notarized-artifacts
+          path: out/release
+      - name: Verify checksums
+        working-directory: out/release
+        run: shasum -a 256 -c SHA256SUMS.txt
+      - name: Verify ZIP through Applications
+        run: |
+          pnpm verify:distribution -- \
+            --kind=zip \
+            --archive="out/release/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
+            --install-app="/Applications/${PRODUCT_NAME}.app" \
+            --expect-version="${RELEASE_VERSION}" \
+            --require-notarized=true \
+            --simulate-download=true
+          mv "/Applications/${PRODUCT_NAME}.app" "${RUNNER_TEMP}/verified-from-zip.app"
+      - name: Verify DMG through Applications
+        run: |
+          pnpm verify:distribution -- \
+            --kind=dmg \
+            --archive="out/release/${PRODUCT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
+            --install-app="/Applications/${PRODUCT_NAME}.app" \
+            --expect-version="${RELEASE_VERSION}" \
+            --require-notarized=true \
+            --simulate-download=true
+
+  release:
+    name: Create verified draft
+    needs: verify_final
+    runs-on: macos-15
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-notarized-artifacts
+          path: release-assets
+      - name: Create immutable draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "DeepSeek YukiRyou ${RELEASE_VERSION}" \
+            --generate-notes \
+            --draft \
+            --prerelease \
+            release-assets/*
