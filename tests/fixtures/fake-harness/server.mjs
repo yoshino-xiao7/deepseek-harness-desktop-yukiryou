@@ -7,12 +7,24 @@ for (let index = 2; index < process.argv.length; index += 2) {
 
 const host = args.get('--host') ?? '127.0.0.1';
 const port = Number(args.get('--port'));
+const companionReadyDelayMs = Number(args.get('--companion-ready-delay-ms') ?? 0);
+const startedAt = Date.now();
 
 if (!Number.isInteger(port) || port <= 0) {
   throw new Error('A positive --port is required');
 }
 
-const server = createServer((_request, response) => {
+const server = createServer((request, response) => {
+  if (
+    request.url === '/plugins/@dsh-desktop/companion/rpc' &&
+    request.method === 'POST'
+  ) {
+    response.writeHead(
+      Date.now() - startedAt >= companionReadyDelayMs ? 403 : 405,
+    );
+    response.end();
+    return;
+  }
   response.writeHead(200, { 'content-type': 'application/json' });
   response.end(
     JSON.stringify({

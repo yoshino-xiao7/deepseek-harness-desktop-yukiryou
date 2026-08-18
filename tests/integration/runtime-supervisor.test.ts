@@ -59,4 +59,32 @@ describe('RuntimeSupervisor', () => {
     expect(supervisor.getState()).toEqual({ kind: 'stopped' });
     await expect(fetch(ready.origin)).rejects.toThrow();
   });
+
+  it('waits for the protected Companion route before reporting readiness', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-runtime-test-'));
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-workspace-test-'));
+    supervisor = createRuntimeSupervisor({
+      command: process.execPath,
+      args: [fakeHarness, '--companion-ready-delay-ms', '150'],
+      runtimeHome,
+      workspaceRoot,
+      version: 'fake-1.0.0',
+      startupTimeoutMs: 5_000,
+      shutdownTimeoutMs: 2_000,
+      createCompanionToken: () =>
+        'test-companion-token-that-never-enters-state',
+    });
+
+    const ready = await supervisor.start();
+    const response = await fetch(
+      `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"kind":"account.balance"}',
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
 });

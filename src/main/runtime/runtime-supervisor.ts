@@ -45,6 +45,8 @@ export interface RuntimeSupervisorOptions {
   readonly onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }
 
+const COMPANION_RPC_ROUTE = '/plugins/@dsh-desktop/companion/rpc';
+
 class OwnedRuntimeSupervisor implements RuntimeSupervisor {
   readonly #options: RuntimeSupervisorOptions;
   readonly #listeners = new Set<(state: RuntimeState) => void>();
@@ -113,6 +115,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     this.#setState({ kind: 'starting', attempt: 1 });
     const port = await allocateLoopbackPort();
     const origin = `http://127.0.0.1:${port}`;
+    const companionToken = this.#options.createCompanionToken?.();
 
     const child = spawn(
       this.#options.command,
@@ -129,7 +132,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
         env: buildRuntimeEnvironment(
           this.#options.runtimeHome,
           this.#options.runtimeBinDirectories ?? [],
-          this.#options.createCompanionToken?.(),
+          companionToken,
         ),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
@@ -153,6 +156,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
       origin,
       this.#options.startupTimeoutMs,
       () => spawnError,
+      companionToken !== undefined,
     );
     if (failure !== undefined) {
       this.#setState({ kind: 'failed', failure });
@@ -263,6 +267,7 @@ async function waitUntilReady(
   origin: string,
   timeoutMs: number,
   getSpawnError: () => Error | undefined,
+  requireCompanionRoute: boolean,
 ): Promise<RuntimeFailure | undefined> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -284,7 +289,9 @@ async function waitUntilReady(
       const response = await fetch(origin, {
         signal: AbortSignal.timeout(Math.min(500, timeoutMs)),
       });
-      if (response.ok) {
+      const rootReady = response.ok;
+      await response.body?.cancel();
+      if (rootReady && (!requireCompanionRoute || await companionRouteReady(origin, timeoutMs))) {
         return undefined;
       }
     } catch {
@@ -296,6 +303,21 @@ async function waitUntilReady(
     code: 'startup-timeout',
     message: `Harness runtime did not become ready within ${String(timeoutMs)}ms`,
   };
+}
+
+async function companionRouteReady(
+  origin: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  const response = await fetch(new URL(COMPANION_RPC_ROUTE, origin), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{"kind":"account.balance"}',
+    signal: AbortSignal.timeout(Math.min(500, timeoutMs)),
+  });
+  const ready = response.status === 403;
+  await response.body?.cancel();
+  return ready;
 }
 
 async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
