@@ -1,0 +1,87 @@
+diff --git a/dist/cjs/util.js b/dist/cjs/util.js
+index 77e64b56872bc65bcb0f60ecfbec84eb3da02c6f..1006f2ee3604a98c42cc5033ae34b5ed1d30683e 100644
+--- a/dist/cjs/util.js
++++ b/dist/cjs/util.js
+@@ -29,7 +29,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.walkAsync = exports.validateOptsPlatform = exports.validateOptsApp = exports.detectElectronPlatform = exports.getAppFrameworksPath = exports.getAppContentsPath = exports.compactFlattenedList = exports.execFileAsync = exports.debugWarn = exports.debugLog = void 0;
+ const child = __importStar(require("child_process"));
+ const fs = __importStar(require("fs-extra"));
+-const isbinaryfile_1 = require("isbinaryfile");
+ const path = __importStar(require("path"));
+ const debug_1 = __importDefault(require("debug"));
+ exports.debugLog = (0, debug_1.default)('electron-osx-sign');
+@@ -101,11 +100,28 @@ exports.detectElectronPlatform = detectElectronPlatform;
+ /**
+  * This function returns a promise resolving the file path if file binary.
+  */
++const machOMagicNumbers = new Set([
++    0xfeedface,
++    0xcefaedfe,
++    0xfeedfacf,
++    0xcffaedfe,
++    0xcafebabe,
++    0xbebafeca,
++    0xcafebabf,
++    0xbfbafeca,
++]);
+ async function getFilePathIfBinary(filePath) {
+-    if (await (0, isbinaryfile_1.isBinaryFile)(filePath)) {
+-        return filePath;
++    const descriptor = fs.openSync(filePath, 'r');
++    try {
++        const header = Buffer.alloc(4);
++        if (fs.readSync(descriptor, header, 0, header.length, 0) < header.length) {
++            return null;
++        }
++        return machOMagicNumbers.has(header.readUInt32BE(0)) ? filePath : null;
++    }
++    finally {
++        fs.closeSync(descriptor);
+     }
+-    return null;
+ }
+ /**
+  * This function returns a promise validating opts.app, the application to be signed or flattened.
+diff --git a/dist/esm/util.js b/dist/esm/util.js
+index d3f66d54b1a88e7410d78affe17de87302db02a3..105323d7b983b205526a5698c5c573573faf4e68 100644
+--- a/dist/esm/util.js
++++ b/dist/esm/util.js
+@@ -1,6 +1,5 @@
+ import * as child from 'child_process';
+ import * as fs from 'fs-extra';
+-import { isBinaryFile } from 'isbinaryfile';
+ import * as path from 'path';
+ import debug from 'debug';
+ export const debugLog = debug('electron-osx-sign');
+@@ -67,11 +66,28 @@ export async function detectElectronPlatform(opts) {
+ /**
+  * This function returns a promise resolving the file path if file binary.
+  */
++const machOMagicNumbers = new Set([
++    0xfeedface,
++    0xcefaedfe,
++    0xfeedfacf,
++    0xcffaedfe,
++    0xcafebabe,
++    0xbebafeca,
++    0xcafebabf,
++    0xbfbafeca,
++]);
+ async function getFilePathIfBinary(filePath) {
+-    if (await isBinaryFile(filePath)) {
+-        return filePath;
++    const descriptor = fs.openSync(filePath, 'r');
++    try {
++        const header = Buffer.alloc(4);
++        if (fs.readSync(descriptor, header, 0, header.length, 0) < header.length) {
++            return null;
++        }
++        return machOMagicNumbers.has(header.readUInt32BE(0)) ? filePath : null;
++    }
++    finally {
++        fs.closeSync(descriptor);
+     }
+-    return null;
+ }
+ /**
+  * This function returns a promise validating opts.app, the application to be signed or flattened.

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createReadStream } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,7 +14,7 @@ const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const productName = 'DeepSeek YukiRyou';
 const architecture = 'arm64';
 const outputDirectory = join(projectRoot, 'out', 'release-candidate');
-const applicationPath = join(
+const packagedApplicationPath = join(
   projectRoot,
   'out',
   `${productName}-darwin-${architecture}`,
@@ -36,22 +37,56 @@ if (gitStatus !== '') {
 }
 
 run('pnpm', ['package:mac', '--', '--arch=arm64']);
-run('pnpm', [
-  'verify:release',
-  '--',
-  `--app=${applicationPath}`,
-  '--expect-arch=arm64',
-  '--require-signed=true',
-]);
-
 await mkdir(outputDirectory, { recursive: true });
 const archivePath = join(
   outputDirectory,
   `${productName}-darwin-${architecture}-${packageManifest.version}-candidate.zip`,
 );
 const manifestPath = join(outputDirectory, 'candidate-manifest.json');
-await rm(archivePath, { force: true });
-run('ditto', ['-c', '-k', '--keepParent', applicationPath, archivePath]);
+const stagingDirectory = await mkdtemp(
+  join(tmpdir(), 'deepseek-release-candidate-'),
+);
+const applicationPath = join(stagingDirectory, `${productName}.app`);
+
+try {
+  run('ditto', [
+    '--noextattr',
+    '--noqtn',
+    packagedApplicationPath,
+    applicationPath,
+  ]);
+  run('xattr', ['-cr', applicationPath]);
+  run('codesign', [
+    '--force',
+    '--timestamp',
+    '--options',
+    'runtime',
+    '--entitlements',
+    join(
+      projectRoot,
+      'node_modules',
+      '@electron',
+      'osx-sign',
+      'entitlements',
+      'default.darwin.plist',
+    ),
+    '--sign',
+    process.env.MACOS_SIGN_IDENTITY,
+    applicationPath,
+  ]);
+  run('pnpm', [
+    'verify:release',
+    '--',
+    `--app=${applicationPath}`,
+    '--expect-arch=arm64',
+    '--require-signed=true',
+  ]);
+
+  await rm(archivePath, { force: true });
+  run('ditto', ['-c', '-k', '--keepParent', applicationPath, archivePath]);
+} finally {
+  await rm(stagingDirectory, { recursive: true, force: true });
+}
 const digest = await sha256(archivePath);
 await writeFile(
   manifestPath,

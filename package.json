@@ -24,7 +24,10 @@
     ],
     "ignoredBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "patchedDependencies": {
+      "@electron/osx-sign@1.3.3": "patches/@electron__osx-sign@1.3.3.patch"
+    }
   },
   "scripts": {
     "dev": "electron-forge start",
