@@ -37,8 +37,6 @@ jobs:
           target=$(node -e "process.stdout.write(JSON.parse(process.argv[1]).targetCommitish)" "${release_json}")
           echo "target=${target}" >> "${GITHUB_OUTPUT}"
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ steps.draft.outputs.target }}
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -47,14 +45,17 @@ jobs:
           corepack enable
           corepack prepare pnpm@${PNPM_VERSION} --activate
       - run: pnpm install --frozen-lockfile
-      - name: Require matching source version
-        run: node -e "const p=require('./package.json'); if (p.version !== process.env.RELEASE_VERSION) throw new Error('Tag source version mismatch')"
       - name: Download draft assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p release-assets
           gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --dir release-assets
+      - name: Require matching release provenance
+        env:
+          TARGET_COMMIT: ${{ steps.draft.outputs.target }}
+        run: |
+          node -e "const fs=require('node:fs'); const m=JSON.parse(fs.readFileSync('release-assets/release-manifest.json','utf8')); if (m.schemaVersion !== 1 || m.version !== process.env.RELEASE_VERSION || m.architecture !== 'arm64' || m.gitCommit !== process.env.TARGET_COMMIT || m.dirtyWorktree !== false || typeof m.notarizationSubmissionId !== 'string') throw new Error('Draft assets do not match release provenance')"
       - name: Verify checksums
         working-directory: release-assets
         run: shasum -a 256 -c SHA256SUMS.txt

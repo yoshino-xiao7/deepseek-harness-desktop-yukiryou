@@ -1,0 +1,109 @@
+name: Resume notarized macOS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact package.json version, for example 0.1.1-beta.1
+        required: true
+        type: string
+      source_run_id:
+        description: Failed Release macOS run containing accepted notarized artifacts
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: resume-macos-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.34.5'
+  PRODUCT_NAME: DeepSeek YukiRyou
+  RELEASE_VERSION: ${{ inputs.version }}
+  RELEASE_TAG: v${{ inputs.version }}
+
+jobs:
+  verify_and_create_draft:
+    name: Reuse notarized artifacts, verify, and create draft
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Validate source run and release immutability
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          source_sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.head_sha')
+          source_workflow=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.path')
+          test "${source_workflow}" = ".github/workflows/release-macos.yml"
+          test -n "${source_sha}"
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists; versions are immutable."
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists; tags are immutable."
+            exit 1
+          fi
+          echo "sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-notarized-artifacts
+          path: out/release
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - name: Require matching notarized provenance
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          node -e "const fs=require('node:fs'); const m=JSON.parse(fs.readFileSync('out/release/release-manifest.json','utf8')); if (m.schemaVersion !== 1 || m.version !== process.env.RELEASE_VERSION || m.architecture !== 'arm64' || m.gitCommit !== process.env.SOURCE_SHA || m.dirtyWorktree !== false || typeof m.notarizationSubmissionId !== 'string') throw new Error('Notarized artifact provenance does not match the source run')"
+      - name: Verify checksums
+        working-directory: out/release
+        run: shasum -a 256 -c SHA256SUMS.txt
+      - name: Verify ZIP through Applications
+        run: |
+          pnpm verify:distribution -- \
+            --kind=zip \
+            --archive="out/release/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" \
+            --install-app="/Applications/${PRODUCT_NAME}.app" \
+            --expect-version="${RELEASE_VERSION}" \
+            --require-notarized=true \
+            --simulate-download=true
+          mv "/Applications/${PRODUCT_NAME}.app" "${RUNNER_TEMP}/verified-from-zip.app"
+      - name: Verify DMG through Applications
+        run: |
+          pnpm verify:distribution -- \
+            --kind=dmg \
+            --archive="out/release/${PRODUCT_NAME}-${RELEASE_VERSION}-arm64.dmg" \
+            --install-app="/Applications/${PRODUCT_NAME}.app" \
+            --expect-version="${RELEASE_VERSION}" \
+            --require-notarized=true \
+            --simulate-download=true
+      - name: Create immutable draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          gh release create "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${SOURCE_SHA}" \
+            --title "DeepSeek YukiRyou ${RELEASE_VERSION}" \
+            --generate-notes \
+            --draft \
+            --prerelease \
+            out/release/*

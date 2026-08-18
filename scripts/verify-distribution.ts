@@ -13,7 +13,11 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-type ArchiveKind = 'zip' | 'dmg';
+import {
+  distributionVerificationPolicy,
+  type ArchiveKind,
+  type DistributionVerificationPolicy,
+} from './distribution-verification-policy.js';
 
 interface CandidateManifest {
   readonly schemaVersion: 1;
@@ -38,6 +42,10 @@ const archivePath = resolve(requiredOption('archive'));
 const kind = requiredOption('kind') as ArchiveKind;
 const installApp = requiredOption('install-app');
 const requireNotarized = options.get('require-notarized') === 'true';
+const verificationPolicy = distributionVerificationPolicy(
+  kind,
+  requireNotarized,
+);
 const simulateDownload = options.get('simulate-download') === 'true';
 const receiptPath = options.get('receipt');
 const manifestPath = options.get('candidate-manifest');
@@ -60,6 +68,10 @@ if (simulateDownload) {
     `0081;${Math.floor(Date.now() / 1000).toString(16)};GitHub Actions;`,
     archivePath,
   ]);
+}
+
+if (verificationPolicy.requireArchiveTicket) {
+  verifyDiskImageArchive(archivePath);
 }
 
 const temporaryRoot = await mkdtemp(join(tmpdir(), 'deepseek-distribution-'));
@@ -85,22 +97,8 @@ try {
   await access(sourceApp);
   await mkdir(dirname(installApp), { recursive: true });
   run('ditto', [sourceApp, installApp]);
-  verifyInstalledApplication(installApp, requireNotarized);
+  verifyInstalledApplication(installApp, verificationPolicy);
   smokeTest(installApp, expectedVersion);
-
-  if (kind === 'dmg' && requireNotarized) {
-    run('codesign', ['--verify', '--verbose=2', archivePath]);
-    run('spctl', [
-      '--assess',
-      '--type',
-      'open',
-      '--context',
-      'context:primary-signature',
-      '--verbose=4',
-      archivePath,
-    ]);
-    run('xcrun', ['stapler', 'validate', archivePath]);
-  }
 
   if (receiptPath !== undefined) {
     if (manifestPath === undefined) {
@@ -143,7 +141,10 @@ try {
   await rm(temporaryRoot, { recursive: true, force: true });
 }
 
-function verifyInstalledApplication(path: string, notarized: boolean): void {
+function verifyInstalledApplication(
+  path: string,
+  policy: DistributionVerificationPolicy,
+): void {
   run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', path]);
   const details = capture('codesign', ['-dv', '--verbose=4', path]);
   if (
@@ -157,8 +158,28 @@ function verifyInstalledApplication(path: string, notarized: boolean): void {
     `--app=${path}`,
     '--expect-arch=arm64',
     '--require-signed=true',
-    `--require-notarized=${String(notarized)}`,
+    '--require-notarized=false',
   ]);
+  if (policy.requireInstalledAppGatekeeper) {
+    run('spctl', ['--assess', '--type', 'execute', '--verbose=4', path]);
+  }
+  if (policy.requireInstalledAppTicket) {
+    run('xcrun', ['stapler', 'validate', path]);
+  }
+}
+
+function verifyDiskImageArchive(path: string): void {
+  run('codesign', ['--verify', '--verbose=2', path]);
+  run('spctl', [
+    '--assess',
+    '--type',
+    'open',
+    '--context',
+    'context:primary-signature',
+    '--verbose=4',
+    path,
+  ]);
+  run('xcrun', ['stapler', 'validate', path]);
 }
 
 function smokeTest(
