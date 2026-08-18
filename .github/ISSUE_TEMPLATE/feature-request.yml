@@ -1,0 +1,62 @@
+name: Feature request / 功能建议
+description: Propose a concrete workflow improvement / 提出明确的工作流改进建议
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请从真实使用场景出发描述需求。路线图是产品方向，不代表具体发布日期。
+
+        Please describe the request through a real workflow. The roadmap communicates direction, not a committed delivery date.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow / 问题或使用场景
+      description: What are you trying to accomplish, and what blocks you today? / 你想完成什么，目前被什么阻碍？
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed experience / 期望体验
+      description: Describe the behavior rather than only the visual appearance. / 请优先描述行为，而不只是视觉效果。
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered / 尝试过的替代方案
+      description: Optional / 可选
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area / 功能区域
+      options:
+        - Desktop and runtime / 桌面与运行时
+        - Workspace review / 工作区审阅
+        - Settings and updates / 设置与更新
+        - DeepSeek pet / DeepSeek 宠物
+        - Mobile remote control / 手机远程控制
+        - Plugin marketplace / 插件市场
+        - Other / 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security or privacy considerations / 安全或隐私考虑
+      description: Mention any credentials, local files, network access, or permissions involved. / 请说明涉及的凭据、本地文件、网络访问或权限。
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation / 确认
+      options:
+        - label: I understand that submission does not guarantee inclusion or a delivery date. / 我理解提交建议不代表一定采纳或承诺发布日期。
+          required: true
+
