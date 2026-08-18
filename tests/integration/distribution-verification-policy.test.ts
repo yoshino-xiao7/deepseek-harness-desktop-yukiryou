@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { distributionVerificationPolicy } from '../../scripts/distribution-verification-policy.js';
@@ -25,5 +28,17 @@ describe('distribution verification policy', () => {
       requireInstalledAppGatekeeper: false,
       requireInstalledAppTicket: false,
     });
+  });
+
+  it('loads the distribution verifier through the native Node entrypoint', () => {
+    const result = spawnSync(
+      process.execPath,
+      [join(process.cwd(), 'scripts', 'verify-distribution.ts')],
+      { encoding: 'utf8' },
+    );
+    const output = `${result.stdout}${result.stderr}`;
+
+    expect(output).not.toContain('ERR_MODULE_NOT_FOUND');
+    expect(output).toContain('Missing required option: --archive');
   });
 });

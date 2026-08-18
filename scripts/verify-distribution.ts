@@ -17,7 +17,7 @@ import {
   distributionVerificationPolicy,
   type ArchiveKind,
   type DistributionVerificationPolicy,
-} from './distribution-verification-policy.js';
+} from './distribution-verification-policy.ts';
 
 interface CandidateManifest {
   readonly schemaVersion: 1;
