@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -20,6 +20,32 @@ describe('bundled Harness runtime', () => {
 
   afterEach(async () => {
     await supervisor?.stop('quit');
+  });
+
+  it('ships the version-scoped per-model capability editor patch', async () => {
+    const client = await readFile(
+      join(
+        projectRoot,
+        'resources',
+        'runtime',
+        'dsh',
+        'node_modules',
+        '@deepseek-ai',
+        'dsh-client-ui-settings-models',
+        'lib',
+        'client.js',
+      ),
+      'utf8',
+    );
+
+    expect(client).toContain(
+      'deepseek-yukiryou:model-capabilities-patch:v1',
+    );
+    expect(client).toContain('modelInputCapability: "输入能力"');
+    expect(client).toContain(
+      'patch(index, { input: capability === "vision" ? ["text", "image"]',
+    );
+    expect(client).not.toContain('defaultInput: ["text", "image"]');
   });
 
   it(

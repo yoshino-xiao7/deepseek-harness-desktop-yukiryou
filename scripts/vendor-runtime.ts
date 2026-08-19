@@ -13,6 +13,11 @@ import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
+import {
+  MODEL_CAPABILITIES_PATCH_DSH_VERSION,
+  patchModelCapabilitiesEditor,
+} from '../src/main/runtime/vendor-model-capabilities-patch.ts';
+
 type RuntimeArchitecture = 'arm64' | 'x64';
 
 interface RuntimeManifest {
@@ -96,6 +101,24 @@ run(nodeExecutable, [
     .filter((entry): entry is string => entry !== undefined)
     .join(delimiter),
 }, 600_000);
+
+if (manifest.dsh.version !== MODEL_CAPABILITIES_PATCH_DSH_VERSION) {
+  throw new Error(
+    `Temporary model-capabilities patch targets dsh ${MODEL_CAPABILITIES_PATCH_DSH_VERSION}; review and remove or update it before vendoring ${manifest.dsh.version}`,
+  );
+}
+const modelsSettingsClient = join(
+  dshDirectory,
+  'node_modules',
+  '@deepseek-ai',
+  'dsh-client-ui-settings-models',
+  'lib',
+  'client.js',
+);
+await writeFile(
+  modelsSettingsClient,
+  patchModelCapabilitiesEditor(await readFile(modelsSettingsClient, 'utf8')),
+);
 
 await cp(
   join(projectRoot, 'runtime', 'desktop-settings-plugin'),
