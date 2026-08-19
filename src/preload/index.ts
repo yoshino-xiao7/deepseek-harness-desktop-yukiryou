@@ -251,10 +251,7 @@ function reconcileHarnessUpdateButton(): void {
     return;
   }
   const sidebar = findHarnessSidebar();
-  const logoRow = sidebar === undefined
-    ? undefined
-    : findHarnessBrandRow(sidebar);
-  if (logoRow === undefined) {
+  if (sidebar === undefined) {
     existing?.remove();
     return;
   }
@@ -266,6 +263,7 @@ function reconcileHarnessUpdateButton(): void {
   button.type = 'button';
   button.className = 'dsh-desktop-header-update';
   button.dataset.updateStatus = updateState.status;
+  positionHarnessUpdateButton(button, sidebar);
   const downloaded = updateState.status === 'downloaded';
   const manual = updateState.status === 'manual';
   const language = document.documentElement.lang.toLowerCase();
@@ -280,8 +278,9 @@ function reconcileHarnessUpdateButton(): void {
     : language.startsWith('en')
       ? 'Downloading update'
       : '正在更新';
-  const buttonText = downloaded ? label : manual ? (language.startsWith('en') ? 'Download' : '下载') : '•••';
-  if (button.textContent !== buttonText) button.textContent = buttonText;
+  if (button.childElementCount === 0) {
+    button.append(createUpdateIcon());
+  }
   button.title = label;
   button.setAttribute('aria-label', label);
   button.disabled = !downloaded && !manual;
@@ -290,39 +289,37 @@ function reconcileHarnessUpdateButton(): void {
     : manual
       ? () => sendUpdateCommand('download')
       : null;
-  if (button.parentElement !== logoRow) {
-    logoRow.insertBefore(button, logoRow.lastElementChild);
+  if (button.parentElement !== sidebar) {
+    sidebar.append(button);
   }
 }
 
-function findHarnessBrandRow(sidebar: HTMLElement): HTMLElement | undefined {
-  const sidebarBounds = sidebar.getBoundingClientRect();
-  const brand = [...sidebar.querySelectorAll<HTMLElement>('*')]
-    .filter((candidate) => {
-      const text = candidate.textContent?.replaceAll(/\s+/g, ' ').trim() ?? '';
-      const bounds = candidate.getBoundingClientRect();
-      return /deepseek/i.test(text) && /harness/i.test(text) &&
-        bounds.width > 0 && bounds.height > 0 && bounds.height <= 72;
-    })
-    .sort((left, right) => {
-      const leftBounds = left.getBoundingClientRect();
-      const rightBounds = right.getBoundingClientRect();
-      return leftBounds.width * leftBounds.height - rightBounds.width * rightBounds.height;
-    })[0];
-  if (brand === undefined) return undefined;
-  let candidate: HTMLElement | null = brand;
-  while (candidate !== null && candidate !== sidebar) {
-    const bounds = candidate.getBoundingClientRect();
-    if (
-      candidate.children.length >= 2 &&
-      bounds.width >= sidebarBounds.width * 0.72 &&
-      bounds.height <= 96
-    ) {
-      return candidate;
-    }
-    candidate = candidate.parentElement;
-  }
-  return undefined;
+function positionHarnessUpdateButton(
+  button: HTMLButtonElement,
+  sidebar: HTMLElement,
+): void {
+  const bounds = sidebar.getBoundingClientRect();
+  button.style.left = `${String(Math.round(bounds.right - 46))}px`;
+  button.style.top = `${String(Math.round(bounds.bottom - 46))}px`;
+}
+
+function createUpdateIcon(): SVGElement {
+  const namespace = 'http://www.w3.org/2000/svg';
+  const icon = document.createElementNS(namespace, 'svg');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.setAttribute('viewBox', '0 0 20 20');
+  icon.setAttribute('fill', 'none');
+  const path = document.createElementNS(namespace, 'path');
+  path.setAttribute(
+    'd',
+    'M10 3.25v8.5m0 0 3-3m-3 3-3-3M4.25 13.25v1.5c0 1.1.9 2 2 2h7.5c1.1 0 2-.9 2-2v-1.5',
+  );
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('stroke-width', '1.7');
+  icon.append(path);
+  return icon;
 }
 
 function installHarnessUpdateButton(): void {
@@ -331,27 +328,33 @@ function installHarnessUpdateButton(): void {
     style.dataset.dshDesktopUpdateStyle = '';
     style.textContent = `
       .dsh-desktop-header-update {
+        position: fixed;
+        z-index: 20;
         box-sizing: border-box;
-        min-width: 30px;
-        height: 26px;
-        padding: 0 9px;
-        border: 1px solid rgb(77 107 254 / 24%);
-        border-radius: 999px;
-        color: var(--dsw-static-deepseek-500, #4d6bfe);
-        background: rgb(77 107 254 / 10%);
+        display: grid;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        border: 0;
+        border-radius: 10px;
+        place-items: center;
+        color: #fff;
+        background: var(--dsw-static-deepseek-500, #4d6bfe);
+        box-shadow: 0 4px 12px rgb(38 70 180 / 22%);
         cursor: pointer;
         flex: none;
-        font: inherit;
-        font-size: 11px;
-        font-weight: 600;
-        line-height: 24px;
       }
+      .dsh-desktop-header-update svg { width: 20px; height: 20px; }
       .dsh-desktop-header-update:hover:not(:disabled) {
-        background: rgb(77 107 254 / 17%);
+        filter: brightness(.96);
+        transform: translateY(-1px);
       }
       .dsh-desktop-header-update:disabled {
         cursor: default;
-        letter-spacing: 1px;
+      }
+      .dsh-desktop-header-update:focus-visible {
+        outline: 2px solid rgb(77 107 254 / 38%);
+        outline-offset: 2px;
       }
       .dsh-desktop-header-update[data-update-status="downloading"] {
         animation: dsh-desktop-header-update-pulse 1.1s ease-in-out infinite;
@@ -364,11 +367,21 @@ function installHarnessUpdateButton(): void {
     document.head.append(style);
   }
   let scheduled = false;
+  let observedSidebar: HTMLElement | undefined;
+  const resizeObserver = new ResizeObserver(() => schedule());
+  const bindSidebar = (): void => {
+    const sidebar = findHarnessSidebar();
+    if (sidebar === observedSidebar) return;
+    resizeObserver.disconnect();
+    observedSidebar = sidebar;
+    if (sidebar !== undefined) resizeObserver.observe(sidebar);
+  };
   const schedule = (): void => {
     if (scheduled) return;
     scheduled = true;
     window.requestAnimationFrame(() => {
       scheduled = false;
+      bindSidebar();
       reconcileHarnessUpdateButton();
     });
   };
@@ -376,6 +389,7 @@ function installHarnessUpdateButton(): void {
     childList: true,
     subtree: true,
   });
+  window.addEventListener('resize', schedule);
   schedule();
 }
 

@@ -16,6 +16,18 @@
 
 - 修正 Desktop Companion 和 `v0.2.1-beta.1` 发布门禁状态；明确非宠物阶段已经收口。
 
+## [0.2.1-beta.2] - 2026-08-19
+
+### 修复
+
+- 主页面更新入口改为固定在侧栏右下角的图标按钮，不再依赖 Harness 品牌行结构，避免运行时更新后位置错乱或被挤出界面。
+- 未配置模型时，账户余额说明改为纵向排布并与“设置”图标对齐，不再发生文字挤压、截断和起始位置偏移。
+- 自定义模型目录新增逐模型输入能力选择，可明确设置为自动继承、仅文本或文本与图片；不会把同一 Provider 的所有模型一起误标为多模态。
+
+### 维护
+
+- 模型能力 UI 以仅适用于 Harness `0.1.0-rc.7` 的可逆临时补丁交付；升级 Harness 时会强制复核，官方修复后可以逐字撤回。
+
 ## [0.2.1-beta.1] - 2026-08-18
 
 ### 修复
@@ -96,6 +108,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[0.2.1-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.2
 [0.2.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.1
 [0.2.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.0-beta.1
 [0.1.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.1.1-beta.1

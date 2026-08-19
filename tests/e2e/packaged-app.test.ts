@@ -167,10 +167,32 @@ describe('packaged desktop application', () => {
             return harness.executeJavaScript(`(() => {
               const bridge = window.deepSeekYukiRyouBalance;
               const card = document.querySelector('[data-testid="desktop-account-balance"]');
+              const value = card?.querySelector('.dsh-balance-value');
+              const balanceIcon = card?.querySelector('.dsh-balance-icon');
+              const settings = [...document.querySelectorAll('button')].find(
+                (button) => /^(设置|Settings)$/.test(button.textContent?.trim() ?? ''),
+              );
+              const settingsIcon = settings?.querySelector('svg');
+              const balanceIconBounds = balanceIcon?.getBoundingClientRect();
+              const settingsIconBounds = settingsIcon?.getBoundingClientRect();
+              const labelBounds = card?.querySelector('.dsh-balance-label')?.getBoundingClientRect();
+              const valueBounds = value?.getBoundingClientRect();
               return {
                 text: card?.textContent,
                 hasCard: card !== null,
                 hasStyle: document.querySelector('style[data-dsh-balance-style]') !== null,
+                valueClipped: value instanceof HTMLElement
+                  ? value.scrollWidth > value.clientWidth
+                  : undefined,
+                valueBelowLabel: labelBounds && valueBounds
+                  ? valueBounds.top >= labelBounds.bottom
+                  : undefined,
+                leadingOffset: balanceIconBounds && settingsIconBounds
+                  ? Math.round(
+                      balanceIconBounds.left + balanceIconBounds.width / 2
+                      - settingsIconBounds.left - settingsIconBounds.width / 2,
+                    )
+                  : undefined,
                 bridgeShape: {
                   getSnapshot: typeof bridge?.getSnapshot,
                   subscribe: typeof bridge?.subscribe,
@@ -185,6 +207,9 @@ describe('packaged desktop application', () => {
           hasCard: true,
           hasStyle: true,
           text: expect.stringMatching(/账户余额|Account balance/),
+          valueClipped: false,
+          valueBelowLabel: true,
+          leadingOffset: 0,
           bridgeShape: {
             getSnapshot: 'function',
             subscribe: 'function',
@@ -537,9 +562,25 @@ describe('packaged desktop application', () => {
               );
             return harness?.executeJavaScript(`(() => {
               const update = document.querySelector('[data-dsh-desktop-update-button]');
+              const frame = [...document.querySelectorAll(
+                '[style*="grid-template-columns"]',
+              )].find((candidate) => {
+                const bounds = candidate.getBoundingClientRect();
+                return bounds.width >= innerWidth * 0.9
+                  && bounds.height >= innerHeight * 0.9;
+              });
+              const sidebar = frame?.firstElementChild;
+              const updateBounds = update?.getBoundingClientRect();
+              const sidebarBounds = sidebar?.getBoundingClientRect();
               return {
                 header: update?.textContent?.trim(),
-                brandRow: update?.parentElement?.textContent?.replaceAll(/\\s+/g, ' ').trim(),
+                parentIsSidebar: update?.parentElement === sidebar,
+                rightGap: updateBounds && sidebarBounds
+                  ? Math.round(sidebarBounds.right - updateBounds.right)
+                  : undefined,
+                bottomGap: updateBounds && sidebarBounds
+                  ? Math.round(sidebarBounds.bottom - updateBounds.bottom)
+                  : undefined,
                 card: document.querySelector('.dsh-desktop-update-button')?.textContent?.trim(),
                 progress: document.querySelector('.dsh-desktop-update-progress')?.getAttribute('role'),
               };
@@ -547,8 +588,10 @@ describe('packaged desktop application', () => {
           }),
         )
         .toMatchObject({
-          header: '•••',
-          brandRow: expect.stringMatching(/deepseek.*harness/i),
+          header: '',
+          parentIsSidebar: true,
+          rightGap: 12,
+          bottomGap: 12,
           card: expect.stringMatching(/^(下载中…|Downloading…)$/),
           progress: 'progressbar',
         });
@@ -575,13 +618,15 @@ describe('packaged desktop application', () => {
               );
             return harness?.executeJavaScript(`({
               header: document.querySelector('[data-dsh-desktop-update-button]')?.textContent?.trim(),
+              headerLabel: document.querySelector('[data-dsh-desktop-update-button]')?.getAttribute('aria-label'),
               card: document.querySelector('.dsh-desktop-update-button')?.textContent?.trim(),
               status: document.querySelector('.dsh-desktop-update-status')?.textContent?.trim(),
             })`);
           }),
         )
         .toMatchObject({
-          header: expect.stringMatching(/^(下载|Download)$/),
+          header: '',
+          headerLabel: expect.stringMatching(/^(手动下载更新|Download update manually)$/),
           card: expect.stringMatching(/^(下载 DMG|Download DMG)$/),
           status: expect.stringMatching(/(macOS|DMG)/),
         });
@@ -609,7 +654,7 @@ describe('packaged desktop application', () => {
               );
             return harness?.executeJavaScript(`
               document.querySelector('[data-dsh-desktop-update-button]')
-                ?.textContent?.trim()
+                ?.getAttribute('aria-label')
             `);
           }),
         )
