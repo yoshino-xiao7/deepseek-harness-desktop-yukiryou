@@ -1,6 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,26 +6,22 @@ import {
   unpatchModelCapabilitiesEditor,
 } from './vendor-model-capabilities-patch.js';
 
-const bundledClient = join(
-  process.cwd(),
-  'resources',
-  'runtime',
-  'dsh',
-  'node_modules',
-  '@deepseek-ai',
-  'dsh-client-ui-settings-models',
-  'lib',
-  'client.js',
-);
+const upstreamFixture = [
+  'window.__ModuleLoader__.load({',
+  '\t\t\tmodelAdvanced: "Capacities",',
+  '\t\t\tmodelAdvanced: "容量",',
+  '\t\t\t\t\t\t\t\t\t\teditCapacity(index, "maxTokens", event.target.value);',
+  '\t\t\t\t\t\t\t\t\t}',
+  '\t\t\t\t\t\t\t\t})]',
+  '\t\t\t\t\t\t\t})]',
+  '});',
+].join('\n');
 
 describe('temporary Harness model-capabilities patch', () => {
-  it('adds a per-model input capability selector without changing route defaults', async () => {
-    const original = unpatchModelCapabilitiesEditor(
-      await readFile(bundledClient, 'utf8'),
-    );
-    const patched = patchModelCapabilitiesEditor(original);
+  it('adds a per-model input capability selector without changing route defaults', () => {
+    const patched = patchModelCapabilitiesEditor(upstreamFixture);
 
-    expect(original).not.toContain(MODEL_CAPABILITIES_PATCH_MARKER);
+    expect(upstreamFixture).not.toContain(MODEL_CAPABILITIES_PATCH_MARKER);
     expect(patched).toContain(MODEL_CAPABILITIES_PATCH_MARKER);
     expect(patched).toContain('modelInputCapability: "输入能力"');
     expect(patched).toContain('modelInputAuto: "自动继承"');
@@ -39,11 +32,8 @@ describe('temporary Harness model-capabilities patch', () => {
     expect(patched).not.toContain('defaultInput: ["text", "image"]');
   });
 
-  it('is idempotent so rebuilding an already-patched runtime is safe', async () => {
-    const original = unpatchModelCapabilitiesEditor(
-      await readFile(bundledClient, 'utf8'),
-    );
-    const once = patchModelCapabilitiesEditor(original);
+  it('is idempotent so rebuilding an already-patched runtime is safe', () => {
+    const once = patchModelCapabilitiesEditor(upstreamFixture);
 
     expect(patchModelCapabilitiesEditor(once)).toBe(once);
   });
@@ -54,12 +44,9 @@ describe('temporary Harness model-capabilities patch', () => {
     );
   });
 
-  it('can restore the exact upstream bundle for a safe rollback', async () => {
-    const original = unpatchModelCapabilitiesEditor(
-      await readFile(bundledClient, 'utf8'),
-    );
-    const patched = patchModelCapabilitiesEditor(original);
+  it('can restore the exact upstream bundle for a safe rollback', () => {
+    const patched = patchModelCapabilitiesEditor(upstreamFixture);
 
-    expect(unpatchModelCapabilitiesEditor(patched)).toBe(original);
+    expect(unpatchModelCapabilitiesEditor(patched)).toBe(upstreamFixture);
   });
 });
