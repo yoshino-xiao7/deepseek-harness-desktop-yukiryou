@@ -18,5 +18,9 @@
     "vite.*.config.ts",
     "src/**/*.ts",
     "tests/**/*.ts"
+  ],
+  "exclude": [
+    "**/* 2.ts",
+    "**/* 2.tsx"
   ]
 }

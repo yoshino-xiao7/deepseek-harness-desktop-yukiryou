@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "jobs": [
+    {
+      "id": "canonical-look",
+      "kind": "canonical-look",
+      "status": "pending",
+      "dependsOn": [],
+      "promptPath": "prompts/canonical-look.md",
+      "outputPath": "generated/canonical-look.png"
+    },
+    {
+      "id": "standing",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look"
+      ],
+      "promptPath": "prompts/standing.md",
+      "outputPath": "generated/keyframes/standing"
+    },
+    {
+      "id": "drowsy",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "standing"
+      ],
+      "promptPath": "prompts/drowsy.md",
+      "outputPath": "generated/keyframes/drowsy"
+    },
+    {
+      "id": "lying-down",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "drowsy"
+      ],
+      "promptPath": "prompts/lying-down.md",
+      "outputPath": "generated/keyframes/lying-down"
+    },
+    {
+      "id": "sleeping",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "lying-down"
+      ],
+      "promptPath": "prompts/sleeping.md",
+      "outputPath": "generated/keyframes/sleeping"
+    },
+    {
+      "id": "waking",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "sleeping"
+      ],
+      "promptPath": "prompts/waking.md",
+      "outputPath": "generated/keyframes/waking"
+    },
+    {
+      "id": "rubbing-eyes",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "waking"
+      ],
+      "promptPath": "prompts/rubbing-eyes.md",
+      "outputPath": "generated/keyframes/rubbing-eyes"
+    },
+    {
+      "id": "work-enter",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "standing"
+      ],
+      "promptPath": "prompts/work-enter.md",
+      "outputPath": "generated/keyframes/work-enter"
+    },
+    {
+      "id": "eating",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "work-enter"
+      ],
+      "promptPath": "prompts/eating.md",
+      "outputPath": "generated/keyframes/eating"
+    },
+    {
+      "id": "work-exit",
+      "kind": "motion-family",
+      "status": "pending",
+      "dependsOn": [
+        "canonical-look",
+        "eating"
+      ],
+      "promptPath": "prompts/work-exit.md",
+      "outputPath": "generated/keyframes/work-exit"
+    }
+  ]
+}

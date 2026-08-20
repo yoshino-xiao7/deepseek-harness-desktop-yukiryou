@@ -1,7 +1,7 @@
 ---
 status: accepted
 implementation: in-progress
-updated: 2026-08-18
+updated: 2026-08-19
 ---
 
 # Desktop Companion 完整实现方案
@@ -15,18 +15,22 @@ updated: 2026-08-18
 ## 已确认的产品决定
 
 1. Harness 左侧栏“设置”上方只显示**当前凭据所属账户余额**，不显示今日消费，不把账户余额称为“Key 余额”。
-2. Desktop Shell 增加可展开的 Desktop Companion：上层最终为宠物活动区，下层为变更、文件树和预览入口。
-3. 文件、Git 变更和预览先实现；宠物功能最后实现，素材阶段由产品所有者补充角色设定与分层资源。
+2. Desktop Shell 增加可展开的 Desktop Companion：宠物启用时上层为 Pet Stage，下层为变更、文件树和预览入口。
+3. 宠物不是写死的单个动画，而是由设置中的 Pet Library、声明式 `.yukipet` 包、唯一 production player 和用户本地导入组成的资产平台；完整设计见 [`11-pet-platform-plan.md`](11-pet-platform-plan.md)。
 4. 第一版变更语义是“当前工作区相对 HEAD 的变更”。没有可靠证据时，不得写成“本轮编辑”。
 5. Markdown 默认渲染为安全的排版预览，同时提供“源码”切换；不得只显示原始 Markdown 代码。
 6. Workspace Review 第一版完全只读，不提供保存、删除、撤销、stage、commit 或自动修复。
 7. 核心功能不依赖 Harness DOM selector、按钮文案、加载图标或页面结构猜测。
+8. Companion 可见时具有最小宽度，拖动只能在合法可见范围内缩放；完全隐藏是右上角开关触发的独立状态，不能通过拖到 `0px` 触发。
+9. 宠物展示帧必须按时间连续插值并具有完整动作过渡；动画运行时在 packaged Apple Silicon PoC 通过前不冻结。
+10. 用户可以导入自制宠物和动作表现，但宠物包只能是经过校验的声明式数据，不能携带代码、网络资源或改变应用行为。
+11. runtime 选型前必须先证明普通用户只用角色参考图和自然语言即可生成可导入宠物；Phase 7 在官方宠物与 `.yukipet v1` 稳定后，把 Phase 6D 已验证的流程产品化为 Pet Authoring Skill。
 
 ## 术语
 
 本文沿用 [`CONTEXT.md`](../CONTEXT.md) 中的 Desktop App、Desktop Shell、Harness Runtime、Harness UI、Runtime Home、Runtime Version 和 App Version。
 
-**Desktop Companion**：由 Desktop Shell 承载的桌面专属只读辅助面。包含右栏、Workspace Review、响应式预览，以及最后阶段加入的宠物活动区。它不复制 Harness 的会话、Agent、设置或工具详情 UI。
+**Desktop Companion**：由 Desktop Shell 承载的桌面专属辅助面。它对 Workspace 保持只读，包含右栏、Workspace Review、响应式预览和 Pet Stage；允许管理应用自有 Pet Library，但不复制 Harness 的会话、Agent、设置或工具详情 UI。
 
 **Workspace Review**：针对当前 Harness Session 所属 Workspace 的只读文件树、Git 变更摘要、diff 和文件预览能力。
 
@@ -35,6 +39,8 @@ updated: 2026-08-18
 **Workspace Capability**：Desktop Shell 主进程根据 Workspace Authority 建立的短期、不透明权限。它只在当前 Runtime instance 和 Workspace generation 内有效。
 
 **Review Focus**：窗口宽度不足以同时容纳 Harness、预览和右栏时，暂时隐藏但不卸载 Harness `WebContentsView`，由本地 renderer 显示预览与文件栏的模式。
+
+宠物领域中的 Pet Library、Pet Package、Pet Stage、Semantic Motion、Active Pet 和 Pet Authoring Skill 以 [`11-pet-platform-plan.md`](11-pet-platform-plan.md) 与 [`CONTEXT.md`](../CONTEXT.md) 的定义为准。“Workspace”仍只表示用户代码项目，不把右栏或 Pet Stage 称为“侧栏工作区”。
 
 ## 目标与非目标
 
@@ -56,39 +62,43 @@ updated: 2026-08-18
 - 不保证第一版能把所有 Workspace 变化准确归因到某一轮 Harness 任务。
 - 不用 Desktop Companion 替换 Harness 已有的工具详情 `details` 面板。
 - 不支持任意用户替换的 Runtime Version；仍只支持随 App Version 固定交付的版本。
-- 不在运行时下载插件、Markdown 执行器、宠物素材或其他可执行代码。
+- 不在运行时下载插件、Markdown 执行器、宠物素材或其他可执行代码；允许用户通过系统文件选择器显式导入本地、声明式 `.yukipet`，但不允许网络下载或任意脚本。
 - 不把项目全文、完整 diff、余额或 Key 写入日志、诊断包、localStorage 或 IndexedDB。
 
-## 当前基线与必须解决的差异
+## 当前基线与宠物阶段新增差异
 
 ### 当前可复用基础
 
 - `DesktopWindow` 已包含本地 `BrowserWindow` renderer 与唯一一个 Harness `WebContentsView`。
 - Harness Runtime 已随 App Version 固定交付，并支持随包 profile extension。
 - `@dsh-desktop/settings` 已通过官方 `settings.section` 注册外观与关于页。
-- 固定 Runtime `0.1.0-rc.7` 已完成 arm64 基线装配、真实 PTY/原生模块、官方 Harness 和 packaged E2E 验证，并提供 `sidebar.footer.action`、`conversation.chat.turnTail`、Session store 与 Workspace registry 等 seam；Companion 实施时仍需为实际使用的 seam 增加独立契约测试。
+- 固定 Runtime `0.1.0-rc.7` 已完成 arm64 基线装配、真实 PTY/原生模块、官方 Harness 和 packaged E2E 验证；`sidebar.footer.action`、`conversation.chat.turnTail`、Session store 与 Workspace registry 等已使用 seam 均已有独立契约测试。
 - 本地顶栏已具备主题快照、renderer 独立恢复和可信 origin 策略。
 
-### 实施前置差异
+### 已解决的主体差异
 
-1. 当前架构文档把本地 renderer 限定为 Loading/Failure；实现前必须把 Desktop Companion 记录为桌面专属只读辅助面的明确扩展，但仍不得复制 Harness 产品 UI。
-2. shell/Harness preload 与 Forge entry 已拆分；后续文件能力只能加入 shell preload，禁止回流 Harness preload。
-3. `DesktopWindowOptions` 已分别接收 `shellPreloadPath` 与 `harnessPreloadPath`。
-4. 当前 `harnessContentBounds()` 永远把 Harness 铺满内容宽度；必须改为由纯布局函数输出完整 layout snapshot。
-5. 当前本地 renderer 只有 `startup | failure`，必须扩展为 `startup | failure | harness`，Harness 模式下渲染顶栏与 Desktop Companion。
-6. Runtime extension 已统一装配 settings/companion 两包；Workspace 阶段继续沿用该清单 Module。
-7. 余额 RPC 已实现每个 Runtime instance 的短期鉴权 token；进程终止前的 PID/启动时间所有权复核仍未实现，不能与 RPC token 混称。
-8. 现有部分 E2E 通过 Harness DOM 进行固定版本兼容冒烟；新核心能力必须通过官方 slot/event 契约和本地 `data-testid` 验证，不能增加新的 DOM selector 依赖。
+- 本地 renderer 已从 Loading/Failure 深化为顶栏与 Desktop Companion；shell/Harness preload、Forge entry 和恢复预算已经拆分。
+- `DesktopWindowOptions` 已分别接收两个 preload，layout 已覆盖 overlay、docked、Review Focus 与 wide review。
+- Runtime extension 已统一装配 settings/companion 两包，Workspace Authority/Capability、文件树、预览和 Git review 已公开交付。
+- 余额 RPC 已实现每个 Runtime instance 的短期鉴权 token；进程终止前的 PID/启动时间所有权复核仍未实现，不能与 RPC token 混称。
+- 固定版本 Harness DOM E2E 只作为兼容冒烟；新核心能力继续通过官方 slot/event 契约和本地 `data-testid` 验证。
+
+### 宠物阶段仍需实现
+
+- 当前 snapshot 只有 `open`，layout 使用固定 340px；需增加 `preferredWidth`、min/max resize 与独立完全隐藏。
+- settings extension 当前只有外观/关于；需增加 metadata-only Pet Library 与 main-owned 安全确认。
+- 当前没有 Pet Store、Package Validator、PetDirector、专用 PetPlayer view 或 Pet Stage。
+- 动画 runtime 和 `.yukipet` 仍为 draft；详细差异和 Phase 6A–6E 见 [`11-pet-platform-plan.md`](11-pet-platform-plan.md)。
 
 ## 关键架构决定
 
 ### Desktop Companion 由 Desktop Shell 承载
 
-不创建第二个 `WebContentsView`。现有本地 renderer 在 Harness 让出右侧空间后直接承载 Desktop Companion；预览需要更多空间时进入宽屏 split 或 Review Focus。
+Desktop Companion 面板和 Workspace Preview 不为可信右栏 UI 创建第二个 `WebContentsView`。现有本地 renderer 在 Harness 让出右侧空间后直接承载面板、文件预览和 Pet Stage Host；预览需要更多空间时进入宽屏 split 或 Review Focus。Phase 6 仅为不可信用户动画新增一个专用、独立非持久 session 的 sandboxed PetPlayer `WebContentsView`，main 将其严格裁剪到 Stage Host 预留 bounds。该 view 唯一 preload 是随签名应用交付、只做一次性 MessagePort 转交且不暴露 API 的 bootstrap。它不是右栏或 preview 的替代 renderer，而是不可绕过的动画 capability 边界。
 
 原因：
 
-- 避免额外 renderer 生命周期、内存和攻击面。
+- 可信面板与 preview 继续复用 shell，额外 renderer 生命周期、内存和攻击面只用于隔离不可信动画，并在宠物禁用/隐藏时停止或销毁。
 - 文件内容只进入可信本地 renderer，不进入 Harness 页面。
 - 不占用固定 Runtime 中已由工具详情占据的 `details` single slot。
 - Harness 崩溃与本地 renderer 崩溃仍可独立恢复。
@@ -133,6 +143,7 @@ Desktop Shell main process
 ├── DesktopCompanion
 ├── WorkspaceInspector
 ├── RuntimeCompanionAdapter
+├── PetLibrary / PetPackageValidator
 └── DesktopWindow layout
              |
              | shell preload: snapshot + discriminated commands only
@@ -141,7 +152,11 @@ Local renderer
 ├── CompanionPanel
 ├── Change/File views
 ├── Safe Preview
-└── PetDirector (final phase)
+├── PetStageHost
+└── PetDirector
+
+Dedicated sandboxed WebContentsView
+└── PetPlayer (one production adapter, bootstrap-only preload, no parent DOM/session sharing)
 ```
 
 ## 依赖分类与 seam
@@ -153,9 +168,11 @@ Local renderer
 | 文件系统                    | local-substitutable | `WorkspaceInspector` 内部 seam | Node fs Adapter                                      | 临时目录/内存 Adapter         |
 | Git                         | local-substitutable | `WorkspaceInspector` 内部 seam | Git argv process Adapter                             | 临时 Git repo/fixture Adapter |
 | Markdown                    | in-process          | `SafeMarkdown` Interface       | 结构化 parser + sanitizer                            | 同一实现 + hostile corpus     |
-| 宠物行为                    | in-process          | `PetDirector` Interface        | reducer + animation implementation                   | fake clock/random/completion  |
+| 宠物资产                    | local-substitutable | `PetLibrary` Interface         | app-owned store + validated local package importer   | in-memory Library/fixtures    |
+| 宠物行为                    | in-process          | `PetDirector` Interface        | reducer                                               | fake clock/random/completion  |
+| 宠物呈现                    | local-substitutable | `PetPlayer` Interface          | Phase 6D 选定的隔离 animation Adapter                | deterministic fake player    |
 
-外部调用方不学习 fs、Git、MIME、Markdown AST、Provider response 或动画 clip 名；这些全部留在相应 Module implementation 内，以获得 leverage 和 locality。
+外部调用方不学习 fs、Git、MIME、Markdown AST、Provider response、宠物包路径或动画 clip 名；这些全部留在相应 Module implementation 内，以获得 leverage 和 locality。
 
 ## Deep Module 与 Interface
 
@@ -555,24 +572,29 @@ type InspectorDocument =
 
 ### 右栏结构
 
-宠物上线前不预留空白区域，文件区占满右栏。宠物最后阶段上线后：
+宠物禁用、无 ready 资产或 player 失败时不预留空白，文件区占满右栏。宠物启用后：
 
 ```text
-┌────────────────────┐
-│ Pet Activity       │ 220-260px，可折叠
-├────────────────────┤
-│ 变更 | 文件        │
-├────────────────────┤
-│ lazy tree / list   │ flex: 1
-└────────────────────┘
+┌──────────────────────────┐
+│ Pet Stage                │ 200-320px，严格裁剪
+├──────────────────────────┤
+│ 变更 | 文件              │
+├──────────────────────────┤
+│ lazy tree / list         │ flex: 1
+└──────────────────────────┘
 ```
 
 默认尺寸：
 
-- Inspector 默认 360px，最小 320px，最大 440px。
+- Companion 首次默认 380px，可见最小 340px，可见最大 560px；动态最大值仍由窗口、Harness 和 Preview 的最小可用宽度决定。
 - Preview 最小 480px。
 - Harness 可用中心区域目标最小 640px。
-- 用户拖动只提交期望 Inspector 宽度；最终 bounds 始终由 main 的纯布局函数计算并 clamp。
+- `open` 与 `preferredWidth` 是两个状态：拖动只提交期望宽度，永远不改变 `open`；最终 bounds 始终由 main 的纯布局函数计算并 clamp。
+- 右边缘固定，左边界向左拖动放大、向右拖动缩小；到 340px 后继续向右无效，只有右上角开关才能完全隐藏。
+- 拖动期间不使用 easing，结束时才持久化；重新打开恢复上次合法宽度。resize handle 同时提供键盘与 `role="separator"` 语义。
+- 垂直空间先把 Pet Stage 从 preferred 260px 缩到 200px；若无法同时保留 220px 文件区则隐藏 Stage，不能挤掉文件 tabs/content。
+
+完整 layout token、Pet Stage 边界和交互验收见 [`11-pet-platform-plan.md`](11-pet-platform-plan.md#companion-尺寸与-pet-stage)。
 
 ### 响应式布局
 
@@ -595,79 +617,20 @@ Review Focus 只隐藏 Harness view，不 reload、不停止任务。退出 revi
 - Workspace 改变时立即清空旧树和 preview，显示新 Workspace loading。
 - 辅助技术可以读出文件名、状态和 `+/-`，颜色不是唯一状态信号。
 
-## 宠物最终阶段设计
+## 宠物平台阶段设计
 
-宠物不会阻塞前述任何阶段。其资产缺失、损坏或性能不达标时，Desktop Companion 继续只显示 Workspace Review。
+宠物不再以“等待素材后一次性加入的固定动画”实施，而是按以下顺序建设：声明式 Pet Package 与安全模型、设置中的 Pet Library、本地导入、右栏尺寸与 Pet Stage、Creator Input 到宠物包的 Authoring PoC、过门候选的连续动画验证、官方宠物制作，最后把既有制作流程产品化为 Pet Authoring Skill。完整 Interface、包格式、安全限制、状态机、Creator Gate、性能门和 Phase 6A–6E/7 退出条件统一以 [`11-pet-platform-plan.md`](11-pet-platform-plan.md) 为准。
 
-### 素材输入门
+必须保持的核心约束：
 
-开始宠物实现前，产品所有者提供并冻结：
-
-- 透明背景、完整脚部与尾巴的 canonical full-body source，建议至少 3000x3000。
-- 正面、3/4、侧面参考与固定头身比、眼距、服装、调色板。
-- neutral、困倦、闭眼、惊醒、揉眼、开心进食表情。
-- 优先提供分层 PSD/Clip Studio：头、前后发、眼皮、嘴、手臂、腿、裙摆、尾巴、饭碗、token 粒子分层。
-- 角色不可变化清单与可接受的动作夸张范围。
-
-如果有分层资源，优先从同一 rig 制作全部动作；如果只有 flattened source，则制作由同一 canonical reference 约束的 coherent sprite animation family。不得逐帧独立生成角色图。
-
-### `PetDirector` Interface
-
-```ts
-type HarnessActivity = "disconnected" | "idle" | "running" | "waiting-user";
-
-type PetState =
-  | "standing"
-  | "drowsy"
-  | "lying-down"
-  | "sleeping"
-  | "waking"
-  | "rubbing-eyes"
-  | "work-enter"
-  | "eating"
-  | "work-exit";
-
-interface PetDirector {
-  update(input: {
-    readonly activity: HarnessActivity;
-    readonly wakeRequested: boolean;
-    readonly visible: boolean;
-    readonly reducedMotion: boolean;
-  }): PetPresentation;
-}
-```
-
-状态机：
-
-```text
-standing -> drowsy -> lying-down -> sleeping
-sleeping -> waking -> rubbing-eyes -> standing
-idle state + running -> work-enter -> eating
-eating + idle -> work-exit -> standing
-```
-
-行为约束：
-
-- blink 是独立 overlay，不改变主 motion state。
-- 站立 5-13 秒随机眨眼；连续闲置 60-120 秒后进入 drowsy。
-- 用户只通过点击/键盘激活宠物活动区明确唤醒；不监控系统级输入。
-- 任一 Harness Session `running=true` 时 `runningCount > 0`，宠物最终进入 eating。
-- `runningCount` 归零后防抖 800ms，再播放完整 work-exit。
-- 不可中断 clip 只在 authored marker 转换；过期 completion 带 generation 并被丢弃。
-- 气泡只在 eating 中显示“疯狂进食 token 中”，作为 DOM overlay，不烘焙进素材。
-- 活动区使用固定 viewBox、`overflow: clip`、`contain: layout paint size`；角色和气泡都不能越界。
-- 页面隐藏时暂停绘制，恢复时按最新 authoritative activity 对账。
-- `prefers-reduced-motion` 使用关键姿势与淡入淡出，但保留状态含义。
-
-性能与 QA：
-
-- 可见动画目标 >=55 fps；idle CPU 目标 <1%。
-- decoded pet assets 总预算 32 MiB；素材离线随包。
-- 每个 clip 输出 contact sheet 与 1x/0.25x 动画预览。
-- 自动检查每帧 alpha bounds、baseline、scale 和首尾 root anchor。
-- 同一角色头身比、眼距、服装颜色和标志性配件不得漂移。
-- 相邻 clip 首尾 anchor 目标差 <=1px；明显跳形或身份漂移阻塞发布。
-- 宠物资源损坏降级为静态角色或完全隐藏，不影响余额、文件、Harness 或更新。
+- Pet Package 是经校验的声明式数据，不是插件；不得携带脚本、WASM/runtime binary、远程 URL 或 Workspace 能力，player code/WASM 只能随签名应用交付。
+- 设置页只获得 Pet Library 元数据与无路径命令；动画 payload 只进入专用、仅含 one-shot bootstrap preload、无父 DOM/Workspace bridge 的 PetPlayer `WebContentsView`。
+- `PetLibrary` 管理资产，`PetDirector` 决定语义状态，`PetPlayer` 隐藏所选动画引擎，Pet Stage 负责裁剪与交互；四者不能合并成一个浅 Module。
+- Phase 6A–6D 可用统一 Creator Input 和无品牌样片推进，不等待产品所有者素材；正式角色素材只阻塞 Phase 6E。
+- production 动画必须连续采样、完整过渡并具有次级运动。候选先通过“参考图 + 自然语言 → 自动生成可导入包”的 Creator Gate，才进入 packaged benchmark；依赖用户手工专有编辑器导出的 Rive 等路径直接淘汰。
+- 6D 完成 Authoring PoC 和唯一 runtime candidate；Phase 6E 用同一流程制作并验收 official pet 后冻结 v1；Phase 7 只负责把已验证流程产品化为 Skill，不再把引擎知识交给用户。
+- 宠物包、player 或素材失败只回退内置宠物或隐藏 Pet Stage，Workspace Review 继续占满右栏。
+- PetStage 的布局、气泡和输入留在本地 shell，PetPlayer 必须进入专用非持久 session、只含 one-shot port bootstrap preload、无父 DOM/Workspace bridge 的 sandboxed `WebContentsView`；页面主世界不得获得 Electron/Node/IPC API。main-owned watchdog 只销毁/重建该 player view；不能满足此边界的候选直接淘汰，Harness view 与任务不 reload。
 
 ## 安全模型增量
 
@@ -678,6 +641,7 @@ eating + idle -> work-exit -> standing
 - Session/Workspace identity 与 running 状态。
 - Runtime companion token 与 Workspace Capability。
 - preview 内存、Blob URL 和本地 renderer 状态。
+- app-owned Pet Library、Imported Pet 元数据、当前宠物选择和 active player 资源。
 
 ### 新增不可信输入
 
@@ -686,6 +650,7 @@ eating + idle -> work-exit -> standing
 - DeepSeek network response 与错误正文。
 - Harness 页面脚本、模型输出和非随包插件。
 - renderer 发出的 command 与 Harness 发出的 event envelope。
+- 用户选择的 `.yukipet` archive、manifest、缩略图、动画 payload、文件名和许可元数据。
 
 ### 发布阻塞门槛
 
@@ -698,6 +663,9 @@ eating + idle -> work-exit -> standing
 - Git 能执行 hooks、pager、external diff、textconv、fsmonitor helper 或 shell interpolation。
 - Companion 失败会阻塞 Harness 启动/运行，或关闭面板后不能恢复全宽 Harness。
 - 项目文件内容或余额被写入日志、诊断包或持久缓存。
+- Harness renderer 能取得宠物包绝对路径或动画 payload，或能提交任意导入路径。
+- 宠物包能携带脚本、远程 URL、外部引用、路径逃逸、link、特殊文件或超限解压内容。
+- 未经 staging、完整验证与原子安装的用户宠物能进入 Pet Library 或 active player。
 
 ## 统一错误模型
 
@@ -719,7 +687,13 @@ eating + idle -> work-exit -> standing
 | `git-unavailable`                 | 非 Git、Git 缺失、安全拒绝          | 文件树继续工作                           |
 | `git-no-baseline`                 | unborn HEAD                         | 显示无 HEAD 基线                         |
 | `git-timeout` / `git-truncated`   | Git 超时/输出过大                   | 显示部分结果和刷新                       |
-| `pet-assets-unavailable`          | 素材缺失/校验失败                   | 静态降级或隐藏宠物                       |
+| `pet-import-cancelled`            | 用户取消系统文件选择器              | 静默结束                                 |
+| `pet-package-invalid`             | archive/manifest/MIME/hash 不合法    | 拒绝导入                                 |
+| `pet-package-unsafe`              | traversal/link/script/remote 等      | 拒绝导入，显示安全分类                   |
+| `pet-package-too-large`           | 任一 package 硬限制超出              | 显示上限，不继续处理                     |
+| `pet-package-incompatible`        | schema/engine/runtime 不兼容         | 不允许启用，可移除                       |
+| `pet-player-unavailable`          | player 初始化或 probe 失败           | 保留旧宠物或隐藏 Pet Stage               |
+| `pet-selection-missing`           | active 包丢失/损坏                   | 回退内置默认                             |
 
 所有错误给 renderer 的 detail 只允许稳定分类与相对展示路径，禁止原始 OS stack、绝对路径、Provider body 或 shell stderr 原文。
 
@@ -737,9 +711,9 @@ P95 在支持的 Apple Silicon 真机测量；CI 验证硬上限和不失控。
 | 图片预览                     | <=300ms（常规图片）        | 10 MiB、32 MP、单边 16384px               |
 | Git status/numstat           | <=1s（常规仓库）           | 3s timeout、8 MiB stdout                  |
 | 单文件 diff                  | <=500ms（常规文件）        | 2 MiB 或 20,000 行                        |
-| Panel resize/scroll          | >=55 fps                   | 不同步递归扫描、不在 renderer 解析大 diff |
+| Panel resize/scroll          | 60 Hz 下无明显连续丢帧      | 不同步递归扫描、不在 renderer 解析大 diff |
 | Inspector 增量内存           | <=64 MiB                   | LRU；Workspace 切换清空                   |
-| Pet 增量 decoded assets      | <=32 MiB                   | 离屏暂停、损坏降级                        |
+| Pet 呈现/资源                | 6D 形成 RC，6E 满意后冻结  | 单 active player、离屏停止、损坏降级      |
 
 MVP 不做递归 watcher。手动刷新、窗口重新聚焦和 turn completion 触发 invalidation，Git 查询至少 debounce 500ms。
 
@@ -749,7 +723,7 @@ MVP 不做递归 watcher。手动刷新、窗口重新聚焦和 turn completion 
 
 ```text
 runtime/
-├── desktop-settings-plugin/          # 保留外观/关于
+├── desktop-settings-plugin/          # 外观/关于；Phase 6 增加 Pet Library
 ├── desktop-companion-plugin/
 │   ├── package.json
 │   ├── index.js                      # AccountBalance + authenticated host RPC
@@ -774,16 +748,14 @@ src/
 ├── harness-preload-entry.ts
 └── preload/
     ├── shell.ts
-    └── harness.ts
+    └── index.ts                      # Harness preload implementation
 ```
 
-需要调整：
+已落地：
 
-- `forge.config.ts`：构建两个 preload entry。
-- `src/main/app-coordinator.ts`：分别解析两个产物路径。
-- `src/main/window/desktop-window-options.ts`：本地 BrowserWindow 使用 shell preload。
-- `src/main/window/desktop-window.ts`：Harness `WebContentsView` 使用 Harness preload。
-- 迁移完成后删除旧 `src/preload/index.ts` 和 `src/preload-entry.ts`，不保留并行实现。
+- `forge.config.ts` 构建两个 preload entry；`app-coordinator.ts` 分别解析两个产物路径。
+- 本地 BrowserWindow 使用 `shell.ts`，Harness `WebContentsView` 使用 `index.ts`；二者不互相 import。
+- 文件/预览能力只存在于 shell preload，余额/Harness event 桥只存在于 Harness preload；E2E 验证 bridge 不串位。
 
 ### Shared contract
 
@@ -828,16 +800,17 @@ src/renderer/companion/
 ├── file-tree-view.ts
 ├── file-preview-view.ts
 ├── safe-markdown.ts
-└── pet/                            # 最后阶段才创建
+└── pet/                            # Phase 6 按 docs/11 创建
 ```
 
-需要调整：
+主体已落地：
 
-- `src/renderer/index.html`：增加 Harness mode 和 Companion root。
-- `src/renderer/index.ts`：从单纯启动页脚本深化为 local shell state adapter。
-- `src/renderer/styles.css`：加入 app-owned allowlisted companion tokens；不新增并行的重复样式入口。
-- `src/main/window/desktop-window-layout.ts`：返回完整 layout snapshot，而不是只返回 Harness bounds。
-- `src/main/window/desktop-window-options.ts`：按响应式模式重新验证 min width。
+- `src/renderer/index.html` 已包含 Harness mode 和 Companion root。
+- `src/renderer/index.ts` 已从启动页脚本深化为 local shell state adapter。
+- `src/renderer/styles.css` 已包含 app-owned allowlisted companion tokens，未新增并行样式入口。
+- `src/main/window/desktop-window-layout.ts` 与 options 已覆盖当前固定面板和响应式模式。
+
+Phase 6 将在上述实现上增加可调整宽度、Pet Stage Host 和专用隔离 PetPlayer view；精确新增文件以 [`11-pet-platform-plan.md`](11-pet-platform-plan.md#精确代码落点) 为准。
 
 ## 分阶段实施计划
 
@@ -957,31 +930,33 @@ src/renderer/companion/
 - 所有安全发布门槛无例外。
 - 余额、Workspace Review 可在不含宠物的 App Version 中公开交付。
 
-### Phase 6：宠物素材与动画
+### Phase 6：宠物资产平台与官方宠物
 
-状态：**等待产品所有者提供并冻结角色素材，尚未开始实现**。
+状态：**6A–6C 已实现，6D 的通用 Player/证据底座已落地并正在按 creator-first 原则推进；6A–6D 不等待正式角色素材**。
 
-目标：在核心能力稳定后增加完整宠物体验。
+详细实施与退出条件见 [`11-pet-platform-plan.md`](11-pet-platform-plan.md)：
 
-- 冻结 canonical character source、identity checklist 和动作清单。
-- 选择并只实现一条 production animation 路径；不同时维护多套运行时。
-- 实现 PetDirector、clip manifest、bounds validator、状态机与 reduced motion。
-- 完成 standing/blink/drowsy/lie-down/sleep/wake/rub-eyes/work-enter/eating/work-exit。
-- 生成 contact sheets、动画预览、视觉基准和 asset manifest hash。
+- **6A 契约与安全**：Semantic Motion、`.yukipet` draft、限制、错误与 hostile fixtures。
+- **6B 资产库与设置**：Pet Library、中英文设置页、本地选择、通用 envelope preflight 与开发态隔离 Inbox；不把未知动画 payload 安装为 ready 宠物。
+- **6C 布局与空壳**：340px 最小可见宽度、左边界拖拽、独立完全隐藏和 Pet Stage。
+- **6D creator-first 动画 spike**：先验证普通用户输入到自动生成宠物包的 Authoring PoC，再在 packaged arm64 Electron 中比较过门候选；选定唯一 runtime candidate，补齐深层 parser/probe/validator 与开发态原子安装，产出 `.yukipet v1-rc` 和 proposed animation runtime ADR。
+- **6E 官方宠物**：此时才需要产品所有者素材；完成全部动作、次级运动、视觉/性能 QA 和发布门，产品满意后才冻结 v1、接受 ADR 并开放用户导入。
 
-退出条件：
+Phase 6 的最终退出条件是资产导入安全、布局语义、连续动画、状态机、身份一致性、资源预算和故障隔离全部通过；不能以稀疏姿势轮播作为临时上线方案。
 
-- fake clock 覆盖所有 transition、stale timer、快速 run/idle 和 renderer restore。
-- 所有行为与气泡不越出活动区，无 identity/scale/baseline 跳变。
-- 帧率、CPU、内存和隐藏暂停预算通过。
-- 宠物失败不影响余额、Workspace Review、Harness 或更新。
+### Phase 7：Pet Authoring Skill
+
+状态：**必须等待 6E 验收、`.yukipet v1` 冻结并经过至少一个公开版本验证**。
+
+Skill 复用 Phase 6D 已验证的 Authoring Module 与应用 validator，只向用户请求角色参考图和自然语言要求，产出可导入宠物包、预览和 QA 报告。它不成为运行时插件；无法无头生成的格式不会进入 production，因此不能把骨骼绑定、状态机或专有编辑器导出留给用户。
 
 ## Feature gating 与回滚
 
 - 不引入远程 feature flag 后台。能力由 App Version 内的固定 capability handshake 决定。
 - Runtime companion handshake 失败时，余额卡不注册、右栏入口隐藏、Harness 全宽运行。
-- Phase 1 余额与 Phase 2-4 Workspace Review 可独立启用；宠物 capability 独立且最后启用。
-- `desktop.json` 只新增向后兼容的 panel open/width/tab 偏好；不保存 canonical root、EntryId、文件内容或余额。
+- Phase 1 余额与 Phase 2-4 Workspace Review 可独立启用；`pet-library`、`pet-player` 与 `pet-stage` 分别握手并可失败关闭。
+- `desktop.json` 只新增向后兼容的 panel open/preferredWidth/tab、pet enabled/activePetId 偏好；不保存导入源路径、canonical root、EntryId、文件内容、动画字节或余额。
+- Pet Library 使用 app-owned 独立索引；旧版本忽略新偏好，future pet schema 在新版本中 fail-closed，不修改 Runtime Home。
 - 未知新字段被旧版本忽略；迁移失败回到默认 panel closed，不改 Runtime Home。
 - App Version 原子更新仍同时固定 Runtime Version 和 companion extension，不支持在线单独升级插件。
 - 如需紧急回滚，可发布关闭 companion capability 的 App Version；用户 Session、Workspace 和 Runtime Home 不需要迁移。
@@ -990,11 +965,11 @@ src/renderer/companion/
 
 | 层级                | AccountBalance                              | Workspace/文件                         | Git                              | Markdown/Preview               | Harness seam                   | Pet                          |
 | ------------------- | ------------------------------------------- | -------------------------------------- | -------------------------------- | ------------------------------ | ------------------------------ | ---------------------------- |
-| Module interface    | schema、decimal、cache、single-flight、错误 | Capability、分页、类型、大小、失效     | NUL parser、状态合并、超限       | hostile corpus、URL、深度/大小 | schema、revision、sender、rate | reducer、timer generation    |
-| 本地集成            | mock HTTPS，无真实 API                      | 临时 FS、symlink、FIFO、权限、并发改名 | 临时 repo、怪异文件名、submodule | Blob/CSP/无网络                | in-memory Runtime Adapter      | manifest/atlas validator     |
+| Module interface    | schema、decimal、cache、single-flight、错误 | Capability、分页、类型、大小、失效     | NUL parser、状态合并、超限       | hostile corpus、URL、深度/大小 | schema、revision、sender、rate | package、library、layout、director generation |
+| 本地集成            | mock HTTPS，无真实 API                      | 临时 FS、symlink、FIFO、权限、并发改名 | 临时 repo、怪异文件名、submodule | Blob/CSP/无网络                | in-memory Runtime Adapter      | 6B Inbox preflight；6D 完整原子安装、player load/dispose |
 | pinned Runtime 契约 | credential resolve 不泄露 Key               | registry 复核 Session/Workspace        | —                                | client slot 正常装配           | footer/turnTail/session seams  | running 驱动                 |
-| Electron E2E        | wide/rail、离线/未配置/stale                | toggle、tree、refresh、切 Workspace    | 变更数、diff、截断               | rendered/source、XSS、链接     | restart 后旧 Capability 失效   | bounds、wake、reduced motion |
-| 发布安全            | 无 Key/余额落盘或日志                       | 诊断包无项目内容                       | helper 不执行                    | CSP 不放宽、SVG/remote 拒绝    | 无通用 emit/任意参数           | 无联网素材                   |
+| Electron E2E        | wide/rail、离线/未配置/stale                | toggle、tree、refresh、切 Workspace    | 变更数、diff、截断               | rendered/source、XSS、链接     | restart 后旧 Capability 失效   | 设置导入、min resize、hide、wake、reduced motion |
+| 发布安全            | 无 Key/余额落盘或日志                       | 诊断包无项目内容                       | helper 不执行                    | CSP 不放宽、SVG/remote 拒绝    | 无通用 emit/任意参数           | hostile archive、无脚本/联网/路径/payload 泄露 |
 
 ### 必须加入的负向 fixtures
 
@@ -1005,6 +980,7 @@ src/renderer/companion/
 - Markdown 含 script、onerror、SVG、iframe、`javascript:`、`file:`、remote image、深层嵌套和超大表格。
 - Harness event 的错误 sender、subframe、旧 revision、旧 instance、超长字段和事件洪水。
 - Balance mock 的 redirect、401、429、5xx、慢响应、巨大 body、错误 decimal、重复币种。
+- Pet archive 的 Zip Slip、压缩炸弹、重复/NFD/大小写冲突路径、symlink/hardlink、假 MIME、hash 不符、future schema、未知 runtime/asset format、缺动作、脚本/remote asset 和超时 payload。
 
 ### 每阶段基础验证
 
@@ -1034,8 +1010,12 @@ pnpm test:e2e
 12. `harness: add rich turn-tail change card and review intent`
 13. `test: harden companion security, recovery and performance gates`
 14. `release: ship account balance and Workspace Review without pet`
-15. `pet: freeze canonical art and animation manifest`
-16. `pet: implement state machine, assets and visual QA`
+15. `pet: define declarative package contract and hostile fixtures`
+16. `pet: add library, settings and atomic local import`
+17. `companion: add minimum-width resize and Pet Stage shell`
+18. `pet: spike continuous animation runtime and produce v1 RC`
+19. `pet: produce official character, state machine and visual QA`
+20. `skill: package the stable pet authoring workflow`
 
 ## 风险登记
 
@@ -1051,12 +1031,15 @@ pnpm test:e2e
 | 把 Workspace diff 误称本轮变更      | 错误归因、误导用户       | 明确 source/coverage，没有证据不使用该文案                 |
 | 右栏挤压 Harness/tool details       | 中心内容不可用           | 响应式 dock/overlay/Review Focus，一次只显示一个辅助面     |
 | 大仓库扫描卡顿                      | main 阻塞、内存增长      | lazy page、无递归 watcher、timeout、LRU、hard limits       |
-| 宠物身份漂移或性能不达标            | 视觉质量差、拖慢主体验   | canonical source、同一 rig/atlas、最后阶段、独立 gate      |
+| 恶意或超大宠物包                  | 路径逃逸、执行或 DoS     | 声明式 allowlist、staging、硬限制、隔离 probe、原子安装    |
+| 动画引擎过早冻结                  | 格式、生态和 Skill 锁死  | Creator Gate 先于 benchmark；6D 只产出 RC，6E 满意后才接受 ADR/v1 |
+| 宠物身份漂移或性能不达标          | 视觉质量差、拖慢主体验   | canonical source、同一 rig/工程、连续过渡、独立人工 gate   |
+| 侧栏 resize 与关闭混用            | 意外隐藏且难恢复         | `open`/preferredWidth 分离，drag 只 clamp 宽度              |
 
 ## 明确拒绝的方案
 
 - 不替换 Harness `details` single slot；这会破坏官方 tool details。
-- 不新增第二个长期驻留 `WebContentsView` 只为右栏或 preview。
+- 不新增第二个长期驻留 `WebContentsView` 只为可信右栏或 preview；PetPlayer 专用 view 是用户动画的强制隔离边界，且在禁用/隐藏宠物时销毁或停止。
 - 不把文件能力加入当前共享 preload。
 - 不接受 renderer/Harness page 传来的任意绝对路径。
 - 不提供任意 channel/JSON IPC 或通用 HTTP 文件 route。
@@ -1065,6 +1048,10 @@ pnpm test:e2e
 - 不把当前 Workspace diff 冒充精确的本轮编辑。
 - 不直接用 `file://`、raw HTML 或可执行 SVG 做 preview。
 - 不为宠物生成彼此独立、身份不一致的逐帧角色图。
+- 不采用稀疏姿势轮播冒充流畅动画，也不长期维护多套 production player。
+- 不让拖动到 `0px` 代表关闭；完全隐藏必须是独立命令。
+- 不把 Pet Package 当插件或允许 JS/HTML、远程资源、任意状态机和 browser 路径。
+- 不在 Creator Gate 通过前冻结 runtime，也不在官方宠物和 `.yukipet v1` 稳定前公开发布 Pet Authoring Skill。
 
 ## 文档同步清单
 
@@ -1079,6 +1066,7 @@ Phase 0 开始实现时同步：
 - `docs/07-current-status.md`：只在功能实际完成后迁移条目；当前仅记录“方案已接受，尚未实现”。
 - `docs/08-appearance-extension.md`：为 Companion 增加严格 allowlist 的背景、边框、文字颜色同步，不传任意 CSS/token map。
 - `docs/references.md`：加入 balance endpoint 与实施时验证的固定 Runtime seam 依据。
+- `docs/11-pet-platform-plan.md`：作为 Phase 6/7 的宠物平台、包格式、动画与 Skill 权威设计。
 - 每个 App Version 的 release notes：明确上线阶段、限制、回滚与 Runtime Version。
 
 ## 总体完成定义
@@ -1094,4 +1082,4 @@ Desktop Companion 主体（不含宠物）完成，必须同时满足：
 7. 项目文件、Key、余额不进入不允许的存储、日志或诊断。
 8. 自动化检查、packaged E2E、Apple Silicon 真机矩阵和发布门禁全部通过。
 
-宠物完成还需额外满足素材输入门、状态机、identity QA、活动区约束与性能预算；宠物未完成不影响主体版本发布。
+宠物完成还需满足 [`11-pet-platform-plan.md`](11-pet-platform-plan.md) 的 Pet Library/Package 安全、Creator Gate、最小可见宽度与独立隐藏、唯一连续动画 player、完整状态机、identity QA、活动区约束、性能预算和产品所有者验收；宠物未完成不影响主体版本发布。Phase 6D 必须先证明 Authoring PoC，Phase 7 再将其产品化为公开 Skill。

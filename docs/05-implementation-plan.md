@@ -69,9 +69,9 @@
 
 ## 已接受的后续专题计划
 
-Desktop Companion 的完整产品语义、架构、安全 seam、文件落点、测试矩阵与阶段退出条件已冻结在 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。非宠物阶段已实现并随 `v0.2.1-beta.1` 完成签名、公证和异机发布验证；相对 Markdown 文件链接、64 MiB 有界预览缓存和 820px 最小窗口响应式矩阵也已收口。下一实施阶段是等待角色素材冻结后的宠物动画。
+Desktop Companion 的主体产品语义、架构、安全 seam、文件落点、测试矩阵与阶段退出条件已冻结在 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)；宠物平台的详细设计见 [`11-pet-platform-plan.md`](11-pet-platform-plan.md)。非宠物阶段已实现并随 `v0.2.1-beta.1` 完成签名、公证和异机发布验证；相对 Markdown 文件链接、64 MiB 有界预览缓存和 820px 最小窗口响应式矩阵也已收口。宠物 Phase 6A–6C 已完成。Phase 6D 已具备惰性专用 PetPlayer、一次性有界 MessagePort、外部 watchdog、frame-time 采样和 fail-closed benchmark contract；现已纠正选型顺序，新增 Creator Input 与无头 Skill 生成硬门。下一步不是索取 `.riv`，而是先实现透明 WebM/高密度序列帧的 Authoring PoC，只有普通用户输入可自动产出合格包的候选才进入 packaged benchmark。
 
-实施顺序固定为：安全契约与双 preload → 账户余额 → 右栏与 Workspace Capability → 文件树和安全预览 → Git 变更与审阅 → 无宠物版本稳定性验收 → 用户提供角色素材后的宠物动画。该专题阶段不得反向改写上文已经完成的基础 Phase 0–4。
+后续顺序固定为：宠物包 draft 与 hostile fixtures（6A）→ Pet Library、设置与隔离 Inbox（6B）→ 右栏最小宽度、独立隐藏和 Pet Stage（6C）→ Creator Input 到自动生成包的 Authoring PoC → 过门候选的 packaged benchmark、唯一 runtime、深层 validator 与 `.yukipet v1-rc`（合称 6D）→ 用同一制作流程生成并验收官方宠物、冻结 v1 和开放生产导入（6E）→ v1 公开验证后把既有流程产品化为 Pet Authoring Skill（Phase 7）。6A–6D 不等待正式角色素材；该专题不得反向改写上文已经完成的基础 Phase 0–4。
 
 ## 首批 Issue 切分
 

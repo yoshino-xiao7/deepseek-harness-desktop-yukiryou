@@ -33,8 +33,8 @@ _Avoid_: 最新版、用户安装版本
 _Avoid_: Harness 版本
 
 **桌面伴侣（Desktop Companion）**：
-由桌面壳承载的只读辅助能力集合。当前包含 Harness 官方 slot 账户余额、右栏与 Workspace Review，但不复制 Agent、会话或工具详情 UI；宠物活动区仍属于最后阶段。
-_Avoid_: 新 Harness UI、文件编辑器
+由桌面壳承载的辅助能力集合。它对 Workspace 保持只读；当前包含 Harness 官方 slot 账户余额、右栏与 Workspace Review，规划加入 Pet Stage 和应用自有 Pet Library，但不复制 Agent、会话或工具详情 UI。
+_Avoid_: 新 Harness UI、文件编辑器、侧栏工作区
 
 **Workspace Review**：
 面向当前 Harness Workspace 的只读文件树、Git 变更、diff 与安全预览。
@@ -43,3 +43,31 @@ _Avoid_: IDE、自动修改
 **Workspace Authority / Capability**：
 Authority 是 Runtime 对 Session 所属 canonical Workspace 的权威解析；Capability 是主进程据此建立的短期不透明文件访问权限。
 _Avoid_: 浏览器传入路径、永久目录授权
+
+**宠物资产库（Pet Library）**：
+应用自有目录中的内置宠物和已安装用户宠物集合；不属于 Runtime Home 或 Workspace。
+_Avoid_: 宠物插件、Workspace 资产
+
+**宠物包（Pet Package）**：
+由应用校验并导入的声明式 `.yukipet` 本地资产包。它描述角色和受支持的语义动作，不携带可执行代码。
+_Avoid_: 插件、脚本包、远程皮肤
+
+**宠物活动区（Pet Stage）**：
+Desktop Companion 顶部具有固定坐标系和裁剪边界的宠物展示区域；完全隐藏 Companion 与拖拽到最小可见宽度是两个不同状态。
+_Avoid_: Workspace、桌面漫游层
+
+**语义动作（Semantic Motion）**：
+应用状态机可以请求的动作含义。用户可自定义视觉实现，但不能改变动作何时触发或获得新的应用权限。
+_Avoid_: 任意脚本、用户状态机
+
+**创作者输入（Creator Input）**：
+普通用户制作宠物时需要提供的角色参考图与自然语言动作要求；可以追加更多视角或分层素材提高质量，但不能强制要求动画软件、骨骼绑定、状态机、代码或文件命名知识。
+_Avoid_: Rive 工程、动画师交付物、运行时资产
+
+**受支持制作流程（Supported Authoring Workflow）**：
+项目负责维护的自动化流程，从创作者输入生成、验证并打包可导入的宠物包；底层动画格式和制作工具属于其实现，不属于用户必须学习的 Interface。
+_Avoid_: 制作教程、手工导出清单、第三方编辑器前置条件
+
+**宠物制作 Skill（Pet Authoring Skill）**：
+受支持制作流程面向 Codex 的交互入口，接收创作者输入并输出宠物包、预览和 QA 报告；不在应用运行时执行，也不把底层动画引擎知识转嫁给用户。
+_Avoid_: 运行时插件、宠物市场

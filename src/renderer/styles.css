@@ -6,6 +6,7 @@
   --companion-muted: #737a89;
   --companion-accent: #356ae6;
   --companion-motion: 220ms cubic-bezier(.2, .8, .2, 1);
+  --companion-panel-width: 380px;
   color-scheme: light dark;
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -82,8 +83,10 @@ body {
   position: absolute;
   z-index: 3;
   inset: 0 0 0 auto;
-  width: min(340px, calc(100vw - 480px));
+  display: flex;
+  width: var(--companion-panel-width);
   min-width: 0;
+  flex-direction: column;
   border-left: 1px solid var(--companion-border);
   color: #202124;
   background: var(--toolbar-content-background);
@@ -93,6 +96,20 @@ body {
   transition: transform var(--companion-motion), visibility 0s linear 220ms, box-shadow var(--companion-motion);
   will-change: transform;
 }
+
+.companion-resize {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.companion-resize::after { position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; content: ""; transition: background-color 120ms ease; }
+.companion-resize:hover::after,.companion-resize:focus-visible::after { background: var(--companion-accent); }
+.companion-resize:focus-visible { outline: none; }
 
 .companion-panel[hidden] { display: none; }
 body[data-companion-open="true"] .companion-panel { box-shadow: -8px 0 24px rgb(24 32 48 / 3%); transform: translateX(0); visibility: visible; transition-delay: 0s; }
@@ -106,6 +123,27 @@ body[data-companion-open="true"] .companion-panel { box-shadow: -8px 0 24px rgb(
   gap: 12px;
   border-bottom: 1px solid var(--companion-border);
 }
+
+.pet-stage {
+  position: relative;
+  display: grid;
+  height: clamp(200px, 32vh, 260px);
+  min-height: 200px;
+  flex: 0 1 260px;
+  overflow: clip;
+  contain: layout paint size;
+  place-items: center;
+  border-bottom: 1px solid var(--companion-border);
+  background: radial-gradient(circle at 50% 68%, rgb(80 108 226 / 10%), transparent 58%);
+}
+.pet-stage[hidden] { display: none; }
+.pet-player-surface { position: absolute; inset: 46px 8px 34px; display: grid; min-width: 64px; min-height: 64px; overflow: clip; place-items: center; }
+.pet-player-surface img { width: min(152px, 46%); height: min(152px, 92%); object-fit: contain; filter: drop-shadow(0 8px 16px rgb(45 58 100 / 12%)); }
+.pet-bubble { position: absolute; top: 14px; right: 14px; max-width: calc(100% - 28px); padding: 7px 10px; overflow: hidden; border: 1px solid var(--companion-border); border-radius: 11px 11px 3px; background: var(--toolbar-content-background); box-shadow: 0 5px 16px rgb(35 45 75 / 8%); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.pet-bubble[hidden] { display: none; }
+.pet-stage-copy { position: absolute; right: 12px; bottom: 11px; left: 12px; display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pet-stage-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.pet-stage-copy span { flex: none; color: var(--companion-muted); font-size: 10px; }
 
 .companion-eyebrow {
   display: block;
@@ -136,7 +174,7 @@ body[data-companion-open="true"] .companion-panel { box-shadow: -8px 0 24px rgb(
 .companion-empty strong { color: #343a4c; font-size: 13px; }
 .companion-empty small { max-width: 220px; font-size: 11px; line-height: 1.5; }
 
-.review-browser { display: flex; height: calc(100% - 72px); min-height: 0; flex-direction: column; }
+.review-browser { display: flex; min-height: 220px; flex: 1 1 auto; flex-direction: column; }
 .review-browser[hidden] { display: none; }
 .review-tabs { display: flex; height: 45px; padding: 0 14px; align-items: stretch; gap: 22px; border-bottom: 1px solid var(--companion-border); }
 .review-tabs button { position: relative; height: 44px; padding: 0 1px; border: 0; border-radius: 0; color: var(--companion-muted); background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; }
@@ -171,12 +209,16 @@ body[data-companion-open="true"] .companion-panel { box-shadow: -8px 0 24px rgb(
 .preview-panel {
   position: absolute;
   z-index: 2;
-  inset: 0 340px 0 auto;
+  inset: 0 var(--companion-panel-width) 0 auto;
   width: 520px;
   min-width: 0;
   border-left: 1px solid rgb(127 127 127 / 14%);
   color: #252a39;
   background: var(--toolbar-content-background);
+}
+
+@media (max-height: 720px) {
+  .pet-stage { height: 200px; flex-basis: 200px; }
 }
 .preview-panel[hidden] { display: none; }
 .preview-toolbar { display: flex; height: 58px; padding: 10px 12px 9px 16px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgb(127 127 127 / 13%); }

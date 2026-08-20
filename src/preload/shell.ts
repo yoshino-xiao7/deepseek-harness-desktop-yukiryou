@@ -9,6 +9,7 @@ import {
 } from '../shared/workspace-review.js';
 import {
   COMPANION_COMMAND_CHANNEL,
+  COMPANION_PANEL_DEFAULT_WIDTH,
   COMPANION_STATE_CHANNEL,
   type DesktopCompanionSnapshot,
   validatedDesktopCompanionSnapshot,
@@ -22,6 +23,17 @@ import {
   TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
   validatedSidebarWidth,
 } from '../shared/sidebar-width-sync.js';
+import {
+  PET_LIBRARY_STATE_CHANNEL,
+  type PetAssetSummary,
+  type PetLibrarySnapshot,
+  validatedPetLibrarySnapshot,
+} from '../shared/pet-library.js';
+import {
+  PET_STAGE_SURFACE_CHANNEL,
+  PET_STAGE_WAKE_CHANNEL,
+  validatedPetStageSurfaceSnapshot,
+} from '../shared/pet-stage-surface.js';
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
@@ -29,11 +41,38 @@ let pendingAppearance: DesktopAppearanceSnapshot | undefined;
 let companionState: DesktopCompanionSnapshot = {
   active: false,
   open: true,
+  preferredWidth: COMPANION_PANEL_DEFAULT_WIDTH,
   previewOpen: false,
   workspace: { status: 'none' },
 };
 const companionListeners = new Set<(snapshot: DesktopCompanionSnapshot) => void>();
 const reviewTargets = createReviewTargetStore();
+export interface PetStageSnapshot {
+  readonly enabled: boolean;
+  readonly asset?: PetAssetSummary;
+}
+let petStageState: PetStageSnapshot = Object.freeze({ enabled: false });
+const petStageListeners = new Set<(snapshot: PetStageSnapshot) => void>();
+
+ipcRenderer.on(PET_LIBRARY_STATE_CHANNEL, (_event, value: unknown) => {
+  const snapshot = validatedPetLibrarySnapshot(value);
+  if (snapshot === undefined) return;
+  petStageState = petStageSnapshot(snapshot);
+  for (const listener of petStageListeners) listener(petStageState);
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouPetStage', {
+  getSnapshot: (): PetStageSnapshot => petStageState,
+  subscribe: (listener: (snapshot: PetStageSnapshot) => void): (() => void) => {
+    petStageListeners.add(listener);
+    return () => petStageListeners.delete(listener);
+  },
+  presentSurface: (value: unknown): void => {
+    const snapshot = validatedPetStageSurfaceSnapshot(value);
+    if (snapshot !== undefined) ipcRenderer.send(PET_STAGE_SURFACE_CHANNEL, snapshot);
+  },
+  wake: (): void => ipcRenderer.send(PET_STAGE_WAKE_CHANNEL),
+});
 
 ipcRenderer.on(SHELL_REVIEW_TARGET_CHANNEL, (_event, value: WorkspaceReviewResponse) => {
   if (value?.kind !== 'preview') return;
@@ -59,12 +98,23 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
   subscribeReviewTarget: (listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): (() => void) => reviewTargets.subscribe(listener),
   toggle: (): void => ipcRenderer.send(COMPANION_COMMAND_CHANNEL, { kind: 'toggle' }),
   setPreviewOpen: (open: boolean): void => ipcRenderer.send(COMPANION_COMMAND_CHANNEL, { kind: 'preview', open: open === true }),
+  resize: (preferredWidth: number, commit = false): void => ipcRenderer.send(
+    COMPANION_COMMAND_CHANNEL,
+    { kind: commit ? 'resize-end' : 'resize', preferredWidth },
+  ),
   request: async (value: unknown): Promise<WorkspaceReviewResponse> => {
     const request = validatedWorkspaceReviewRequest(value);
     if (request === undefined) return { kind: 'unavailable', reason: 'invalid-node' };
     return ipcRenderer.invoke(WORKSPACE_REVIEW_REQUEST_CHANNEL, request) as Promise<WorkspaceReviewResponse>;
   },
 });
+
+function petStageSnapshot(snapshot: PetLibrarySnapshot): PetStageSnapshot {
+  const asset = snapshot.activePetId === undefined
+    ? snapshot.assets.find((candidate) => candidate.origin === 'built-in')
+    : snapshot.assets.find((candidate) => candidate.id === snapshot.activePetId);
+  return Object.freeze({ enabled: snapshot.enabled, ...(asset === undefined ? {} : { asset }) });
+}
 
 function applyToolbarWidth(): void {
   document.documentElement?.style.setProperty(

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "quality": 95,
+  "motions": {
+    "standing": {
+      "sourceBytes": 8645597,
+      "encodedBytes": 2548820,
+      "width": 2560,
+      "height": 2595
+    },
+    "drowsy": {
+      "sourceBytes": 5109711,
+      "encodedBytes": 1346852,
+      "width": 2560,
+      "height": 1384
+    },
+    "lying-down": {
+      "sourceBytes": 4167703,
+      "encodedBytes": 1111092,
+      "width": 2560,
+      "height": 1384
+    },
+    "sleeping": {
+      "sourceBytes": 5644690,
+      "encodedBytes": 1570728,
+      "width": 2560,
+      "height": 2076
+    },
+    "waking": {
+      "sourceBytes": 4332804,
+      "encodedBytes": 1148524,
+      "width": 2560,
+      "height": 1384
+    },
+    "rubbing-eyes": {
+      "sourceBytes": 4754762,
+      "encodedBytes": 1303750,
+      "width": 2560,
+      "height": 1384
+    },
+    "work-enter": {
+      "sourceBytes": 3553993,
+      "encodedBytes": 911230,
+      "width": 2560,
+      "height": 1038
+    },
+    "eating": {
+      "sourceBytes": 8570169,
+      "encodedBytes": 2252582,
+      "width": 2560,
+      "height": 2595
+    },
+    "work-exit": {
+      "sourceBytes": 3484683,
+      "encodedBytes": 909384,
+      "width": 2560,
+      "height": 1038
+    }
+  }
+}

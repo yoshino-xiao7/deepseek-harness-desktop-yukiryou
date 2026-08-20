@@ -33,7 +33,7 @@
 - Vitest 覆盖模块接口，Playwright Electron 覆盖端到端启动与窗口策略。
 - pnpm 作为仓库包管理器；CI 使用 `--frozen-lockfile`。
 
-不使用 React/Vue 创建第二套产品 UI。仅保留一个很小的本地启动/诊断页面，可用静态 HTML/CSS/TypeScript 实现。外观和关于页通过 Harness 官方 `settings.section` 插槽注册，继续使用 Harness 自己的设置弹窗、主题服务和本地化服务。
+不使用 React/Vue 创建第二套 Harness 产品 UI。本地静态 renderer 承载启动/诊断、44px 顶栏以及 Desktop Companion/Workspace Review；外观和关于页通过 Harness 官方 `settings.section` 插槽注册，继续使用 Harness 自己的设置弹窗、主题服务和本地化服务。规划中的宠物设置页复用同一官方 seam；动画在专用受限 PetPlayer view 中运行，并只显示在本地 Pet Stage Host 预留的 bounds 内。
 
 ## 深模块与接口
 
@@ -90,7 +90,12 @@ interface DesktopWindow {
 - “外观”调用官方 `ctx.theme.getTheme()` / `setTheme()`，因此浅色、深色、跟随系统及持久化只有一个事实来源。
 - 隔离 preload 将 Harness 最终解析出的明暗模式和两个桌面 chrome 颜色归一化后转发给本地顶栏；后续风格按 [外观扩展契约](./08-appearance-extension.md) 同时提供 Harness 令牌与顶栏令牌。
 - “关于”展示主进程提供的应用更新状态，以及构建时固定的 Harness、Node、pnpm 和 arm64 信息，不读取网页或系统敏感数据。
-- 扩展只注册 `settings.section`，不获得 Electron、Node、文件系统或通用 IPC 能力；它只能调用 preload 暴露的两个固定更新动作。
+- 规划中的“宠物”页只展示 Pet Library 元数据并发送 `import|select|remove|set-enabled` 判别命令；`import` 不接受路径，由主进程打开系统选择器。
+- 扩展只注册 `settings.section`，不获得 Electron、Node、文件系统或通用 IPC 能力；现有更新桥和未来 Pet Library 桥都保持独立、固定 schema，不能合并为通用 IPC。
+
+### `PetLibrary` / `PetDirector` / `PetPlayer`（规划中，尚未实现）
+
+Pet Library 管理 app-owned 内置/用户宠物、导入和选择；`PetPackageValidator` 在 staging 中验证声明式 `.yukipet` 后原子安装。`PetDirector` 只把 Harness activity 转为语义动作，Pet Stage Host 负责可信布局/气泡，`PetPlayer` 隐藏唯一动画运行时并位于专用非持久 session、仅含 one-shot MessagePort bootstrap preload、无父 DOM/Workspace bridge 的 sandboxed `WebContentsView`；页面主世界没有 Electron/Node API。四者的完整 Interface、尺寸状态与 Phase 6A–6E 见 [`11-pet-platform-plan.md`](11-pet-platform-plan.md)。
 
 ### `AppUpdater`
 
@@ -163,12 +168,12 @@ interface AppUpdater {
 │   │   │   └── app-updater.ts
 │   │   └── diagnostics/
 │   ├── preload/           # shell/Harness 两份最小隔离 preload
-│   └── renderer/          # 仅 Loading / Failure 本地页面
+│   └── renderer/          # Loading / Failure / 本地顶栏 / Desktop Companion；规划 Pet Stage
 ├── resources/
 │   ├── runtime/           # 构建时生成，不手工修改
 │   └── icons/
 ├── runtime/
-│   ├── desktop-settings-plugin/  # 外观/关于 Harness 扩展源码
+│   ├── desktop-settings-plugin/  # 外观/关于；规划 Pet Library 设置页
 │   ├── desktop-companion-plugin/ # 余额与后续 Companion seam
 │   └── desktop-extensions.patch.yml
 ├── scripts/

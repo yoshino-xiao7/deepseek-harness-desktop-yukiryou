@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   animatedReservedWidth,
   companionLayout,
+  resolvedCompanionPanelWidth,
   harnessContentBounds,
 } from './desktop-window-layout.js';
 
@@ -24,13 +25,19 @@ describe('integrated desktop window layout', () => {
   });
 
   it.each([
-    { width: 820, open: true, preview: false, expected: { overlay: true, reviewFocus: false, reservedWidth: 0 } },
-    { width: 980, open: true, preview: false, expected: { overlay: false, reviewFocus: false, reservedWidth: 340 } },
-    { width: 1180, open: true, preview: true, expected: { overlay: false, reviewFocus: true, reservedWidth: 340 } },
-    { width: 1319, open: true, preview: true, expected: { overlay: false, reviewFocus: true, reservedWidth: 340 } },
-    { width: 1320, open: true, preview: true, expected: { overlay: false, reviewFocus: false, reservedWidth: 860 } },
-    { width: 1480, open: true, preview: true, expected: { overlay: false, reviewFocus: false, reservedWidth: 860 } },
+    { width: 820, open: true, preview: false, expected: { overlay: true, reviewFocus: false, panelWidth: 380, reservedWidth: 0 } },
+    { width: 980, open: true, preview: false, expected: { overlay: false, reviewFocus: false, panelWidth: 380, reservedWidth: 380 } },
+    { width: 1180, open: true, preview: true, expected: { overlay: false, reviewFocus: true, panelWidth: 380, reservedWidth: 380 } },
+    { width: 1319, open: true, preview: true, expected: { overlay: false, reviewFocus: true, panelWidth: 380, reservedWidth: 380 } },
+    { width: 1320, open: true, preview: true, expected: { overlay: false, reviewFocus: false, panelWidth: 340, reservedWidth: 860 } },
+    { width: 1480, open: true, preview: true, expected: { overlay: false, reviewFocus: false, panelWidth: 380, reservedWidth: 900 } },
   ])('uses the intended responsive mode at $width px', ({ width, open, preview, expected }) => {
-    expect(companionLayout(width, open, preview)).toEqual(expected);
+    expect(companionLayout(width, open, preview, 380)).toEqual(expected);
+  });
+
+  it('dynamically clamps a preferred width without shrinking below the visible minimum', () => {
+    expect(resolvedCompanionPanelWidth(900, 560, false)).toBe(560);
+    expect(resolvedCompanionPanelWidth(980, 560, false)).toBe(500);
+    expect(resolvedCompanionPanelWidth(1320, 560, true)).toBe(340);
   });
 });

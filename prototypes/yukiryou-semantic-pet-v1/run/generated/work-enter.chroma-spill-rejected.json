@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "motion": "work-enter",
+  "durationMs": 1500,
+  "columns": 16,
+  "rows": 6,
+  "frameCount": 90,
+  "loop": false,
+  "mediaType": "image/png",
+  "atlas": "atlases/work-enter.png",
+  "synthesis": {
+    "atlas": "/Users/yukiryou/Documents/ChatGPT/deepseek/prototypes/yukiryou-semantic-pet-v1/run/generated/atlases/work-enter.png",
+    "engine": "apple-vision-optical-flow-r1-one-way-v2",
+    "height": 208,
+    "inputFrames": 6,
+    "loop": false,
+    "outputFrames": 90,
+    "status": "complete",
+    "width": 192
+  }
+}

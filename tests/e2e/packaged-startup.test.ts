@@ -5,17 +5,21 @@ import { _electron as electron, type ElectronApplication } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveE2eExecutablePath } from './executable-path.js';
+import { closeE2eElectronApplication } from './electron-lifecycle.js';
 
 describe('packaged Runtime startup', () => {
   let electronApp: ElectronApplication | undefined;
   let userData: string | undefined;
 
-  afterEach(async () => {
-    await electronApp?.close();
-    if (userData !== undefined) {
-      await rm(userData, { recursive: true, force: true });
-    }
-  });
+  afterEach(
+    async () => {
+      await closeE2eElectronApplication(electronApp);
+      if (userData !== undefined) {
+        await rm(userData, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
 
   it('starts the exact packaged application and reaches the Harness UI', async () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-startup-e2e-'));

@@ -1,6 +1,6 @@
 import { app, clipboard, dialog, Menu, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { release } from 'node:os';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,6 +9,7 @@ import { resolveRendererLocation } from './app-config.js';
 import { createAppLog, redact, type AppLog } from './diagnostics/app-log.js';
 import { createDiagnosticArchive } from './diagnostics/diagnostic-archive.js';
 import { recoverInvalidPreferences } from './preferences/preferences-recovery.js';
+import { openCompanionPreferenceStore } from './preferences/companion-preference-store.js';
 import {
   createRuntimeSupervisor,
   type RuntimeFailure,
@@ -35,6 +36,18 @@ import type { UpdateCommand } from '../shared/update-bridge.js';
 import type { AccountBalanceSnapshot } from '../shared/account-balance.js';
 import type { HarnessContextSnapshot } from '../shared/desktop-companion.js';
 import type { WorkspaceReviewRequest, WorkspaceReviewResponse } from '../shared/workspace-review.js';
+import {
+  type PetLibrary,
+  type PetLibraryCommand,
+  type PetLibraryResult,
+  type PetLibrarySnapshot,
+} from '../shared/pet-library.js';
+import { PET_PACKAGE_LIMITS } from '../shared/pet-package.js';
+import { loadBuiltInPetPreview } from './pet/built-in-pet-preview.js';
+import { openPetLibraryStore } from './pet/pet-library-store.js';
+import { openPetThumbnailStore, type PetThumbnailStore } from './pet/pet-thumbnail-store.js';
+import type { PetPlayerSelection } from './pet/pet-player-host.js';
+import { createPetRuntimeValidator } from './pet/pet-runtime-validator.js';
 
 const moduleDirectory = __dirname;
 const RELEASE_DOWNLOAD_URL =
@@ -52,6 +65,10 @@ export class AppCoordinator {
   #companionToken = '';
   #workspaceAuthorityRevision = 0;
   #workspaceInspector: WorkspaceInspector | undefined;
+  #petLibrary: PetLibrary | undefined;
+  #petThumbnailStore: PetThumbnailStore | undefined;
+  #builtInPetSelection: PetPlayerSelection | undefined;
+  #petPlayerSyncRevision = 0;
 
   async run(): Promise<void> {
     if (!app.requestSingleInstanceLock()) {
@@ -88,11 +105,28 @@ export class AppCoordinator {
       onError: (error) => this.#handleUpdaterError(error),
     });
 
+    const companionPreferences = await openCompanionPreferenceStore(join(userData, 'desktop.json'));
+    const petResourceRoot = app.isPackaged
+      ? join(process.resourcesPath, 'pets')
+      : join(app.getAppPath(), 'resources', 'pets');
+    const builtInPet = await loadBuiltInPetPreview({
+      archivePath: join(petResourceRoot, 'builtin', 'yukiryou-whale-maid-preview.yukipet'),
+      thumbnailPath: join(petResourceRoot, 'builtin', 'yukiryou-whale-maid-preview.png'),
+    });
+    this.#builtInPetSelection = builtInPet.selection;
+    this.#petThumbnailStore = openPetThumbnailStore([builtInPet.thumbnail]);
+    this.#log?.write(
+      'pet.builtin-preview',
+      `status=${builtInPet.summary.status} runtime=${builtInPet.selection?.runtime ?? 'unavailable'}`,
+    );
+
     const loadingLocation = rendererLocation();
     this.#window = createDesktopWindow({
       loadingUrl: loadingLocation,
       shellPreloadPath: join(moduleDirectory, 'shell-preload-entry.cjs'),
       harnessPreloadPath: join(moduleDirectory, 'harness-preload-entry.cjs'),
+      petPlayerPreloadPath: join(moduleDirectory, 'pet-player-preload-entry.cjs'),
+      petPlayerEntryUrl: petPlayerLocation(),
       onRetry: () => void this.restartRuntime(),
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
@@ -103,9 +137,40 @@ export class AppCoordinator {
       onWorkspaceReviewRequest: (request) => this.#handleWorkspaceReviewRequest(request),
       onHarnessReviewIntent: (intent) => this.#workspaceInspector?.previewChangedPath(intent.path, intent.historicalDiff)
         ?? Promise.resolve({ kind: 'unavailable', reason: 'no-workspace' }),
+      onPetLibraryRequest: (command) => this.#handlePetLibraryRequest(command),
+      onPetThumbnailRequest: (url) => this.#petThumbnailStore?.resolve(url)
+        ?? Promise.resolve({ status: 'not-found' }),
+      initialCompanionPreference: companionPreferences.getSnapshot(),
+      onCompanionPreferenceChange: (preference) => {
+        void companionPreferences.save(preference).catch((error: unknown) => {
+          this.#log?.write(
+            'companion.preference-save-failed',
+            error instanceof Error ? error.message : String(error),
+          );
+        });
+      },
       onRendererCrash: (target, reason) =>
         this.#log?.write('renderer.crashed', `target=${target} reason=${reason}`),
     });
+    this.#petLibrary = await openPetLibraryStore({
+      rootDirectory: join(userData, 'pets'),
+      builtInAssets: [builtInPet.summary],
+      developmentInboxEnabled: !app.isPackaged || process.env.DSH_DESKTOP_PET_IMPORT_DEV === '1',
+      chooseArchive: () => this.#choosePetArchive(),
+      runtimeValidator: createPetRuntimeValidator({
+        createProbe: () => {
+          if (this.#window === undefined) throw new Error('desktop window unavailable');
+          return this.#window.createPetRuntimeProbe();
+        },
+      }),
+    });
+    this.#petLibrary.subscribe((state) => {
+      this.#window?.setPetLibraryState(state);
+      void this.#syncPetPlayer(state);
+    });
+    const initialPetLibraryState = this.#petLibrary.getSnapshot();
+    this.#window.setPetLibraryState(initialPetLibraryState);
+    void this.#syncPetPlayer(initialPetLibraryState);
     this.#updater.subscribe((state) => {
       this.#log?.write('update.state', JSON.stringify(state));
       this.#window?.setUpdateState(state);
@@ -167,6 +232,56 @@ export class AppCoordinator {
       state.origin,
       force,
     );
+  }
+
+  async #handlePetLibraryRequest(command: PetLibraryCommand): Promise<PetLibraryResult> {
+    const library = this.#petLibrary;
+    if (library === undefined) return { status: 'rejected', code: 'inbox-disabled' };
+    if (command.kind === 'remove') {
+      const asset = library.getSnapshot().assets.find((candidate) => candidate.id === command.petId);
+      if (asset?.origin === 'imported') {
+        const confirmation = await dialog.showMessageBox({
+          type: 'warning',
+          buttons: ['取消', '移到废纸篓'],
+          defaultId: 0,
+          cancelId: 0,
+          title: '移除宠物资产',
+          message: `要移除“${asset.name}”吗？`,
+          detail: '资产会先进入应用的可恢复废纸篓，不会立即永久删除。',
+        });
+        if (confirmation.response !== 1) return { status: 'cancelled' };
+      }
+    }
+    return library.request(command);
+  }
+
+  async #syncPetPlayer(state: PetLibrarySnapshot): Promise<void> {
+    const window = this.#window;
+    if (window === undefined) return;
+    const revision = ++this.#petPlayerSyncRevision;
+    const selection = state.enabled && state.activePetId === this.#builtInPetSelection?.id
+      ? this.#builtInPetSelection
+      : undefined;
+    const result = await window.setPetPlayerAsset(selection);
+    if (revision !== this.#petPlayerSyncRevision) return;
+    if (selection !== undefined && result !== 'ready') {
+      this.#log?.write('pet.player-unavailable', `id=${selection.id}`);
+    }
+  }
+
+  async #choosePetArchive(): Promise<Uint8Array | undefined> {
+    const selection = await dialog.showOpenDialog({
+      title: '导入宠物资产',
+      properties: ['openFile'],
+      filters: [{ name: 'YukiRyou Pet Package', extensions: ['yukipet'] }],
+    });
+    const selectedPath = selection.canceled ? undefined : selection.filePaths[0];
+    if (selectedPath === undefined) return undefined;
+    const metadata = await stat(selectedPath);
+    if (!metadata.isFile() || metadata.size > PET_PACKAGE_LIMITS.archiveBytes) {
+      throw new Error('selected pet package is not a bounded regular file');
+    }
+    return readFile(selectedPath);
   }
 
   async #handleHarnessContext(snapshot: HarnessContextSnapshot): Promise<void> {
@@ -436,7 +551,9 @@ export class AppCoordinator {
     this.#window?.dispose();
     this.#updater?.dispose();
     await this.#log?.close();
-    app.quit();
+    // All owned resources are already stopped above. Do not wait for Chromium
+    // session activity (including custom protocol requests) to drain again.
+    app.exit(0);
   }
 
   async #startRuntime(): Promise<void> {
@@ -512,6 +629,17 @@ function rendererLocation(): string {
   return resolveRendererLocation({
     isPackaged: app.isPackaged,
     developmentServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL,
+    packagedRendererUrl,
+  }).value;
+}
+
+function petPlayerLocation(): string {
+  const packagedRendererUrl = pathToFileURL(
+    join(moduleDirectory, `../renderer/${PET_PLAYER_VITE_NAME}/index.html`),
+  ).toString();
+  return resolveRendererLocation({
+    isPackaged: app.isPackaged,
+    developmentServerUrl: PET_PLAYER_VITE_DEV_SERVER_URL,
     packagedRendererUrl,
   }).value;
 }

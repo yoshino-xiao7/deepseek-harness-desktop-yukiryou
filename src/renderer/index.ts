@@ -1,4 +1,13 @@
-import type { DesktopCompanionSnapshot } from '../shared/desktop-companion.js';
+import {
+  COMPANION_PANEL_DEFAULT_WIDTH,
+  COMPANION_PANEL_MAX_WIDTH,
+  COMPANION_PANEL_MIN_WIDTH,
+  clampCompanionPreferredWidth,
+  resolvedCompanionPanelWidth,
+  type DesktopCompanionSnapshot,
+} from '../shared/desktop-companion.js';
+import type { PetAssetSummary } from '../shared/pet-library.js';
+import type { PetStageSurfaceSnapshot } from '../shared/pet-stage-surface.js';
 import type {
   WorkspaceNode,
   WorkspaceReviewRequest,
@@ -15,6 +24,12 @@ const failed = parameters.get('state') === 'failure';
 const status = document.querySelector<HTMLElement>('[data-testid="startup-status"]');
 const companionToggle = document.querySelector<HTMLButtonElement>('[data-testid="companion-toggle"]');
 const companionPanel = document.querySelector<HTMLElement>('[data-testid="companion-panel"]');
+const companionResize = document.querySelector<HTMLElement>('[data-testid="companion-resize"]');
+const petStage = document.querySelector<HTMLElement>('[data-testid="pet-stage"]');
+const petPlayerSurface = document.querySelector<HTMLElement>('[data-testid="pet-player-surface"]');
+const petStageThumbnail = document.querySelector<HTMLImageElement>('[data-testid="pet-stage-thumbnail"]');
+const petStageName = document.querySelector<HTMLElement>('[data-testid="pet-stage-name"]');
+const petBubble = document.querySelector<HTMLElement>('[data-testid="pet-bubble"]');
 const companionTitle = document.querySelector<HTMLElement>('[data-testid="companion-workspace-title"]');
 const companionRunning = document.querySelector<HTMLElement>('[data-testid="companion-running"]');
 const companionEmpty = document.querySelector<HTMLElement>('[data-testid="companion-empty"]');
@@ -32,6 +47,9 @@ let loadedWorkspaceId: string | undefined;
 let reviewLoadRevision = 0;
 let currentPreview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined;
 let showingMarkdownSource = false;
+let currentCompanionSnapshot: DesktopCompanionSnapshot | undefined;
+let wakeGeneration = 0;
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 const companionBridge = (
   window as unknown as {
     deepSeekYukiRyouCompanion?: {
@@ -39,13 +57,26 @@ const companionBridge = (
       subscribe(listener: (snapshot: DesktopCompanionSnapshot) => void): () => void;
       toggle(): void;
       setPreviewOpen(open: boolean): void;
+      resize(preferredWidth: number, commit?: boolean): void;
       request(request: WorkspaceReviewRequest): Promise<WorkspaceReviewResponse>;
       subscribeReviewTarget(listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): () => void;
     };
   }
 ).deepSeekYukiRyouCompanion;
+const petStageBridge = (
+  window as unknown as {
+    deepSeekYukiRyouPetStage?: {
+      getSnapshot(): { readonly enabled: boolean; readonly asset?: PetAssetSummary };
+      subscribe(listener: (snapshot: { readonly enabled: boolean; readonly asset?: PetAssetSummary }) => void): () => void;
+      presentSurface(snapshot: PetStageSurfaceSnapshot): void;
+      wake(): void;
+    };
+  }
+).deepSeekYukiRyouPetStage;
 
 function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
+  currentCompanionSnapshot = snapshot;
+  applyCompanionWidth(snapshot);
   document.body.dataset.companionActive = String(snapshot.active);
   document.body.dataset.companionOpen = String(snapshot.active && snapshot.open);
   if (companionToggle !== null) {
@@ -67,6 +98,7 @@ function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
   }
   const running = workspace.status !== 'none' && workspace.running;
   if (companionRunning !== null) companionRunning.hidden = !running;
+  if (petBubble !== null) petBubble.hidden = !running;
   if (companionEmpty !== null) {
     const heading = companionEmpty.querySelector('strong');
     const detail = companionEmpty.querySelector('small');
@@ -92,6 +124,38 @@ function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
     if (companionEmpty !== null) companionEmpty.hidden = false;
     closePreview();
   }
+  window.requestAnimationFrame(reportPetPlayerSurface);
+  window.setTimeout(reportPetPlayerSurface, 240);
+}
+
+function applyCompanionWidth(snapshot: DesktopCompanionSnapshot): void {
+  const preferredWidth = snapshot.preferredWidth ?? COMPANION_PANEL_DEFAULT_WIDTH;
+  const panelWidth = resolvedCompanionPanelWidth(
+    window.innerWidth,
+    preferredWidth,
+    snapshot.previewOpen && window.innerWidth >= 1_320,
+  );
+  const maximumWidth = resolvedCompanionPanelWidth(
+    window.innerWidth,
+    COMPANION_PANEL_MAX_WIDTH,
+    snapshot.previewOpen && window.innerWidth >= 1_320,
+  );
+  document.documentElement.style.setProperty('--companion-panel-width', `${String(panelWidth)}px`);
+  if (companionResize !== null) {
+    companionResize.setAttribute('aria-valuemin', String(COMPANION_PANEL_MIN_WIDTH));
+    companionResize.setAttribute('aria-valuemax', String(maximumWidth));
+    companionResize.setAttribute('aria-valuenow', String(panelWidth));
+  }
+}
+
+function renderPetStage(snapshot: { readonly enabled: boolean; readonly asset?: PetAssetSummary }): void {
+  const visible = snapshot.enabled && snapshot.asset !== undefined;
+  if (petStage === null) return;
+  petStage.hidden = !visible;
+  reportPetPlayerSurface();
+  if (!visible || snapshot.asset === undefined) return;
+  if (petStageThumbnail !== null) petStageThumbnail.src = snapshot.asset.thumbnailUrl;
+  if (petStageName !== null) petStageName.textContent = snapshot.asset.name;
 }
 
 if (companionBridge !== undefined) {
@@ -109,6 +173,90 @@ if (companionBridge !== undefined) {
     renderPreview();
   });
   companionToggle?.addEventListener('click', () => companionBridge.toggle());
+  companionResize?.addEventListener('pointerdown', beginCompanionResize);
+  companionResize?.addEventListener('keydown', resizeCompanionWithKeyboard);
+  companionResize?.addEventListener('dblclick', () => companionBridge.resize(COMPANION_PANEL_DEFAULT_WIDTH, true));
+}
+
+if (petStageBridge !== undefined) {
+  renderPetStage(petStageBridge.getSnapshot());
+  petStageBridge.subscribe(renderPetStage);
+}
+
+const petSurfaceObserver = typeof ResizeObserver === 'undefined' || petPlayerSurface === null
+  ? undefined
+  : new ResizeObserver(() => reportPetPlayerSurface());
+if (petSurfaceObserver !== undefined && petPlayerSurface !== null) {
+  petSurfaceObserver.observe(petPlayerSurface);
+}
+reducedMotionQuery.addEventListener('change', reportPetPlayerSurface);
+
+window.addEventListener('resize', () => {
+  if (currentCompanionSnapshot !== undefined) applyCompanionWidth(currentCompanionSnapshot);
+  reportPetPlayerSurface();
+});
+
+function reportPetPlayerSurface(): void {
+  if (petStageBridge === undefined || petStage === null || petPlayerSurface === null || petStage.hidden) {
+    petStageBridge?.presentSurface({ visible: false });
+    return;
+  }
+  const bounds = petPlayerSurface.getBoundingClientRect();
+  petStageBridge.presentSurface({
+    visible: true,
+    bounds: {
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height),
+    },
+    devicePixelRatio: window.devicePixelRatio,
+    reducedMotion: reducedMotionQuery.matches,
+  });
+}
+
+function beginCompanionResize(event: PointerEvent): void {
+  if (companionBridge === undefined || companionResize === null || currentCompanionSnapshot === undefined) return;
+  event.preventDefault();
+  const startX = event.clientX;
+  const startWidth = currentCompanionSnapshot.preferredWidth ?? COMPANION_PANEL_DEFAULT_WIDTH;
+  companionResize.setPointerCapture(event.pointerId);
+  const move = (next: PointerEvent): void => {
+    companionBridge.resize(clampCompanionPreferredWidth(startWidth + startX - next.clientX));
+  };
+  const finish = (next: PointerEvent): void => {
+    companionResize.releasePointerCapture(next.pointerId);
+    companionResize.removeEventListener('pointermove', move);
+    companionResize.removeEventListener('pointerup', finish);
+    companionResize.removeEventListener('pointercancel', finish);
+    companionBridge.resize(clampCompanionPreferredWidth(startWidth + startX - next.clientX), true);
+  };
+  companionResize.addEventListener('pointermove', move);
+  companionResize.addEventListener('pointerup', finish);
+  companionResize.addEventListener('pointercancel', finish);
+}
+
+function resizeCompanionWithKeyboard(event: KeyboardEvent): void {
+  if (companionBridge === undefined || currentCompanionSnapshot === undefined) return;
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  const step = event.shiftKey ? 48 : 16;
+  const current = currentCompanionSnapshot.preferredWidth ?? COMPANION_PANEL_DEFAULT_WIDTH;
+  companionBridge.resize(current + (event.key === 'ArrowLeft' ? step : -step), true);
+}
+
+petStage?.addEventListener('click', wakePetStage);
+petStage?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    wakePetStage();
+  }
+});
+
+function wakePetStage(): void {
+  wakeGeneration += 1;
+  if (petStage !== null) petStage.dataset.wakeGeneration = String(wakeGeneration);
+  petStageBridge?.wake();
 }
 
 async function loadOverview(workspaceId: string): Promise<void> {

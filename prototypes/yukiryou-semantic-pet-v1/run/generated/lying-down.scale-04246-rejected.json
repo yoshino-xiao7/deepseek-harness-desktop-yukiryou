@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "motion": "lying-down",
+  "durationMs": 2000,
+  "columns": 16,
+  "rows": 8,
+  "frameCount": 120,
+  "loop": false,
+  "mediaType": "image/png",
+  "atlas": "atlases/lying-down.png",
+  "synthesis": {
+    "atlas": "/Users/yukiryou/Documents/ChatGPT/deepseek/prototypes/yukiryou-semantic-pet-v1/run/generated/atlases/lying-down.png",
+    "engine": "apple-vision-optical-flow-r1-one-way-v2",
+    "height": 208,
+    "inputFrames": 6,
+    "loop": false,
+    "outputFrames": 120,
+    "status": "complete",
+    "width": 192
+  }
+}

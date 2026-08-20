@@ -5,6 +5,7 @@ import { _electron as electron, type ElectronApplication } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveE2eExecutablePath } from './executable-path.js';
+import { closeE2eElectronApplication } from './electron-lifecycle.js';
 
 const executablePath = resolveE2eExecutablePath();
 
@@ -12,12 +13,15 @@ describe('renderer recovery', () => {
   let electronApp: ElectronApplication | undefined;
   let userData: string | undefined;
 
-  afterEach(async () => {
-    await electronApp?.close();
-    if (userData !== undefined) {
-      await rm(userData, { recursive: true, force: true });
-    }
-  });
+  afterEach(
+    async () => {
+      await closeE2eElectronApplication(electronApp);
+      if (userData !== undefined) {
+        await rm(userData, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
 
   it(
     'recovers Harness and toolbar renderers without restarting the other',
@@ -81,7 +85,7 @@ describe('renderer recovery', () => {
           );
           const toolbar = webContents
             .getAllWebContents()
-            .find((contents) => contents.getURL().startsWith('file:'));
+            .find((contents) => contents.getURL().includes('/main_window/'));
           toolbar?.forcefullyCrashRenderer();
         }),
         'crash toolbar renderer',
@@ -123,7 +127,7 @@ async function rendererReadiness(
     const harness = contents.find((item) =>
       item.getURL().startsWith('http://127.0.0.1:'),
     );
-    const toolbar = contents.find((item) => item.getURL().startsWith('file:'));
+    const toolbar = contents.find((item) => item.getURL().includes('/main_window/'));
     return {
       harness: await isReady(harness),
       toolbar: await isReady(toolbar),
@@ -160,7 +164,7 @@ async function toolbarRecovered(electronApp: ElectronApplication): Promise<boole
   return electronApp.evaluate(async ({ webContents }) => {
     const toolbar = webContents
       .getAllWebContents()
-      .find((contents) => contents.getURL().startsWith('file:'));
+      .find((contents) => contents.getURL().includes('/main_window/'));
     try {
       return (await toolbar?.executeJavaScript('document.readyState')) === 'complete';
     } catch {

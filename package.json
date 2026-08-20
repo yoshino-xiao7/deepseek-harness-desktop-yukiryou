@@ -44,6 +44,10 @@
     "test:soak:app:extended": "DSH_PACKAGED_SOAK_DURATION_MS=18000000 vitest run tests/performance/packaged-app-soak.test.ts",
     "test:e2e": "vitest run tests/e2e --no-file-parallelism",
     "test:watch": "vitest",
+    "pet:spike": "node prototypes/pet-runtime-spike/cli.mjs",
+    "pet:authoring:prepare": "node scripts/prepare-yukiryou-pet-authoring.mjs",
+    "pet:authoring:synthesize": "node scripts/synthesize-yukiryou-pet-motion.mjs",
+    "pet:authoring:synthesize-all": "node scripts/synthesize-yukiryou-pet-all.mjs",
     "runtime:vendor": "node scripts/vendor-runtime.ts",
     "runtime:verify": "node scripts/verify-runtime.ts",
     "release:mac:candidate": "node scripts/prepare-release-candidate.ts",
@@ -62,7 +66,9 @@
     "@electron-forge/plugin-vite": "7.11.2",
     "@electron-forge/shared-types": "7.11.2",
     "@eslint/js": "10.0.1",
+    "@rive-app/canvas-lite": "2.40.0",
     "@types/node": "26.2.0",
+    "@types/yauzl": "2.10.3",
     "electron": "43.4.0",
     "eslint": "10.8.1",
     "playwright": "1.62.1",
@@ -72,6 +78,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "yaml": "2.9.0"
+    "yaml": "2.9.0",
+    "yauzl": "2.10.0"
   }
 }

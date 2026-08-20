@@ -6,7 +6,8 @@
 
 1. DeepSeek Harness 的组件、页面和状态色。
 2. Electron 本地 44px 顶栏的侧栏区域与内容区域。
-3. 浅色、深色和跟随系统下的最终解析结果。
+3. Desktop Companion、Workspace Review，以及规划中的 Pet Library 设置页与 Pet Stage DOM chrome。
+4. 浅色、深色和跟随系统下的最终解析结果。
 
 本地顶栏与 Harness 位于两个隔离的 webContents，不能共享 DOM 或直接读取彼此的 CSS。应用使用一条经过校验的外观同步通道连接二者。
 
@@ -76,5 +77,6 @@ interface DesktopStyleDefinition {
 - 顶栏两段颜色与 Harness 对应区域一致。
 - 重启应用后风格选择恢复。
 - 未向 Harness 暴露 Electron/Node 能力，IPC 仍只接受归一化颜色。
+- 宠物阶段需额外验证 Pet Library 卡片、Pet Stage 边框/气泡、disabled/error/focus 状态和 reduced-motion 在浅色、深色、跟随系统中仍与 Harness token 一致；角色资产本身不被主题滤镜任意改色。
 
 当前端到端测试已经覆盖深色切换后 Harness 与顶栏同步；新增风格时应在同一测试 seam 上补充预设选择与重启持久化断言。

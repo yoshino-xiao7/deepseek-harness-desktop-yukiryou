@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "quality": 95,
+  "motions": {
+    "standing": {
+      "sourceBytes": 8645597,
+      "encodedBytes": 1799828,
+      "width": 2048,
+      "height": 2085,
+      "changedAdjacentPairs": 239
+    },
+    "drowsy": {
+      "sourceBytes": 5109711,
+      "encodedBytes": 944932,
+      "width": 2048,
+      "height": 1112,
+      "changedAdjacentPairs": 119
+    },
+    "lying-down": {
+      "sourceBytes": 4167703,
+      "encodedBytes": 783386,
+      "width": 2048,
+      "height": 1112,
+      "changedAdjacentPairs": 119
+    },
+    "sleeping": {
+      "sourceBytes": 5644690,
+      "encodedBytes": 1103562,
+      "width": 2048,
+      "height": 1668,
+      "changedAdjacentPairs": 179
+    },
+    "waking": {
+      "sourceBytes": 4332804,
+      "encodedBytes": 808674,
+      "width": 2048,
+      "height": 1112,
+      "changedAdjacentPairs": 119
+    },
+    "rubbing-eyes": {
+      "sourceBytes": 4754762,
+      "encodedBytes": 920262,
+      "width": 2048,
+      "height": 1112,
+      "changedAdjacentPairs": 119
+    },
+    "work-enter": {
+      "sourceBytes": 3553993,
+      "encodedBytes": 639436,
+      "width": 2048,
+      "height": 834,
+      "changedAdjacentPairs": 89
+    },
+    "eating": {
+      "sourceBytes": 8570169,
+      "encodedBytes": 1576918,
+      "width": 2048,
+      "height": 2085,
+      "changedAdjacentPairs": 239
+    },
+    "work-exit": {
+      "sourceBytes": 3484683,
+      "encodedBytes": 642264,
+      "width": 2048,
+      "height": 834,
+      "changedAdjacentPairs": 89
+    }
+  }
+}

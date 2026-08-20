@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  COMPANION_PANEL_DEFAULT_WIDTH,
+  COMPANION_PANEL_MIN_WIDTH,
+  clampCompanionPreferredWidth,
   transitionCompanion,
   transitionCompanionWorkspace,
   validatedHarnessContext,
@@ -22,11 +25,13 @@ describe('Harness context boundary', () => {
     let state: DesktopCompanionSnapshot = {
       active: true,
       open: true,
+      preferredWidth: COMPANION_PANEL_DEFAULT_WIDTH,
       previewOpen: false,
       workspace: { status: 'ready', workspaceId: 'workspace-1', title: 'Project', running: false },
     };
     for (let cycle = 0; cycle < 100; cycle += 1) {
       state = transitionCompanion(state, { kind: 'preview', open: true });
+      state = transitionCompanion(state, { kind: 'resize', preferredWidth: 100 });
       state = transitionCompanionWorkspace(state, { status: 'authorizing', running: false });
       const workspaceId = `workspace-${String((cycle % 2) + 1)}`;
       state = transitionCompanionWorkspace(state, { status: 'ready', workspaceId, title: `Project ${workspaceId}`, running: false });
@@ -37,6 +42,7 @@ describe('Harness context boundary', () => {
     expect(state).toEqual({
       active: true,
       open: true,
+      preferredWidth: COMPANION_PANEL_MIN_WIDTH,
       previewOpen: false,
       workspace: { status: 'ready', workspaceId: 'workspace-2', title: 'Project workspace-2', running: false },
     });
@@ -46,6 +52,7 @@ describe('Harness context boundary', () => {
     const state: DesktopCompanionSnapshot = {
       active: true,
       open: true,
+      preferredWidth: COMPANION_PANEL_DEFAULT_WIDTH,
       previewOpen: true,
       workspace: { status: 'ready', workspaceId: 'workspace-1', title: 'Old project', running: false },
     };
@@ -53,8 +60,28 @@ describe('Harness context boundary', () => {
     expect(transitionCompanionWorkspace(state, { status: 'authorizing', running: false })).toEqual({
       active: true,
       open: true,
+      preferredWidth: COMPANION_PANEL_DEFAULT_WIDTH,
       previewOpen: false,
       workspace: { status: 'authorizing', running: false },
     });
+  });
+
+  it('clamps resizing without changing open state and restores the last width after toggling', () => {
+    const initial: DesktopCompanionSnapshot = {
+      active: true,
+      open: true,
+      preferredWidth: COMPANION_PANEL_DEFAULT_WIDTH,
+      previewOpen: false,
+      workspace: { status: 'none' },
+    };
+    const minimum = transitionCompanion(initial, { kind: 'resize', preferredWidth: 1 });
+    expect(minimum).toMatchObject({ open: true, preferredWidth: COMPANION_PANEL_MIN_WIDTH });
+    const closed = transitionCompanion(minimum, { kind: 'toggle' });
+    expect(closed).toMatchObject({ open: false, preferredWidth: COMPANION_PANEL_MIN_WIDTH });
+    expect(transitionCompanion(closed, { kind: 'toggle' })).toMatchObject({
+      open: true,
+      preferredWidth: COMPANION_PANEL_MIN_WIDTH,
+    });
+    expect(clampCompanionPreferredWidth(Number.POSITIVE_INFINITY)).toBe(COMPANION_PANEL_DEFAULT_WIDTH);
   });
 });

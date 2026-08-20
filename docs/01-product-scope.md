@@ -54,6 +54,7 @@
 - 不保证兼容任意用户自行替换的 dsh 版本。
 - V1 不做多窗口、多运行时实例和移动端远程控制。
 - Desktop Companion 不复制 Harness 的 Agent、会话、工具详情或设置 UI；Workspace Review 第一版不保存、删除、撤销、stage 或 commit。
+- 用户宠物只能以经过校验的声明式本地资产包导入；宠物包不是插件，不能执行代码、联网或取得 Workspace 权限。
 
 ## V1 验收标准
 
@@ -72,3 +73,4 @@
 - 菜单栏常驻模式和启动时自动运行。
 - 经过兼容性检查的高级“切换运行时版本”功能。
 - 面向桌面能力的官方 dsh 插件，而不是向 Harness 页面注入不稳定 DOM 脚本。
+- 设置中的 Pet Library、可调整但具有最小可见宽度的 Pet Stage、连续动画官方宠物，以及从角色参考图与自然语言自动生成宠物包的制作流程；Phase 6D 先验证该流程，格式稳定后再作为 Pet Authoring Skill 公开，详见 [`11-pet-platform-plan.md`](11-pet-platform-plan.md)。

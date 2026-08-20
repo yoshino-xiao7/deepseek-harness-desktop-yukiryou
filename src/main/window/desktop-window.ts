@@ -14,6 +14,7 @@ import {
 import {
   COMPANION_COMMAND_CHANNEL,
   COMPANION_STATE_CHANNEL,
+  COMPANION_PANEL_DEFAULT_WIDTH,
   HARNESS_CONTEXT_CHANNEL,
   type CompanionWorkspaceSnapshot,
   type DesktopCompanionSnapshot,
@@ -47,6 +48,14 @@ import {
 } from '../../shared/update-bridge.js';
 import { createDesktopWindowOptions } from './desktop-window-options.js';
 import {
+  PET_LIBRARY_REQUEST_CHANNEL,
+  PET_LIBRARY_STATE_CHANNEL,
+  parsePetLibraryCommand,
+  type PetLibraryCommand,
+  type PetLibraryResult,
+  type PetLibrarySnapshot,
+} from '../../shared/pet-library.js';
+import {
   animatedReservedWidth,
   companionLayout,
   COMPANION_LAYOUT_ANIMATION_MS,
@@ -62,6 +71,22 @@ import {
   createTrustedHarnessOrigin,
   type TrustedHarnessOrigin,
 } from './trusted-navigation.js';
+import type { PetThumbnailResponse } from '../pet/pet-thumbnail-store.js';
+import type { CompanionPanelPreference } from '../preferences/companion-preference-store.js';
+import {
+  PET_STAGE_SURFACE_CHANNEL,
+  PET_STAGE_WAKE_CHANNEL,
+  type PetStageSurfaceSnapshot,
+  validatedPetStageSurfaceSnapshot,
+} from '../../shared/pet-stage-surface.js';
+import {
+  createPetPlayerHost,
+  type PetPlayerHost,
+  type PetPlayerSelection,
+} from '../pet/pet-player-host.js';
+import { createPetPlayerRealm } from '../pet/pet-player-realm.js';
+import { createPetPlayerProbe } from '../pet/pet-player-probe.js';
+import type { PetRuntimeProbe } from '../pet/pet-runtime-validator.js';
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
@@ -71,6 +96,9 @@ export interface DesktopWindow {
   reveal(): void;
   setUpdateState(state: DesktopUpdateState): void;
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void;
+  setPetLibraryState(state: PetLibrarySnapshot): void;
+  setPetPlayerAsset(selection?: PetPlayerSelection): Promise<'ready' | 'unavailable'>;
+  createPetRuntimeProbe(): PetRuntimeProbe;
   dispose(): void;
 }
 
@@ -78,6 +106,8 @@ export interface DesktopWindowOptions {
   readonly loadingUrl: string;
   readonly shellPreloadPath: string;
   readonly harnessPreloadPath: string;
+  readonly petPlayerPreloadPath: string;
+  readonly petPlayerEntryUrl: string;
   readonly onRetry: () => void;
   readonly onOpenLogs: () => void;
   readonly onCopyDiagnostics: () => void;
@@ -91,6 +121,10 @@ export interface DesktopWindowOptions {
     request: WorkspaceReviewRequest,
   ) => Promise<WorkspaceReviewResponse>;
   readonly onHarnessReviewIntent: (intent: ChangedFileReviewIntent) => Promise<WorkspaceReviewResponse>;
+  readonly onPetLibraryRequest: (command: PetLibraryCommand) => Promise<PetLibraryResult>;
+  readonly onPetThumbnailRequest: (url: string) => Promise<PetThumbnailResponse>;
+  readonly initialCompanionPreference: CompanionPanelPreference;
+  readonly onCompanionPreferenceChange: (preference: CompanionPanelPreference) => void;
   readonly onRendererCrash: (target: RendererTarget, reason: string) => void;
 }
 
@@ -111,19 +145,19 @@ class ElectronDesktopWindow implements DesktopWindow {
   #sidebarWidth: number | undefined;
   #appearance: ReturnType<typeof validatedAppearanceSnapshot>;
   #updateState: DesktopUpdateState | undefined;
+  #petLibraryState: PetLibrarySnapshot | undefined;
+  #petStageSurface: PetStageSurfaceSnapshot = { visible: false };
+  #petPlayerSelectionId: string | undefined;
+  readonly #petPlayerHost: PetPlayerHost;
   #balanceRequestRevision = 0;
-  #companionState: DesktopCompanionSnapshot = {
-    active: false,
-    open: true,
-    previewOpen: false,
-    workspace: { status: 'none' },
-  };
+  #companionState: DesktopCompanionSnapshot;
   #lastHarnessContextRevision = -1;
   #contextRateWindowStartedAt = 0;
   #contextRateCount = 0;
   #reservedRightWidth = 0;
   #layoutAnimationRevision = 0;
   #layoutAnimationTimer: ReturnType<typeof setTimeout> | undefined;
+  #petThumbnailProtocolInstalled = false;
   readonly #rendererRecovery = createRendererRecoveryPolicy(
     [250, 1_000],
     30_000,
@@ -133,9 +167,17 @@ class ElectronDesktopWindow implements DesktopWindow {
   constructor(options: DesktopWindowOptions) {
     this.#options = options;
     this.#loadingUrl = options.loadingUrl;
+    this.#companionState = {
+      active: false,
+      open: options.initialCompanionPreference.open,
+      preferredWidth: options.initialCompanionPreference.preferredWidth,
+      previewOpen: false,
+      workspace: { status: 'none' },
+    };
     this.#window = new BrowserWindow(
       createDesktopWindowOptions(options.shellPreloadPath),
     );
+    this.#petPlayerHost = createPetPlayerHost(() => this.#createPetPlayerRealm());
     this.#harnessView = new WebContentsView({
       webPreferences: {
         preload: options.harnessPreloadPath,
@@ -146,6 +188,7 @@ class ElectronDesktopWindow implements DesktopWindow {
       },
     });
     this.#window.contentView.addChildView(this.#harnessView);
+    this.#installPetThumbnailProtocol();
     this.#harnessView.setVisible(false);
     this.#layoutHarnessView();
 
@@ -181,6 +224,8 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#installCompanionBridge();
     this.#installWorkspaceReviewBridge();
     this.#installHarnessReviewIntentBridge();
+    this.#installPetLibraryBridge();
+    this.#installPetStageSurfaceBridge();
   }
 
   async showLoading(): Promise<void> {
@@ -190,6 +235,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#companionState = { ...this.#companionState, active: false, previewOpen: false, workspace: { status: 'none' } };
     this.#sendCompanionState();
     this.#harnessView.setVisible(false);
+    this.#presentPetPlayer();
     await this.#window.loadURL(this.#loadingUrl);
   }
 
@@ -212,6 +258,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#companionState = { ...this.#companionState, active: false, previewOpen: false, workspace: { status: 'none' } };
     this.#sendCompanionState();
     this.#harnessView.setVisible(false);
+    this.#presentPetPlayer();
     const location = new URL(this.#loadingUrl);
     location.searchParams.set('state', 'failure');
     location.searchParams.set('code', failure.code);
@@ -245,12 +292,59 @@ class ElectronDesktopWindow implements DesktopWindow {
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void {
     this.#companionState = transitionCompanionWorkspace(this.#companionState, state);
     this.#sendCompanionState();
+    this.#presentPetPlayer();
+  }
+
+  setPetLibraryState(state: PetLibrarySnapshot): void {
+    this.#petLibraryState = state;
+    const active = state.activePetId === undefined
+      ? undefined
+      : state.assets.find((asset) => asset.id === state.activePetId);
+    if (!state.enabled || active?.status !== 'ready' || active.id !== this.#petPlayerSelectionId) {
+      this.#petPlayerSelectionId = undefined;
+      void this.#petPlayerHost.select();
+    }
+    if (!this.#harnessView.webContents.isDestroyed()) {
+      this.#harnessView.webContents.send(PET_LIBRARY_STATE_CHANNEL, state);
+    }
+    if (!this.#window.webContents.isDestroyed()) {
+      this.#window.webContents.send(PET_LIBRARY_STATE_CHANNEL, state);
+    }
+    this.#presentPetPlayer();
+  }
+
+  async setPetPlayerAsset(selection?: PetPlayerSelection): Promise<'ready' | 'unavailable'> {
+    const activeId = this.#petLibraryState?.activePetId;
+    const active = this.#petLibraryState?.assets.find((asset) => asset.id === activeId);
+    if (selection === undefined || active?.status !== 'ready' || selection.id !== activeId) {
+      this.#petPlayerSelectionId = undefined;
+      await this.#petPlayerHost.select();
+      this.#presentPetPlayer();
+      return 'unavailable';
+    }
+    this.#petPlayerSelectionId = selection.id;
+    const result = await this.#petPlayerHost.select(selection);
+    if (result !== 'ready' && this.#petPlayerSelectionId === selection.id) {
+      this.#petPlayerSelectionId = undefined;
+    }
+    this.#presentPetPlayer();
+    return result;
+  }
+
+  createPetRuntimeProbe(): PetRuntimeProbe {
+    return createPetPlayerProbe(() => this.#createPetPlayerRealm());
   }
 
   dispose(): void {
     this.#disposing = true;
     this.#cancelLayoutAnimation();
+    this.#petPlayerHost.dispose();
     ipcMain.removeHandler(WORKSPACE_REVIEW_REQUEST_CHANNEL);
+    ipcMain.removeHandler(PET_LIBRARY_REQUEST_CHANNEL);
+    if (this.#petThumbnailProtocolInstalled) {
+      this.#harnessView.webContents.session.protocol.unhandle('dsh-pet');
+      this.#petThumbnailProtocolInstalled = false;
+    }
     this.#window.contentView.removeChildView(this.#harnessView);
     this.#harnessView.webContents.close();
     this.#window.destroy();
@@ -396,6 +490,9 @@ class ElectronDesktopWindow implements DesktopWindow {
         this.#appearance,
       );
     }
+    if (this.#petLibraryState !== undefined) {
+      this.#window.webContents.send(PET_LIBRARY_STATE_CHANNEL, this.#petLibraryState);
+    }
     this.#sendCompanionState();
   }
 
@@ -415,6 +512,9 @@ class ElectronDesktopWindow implements DesktopWindow {
     if (this.#updateState !== undefined) {
       this.#harnessView.webContents.send(UPDATE_STATE_CHANNEL, this.#updateState);
     }
+    if (this.#petLibraryState !== undefined) {
+      this.#harnessView.webContents.send(PET_LIBRARY_STATE_CHANNEL, this.#petLibraryState);
+    }
   }
 
   #installCompanionBridge(): void {
@@ -423,8 +523,15 @@ class ElectronDesktopWindow implements DesktopWindow {
       const command = validatedCompanionCommand(value);
       if (command === undefined) return;
       this.#companionState = transitionCompanion(this.#companionState, command);
+      if (command.kind === 'toggle' || command.kind === 'resize-end') {
+        this.#options.onCompanionPreferenceChange({
+          open: this.#companionState.open,
+          preferredWidth: this.#companionState.preferredWidth ?? COMPANION_PANEL_DEFAULT_WIDTH,
+        });
+      }
       this.#sendCompanionState();
       this.#layoutHarnessView(command.kind === 'toggle');
+      this.#presentPetPlayer();
     });
     this.#harnessView.webContents.on('ipc-message', (_event, channel, value: unknown) => {
       if (channel !== HARNESS_CONTEXT_CHANNEL) return;
@@ -463,6 +570,67 @@ class ElectronDesktopWindow implements DesktopWindow {
     });
   }
 
+  #installPetLibraryBridge(): void {
+    ipcMain.removeHandler(PET_LIBRARY_REQUEST_CHANNEL);
+    ipcMain.handle(PET_LIBRARY_REQUEST_CHANNEL, async (event, value: unknown) => {
+      if (
+        event.sender !== this.#harnessView.webContents
+        || event.senderFrame !== this.#harnessView.webContents.mainFrame
+      ) return { status: 'rejected', code: 'invalid-command' };
+      const command = parsePetLibraryCommand(value);
+      if (command === undefined) return { status: 'rejected', code: 'invalid-command' };
+      if ((command.kind === 'import' || command.kind === 'remove')
+        && (!this.#window.isVisible() || !this.#window.isFocused())) {
+        return { status: 'rejected', code: 'window-not-foreground' };
+      }
+      return this.#options.onPetLibraryRequest(command);
+    });
+  }
+
+  #installPetStageSurfaceBridge(): void {
+    this.#window.webContents.on('ipc-message', (event, channel, value: unknown) => {
+      if (event.senderFrame !== this.#window.webContents.mainFrame) return;
+      if (channel === PET_STAGE_WAKE_CHANNEL) {
+        this.#petPlayerHost.wake();
+        return;
+      }
+      if (channel !== PET_STAGE_SURFACE_CHANNEL) return;
+      const surface = validatedPetStageSurfaceSnapshot(value);
+      if (surface === undefined) return;
+      this.#petStageSurface = surface;
+      this.#presentPetPlayer();
+    });
+  }
+
+  #createPetPlayerRealm(): ReturnType<typeof createPetPlayerRealm> {
+    return createPetPlayerRealm({
+      host: this.#window,
+      entryUrl: this.#options.petPlayerEntryUrl,
+      preloadPath: this.#options.petPlayerPreloadPath,
+      onCrash: (reason) => this.#options.onRendererCrash('pet-player', reason),
+      onOutput: (message) => {
+        if (message.kind === 'activation') this.#petPlayerHost.wake();
+      },
+    });
+  }
+
+  #installPetThumbnailProtocol(): void {
+    this.#harnessView.webContents.session.protocol.handle('dsh-pet', async (request) => {
+      const response = await this.#options.onPetThumbnailRequest(request.url);
+      if (response.status === 'not-found') return new Response(null, { status: 404 });
+      return new Response(Buffer.from(response.data), {
+        status: 200,
+        headers: {
+          'Cache-Control': 'private, max-age=31536000, immutable',
+          'Content-Type': response.mediaType,
+          ETag: response.etag,
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    });
+    this.#petThumbnailProtocolInstalled = true;
+  }
+
   #acceptContextEvent(): boolean {
     const now = Date.now();
     if (now - this.#contextRateWindowStartedAt >= 1_000) {
@@ -477,6 +645,35 @@ class ElectronDesktopWindow implements DesktopWindow {
     if (!this.#window.webContents.isDestroyed()) {
       this.#window.webContents.send(COMPANION_STATE_CHANNEL, this.#companionState);
     }
+  }
+
+  #presentPetPlayer(): void {
+    const surface = this.#petStageSurface;
+    const activeId = this.#petLibraryState?.activePetId;
+    const active = this.#petLibraryState?.assets.find((asset) => asset.id === activeId);
+    const contentBounds = this.#window.contentView.getBounds();
+    const boundsInsideWindow = surface.visible
+      && surface.bounds.x + surface.bounds.width <= contentBounds.width
+      && surface.bounds.y + surface.bounds.height <= contentBounds.height;
+    const visible = boundsInsideWindow
+      && this.#showingHarness
+      && this.#companionState.active
+      && this.#companionState.open
+      && this.#petLibraryState?.enabled === true
+      && active?.status === 'ready'
+      && active.id === this.#petPlayerSelectionId;
+    if (!visible || !surface.visible) {
+      this.#petPlayerHost.present();
+      return;
+    }
+    const workspace = this.#companionState.workspace;
+    this.#petPlayerHost.present({
+      bounds: surface.bounds,
+      visible: true,
+      running: workspace.status !== 'none' && workspace.running,
+      reducedMotion: surface.reducedMotion,
+      devicePixelRatio: surface.devicePixelRatio,
+    });
   }
 
   #installAccountBalanceBridge(): void {
@@ -501,6 +698,7 @@ class ElectronDesktopWindow implements DesktopWindow {
       width,
       this.#showingHarness && this.#companionState.open,
       this.#showingHarness && this.#companionState.previewOpen,
+      this.#companionState.preferredWidth ?? COMPANION_PANEL_DEFAULT_WIDTH,
     );
     const { reviewFocus, reservedWidth: target } = layout;
     if (!animate || reviewFocus || !this.#showingHarness) {
@@ -531,6 +729,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#reservedRightWidth = reserved;
     this.#harnessView.setVisible(this.#showingHarness && !reviewFocus);
     this.#harnessView.setBounds(harnessContentBounds({ width, height }, reserved));
+    this.#presentPetPlayer();
   }
 
   #cancelLayoutAnimation(): void {

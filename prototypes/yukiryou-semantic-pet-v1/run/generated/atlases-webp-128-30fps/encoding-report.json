@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "quality": 95,
+  "motions": {
+    "standing": {
+      "sourceBytes": 8645597,
+      "encodedBytes": 930546,
+      "width": 1536,
+      "height": 1390,
+      "columns": 12,
+      "rows": 10,
+      "frameCount": 120,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 119
+    },
+    "drowsy": {
+      "sourceBytes": 5109711,
+      "encodedBytes": 475124,
+      "width": 1536,
+      "height": 695,
+      "columns": 12,
+      "rows": 5,
+      "frameCount": 60,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 59
+    },
+    "lying-down": {
+      "sourceBytes": 4167703,
+      "encodedBytes": 392010,
+      "width": 1536,
+      "height": 695,
+      "columns": 12,
+      "rows": 5,
+      "frameCount": 60,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 59
+    },
+    "sleeping": {
+      "sourceBytes": 5644690,
+      "encodedBytes": 561830,
+      "width": 1536,
+      "height": 1112,
+      "columns": 12,
+      "rows": 8,
+      "frameCount": 90,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 89
+    },
+    "waking": {
+      "sourceBytes": 4332804,
+      "encodedBytes": 408096,
+      "width": 1536,
+      "height": 695,
+      "columns": 12,
+      "rows": 5,
+      "frameCount": 60,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 59
+    },
+    "rubbing-eyes": {
+      "sourceBytes": 4754762,
+      "encodedBytes": 465366,
+      "width": 1536,
+      "height": 695,
+      "columns": 12,
+      "rows": 5,
+      "frameCount": 60,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 59
+    },
+    "work-enter": {
+      "sourceBytes": 3553993,
+      "encodedBytes": 324306,
+      "width": 1536,
+      "height": 556,
+      "columns": 12,
+      "rows": 4,
+      "frameCount": 45,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 44
+    },
+    "eating": {
+      "sourceBytes": 8570169,
+      "encodedBytes": 809442,
+      "width": 1536,
+      "height": 1390,
+      "columns": 12,
+      "rows": 10,
+      "frameCount": 120,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 119
+    },
+    "work-exit": {
+      "sourceBytes": 3484683,
+      "encodedBytes": 325906,
+      "width": 1536,
+      "height": 556,
+      "columns": 12,
+      "rows": 4,
+      "frameCount": 45,
+      "sourceFps": 60,
+      "targetFps": 30,
+      "changedAdjacentPairs": 44
+    }
+  }
+}

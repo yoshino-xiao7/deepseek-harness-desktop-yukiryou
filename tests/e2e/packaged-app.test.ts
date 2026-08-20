@@ -5,6 +5,7 @@ import { _electron as electron, type ElectronApplication } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveE2eExecutablePath } from './executable-path.js';
+import { closeE2eElectronApplication } from './electron-lifecycle.js';
 
 const executablePath = resolveE2eExecutablePath();
 
@@ -13,7 +14,7 @@ describe('packaged desktop application', () => {
   let userData: string | undefined;
 
   afterEach(async () => {
-    await electronApp?.close();
+    await closeE2eElectronApplication(electronApp);
     if (userData !== undefined) await rm(userData, { recursive: true, force: true });
   }, 30_000);
 
@@ -222,6 +223,25 @@ describe('packaged desktop application', () => {
         ),
       ).toBe('undefined');
       await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await expect.poll(() => shellPage!.locator('[data-testid="pet-stage"]').isVisible()).toBe(true);
+      await expect.poll(() => shellPage!.locator('[data-testid="pet-stage-thumbnail"]').evaluate((node) => (
+        node instanceof HTMLImageElement && node.complete && node.naturalWidth > 0
+      ))).toBe(true);
+      await expect.poll(() => electronApp!.evaluate(async ({ webContents }) => {
+        const player = webContents.getAllWebContents().find((contents) => (
+          contents.getURL().includes('/pet_player/')
+        ));
+        try {
+          return await player?.executeJavaScript(`(
+            document.body.dataset.playerReady === 'true'
+            && document.body.dataset.petState === 'standing'
+            && (document.querySelector('#pet-canvas')?.width ?? 0) > 0
+            && (document.querySelector('#pet-canvas')?.height ?? 0) > 0
+          )`);
+        } catch {
+          return undefined;
+        }
+      }), { timeout: 10_000 }).toBe(true);
       await expect.poll(() => shellPage!.locator('[data-testid="companion-empty"]').textContent()).toContain('选择一个工作区会话');
       const rejectedPath = await shellPage!.evaluate(async () => {
         const bridge = (window as unknown as { deepSeekYukiRyouCompanion: { request(value: unknown): Promise<unknown> } }).deepSeekYukiRyouCompanion;
@@ -257,9 +277,60 @@ describe('packaged desktop application', () => {
       expect(openHarnessWidth).toBeTypeOf('number');
       expect(animatingHarnessWidth).toBeGreaterThan(openHarnessWidth!);
       expect(animatingHarnessWidth).toBeLessThan(closedHarnessWidth!);
-      expect(closedHarnessWidth! - openHarnessWidth!).toBeCloseTo(340, -1);
+      expect(closedHarnessWidth! - openHarnessWidth!).toBeCloseTo(380, -1);
       await shellPage!.locator('[data-testid="companion-toggle"]').click();
       await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      const resizeHandle = shellPage!.locator('[data-testid="companion-resize"]');
+      await resizeHandle.focus();
+      await resizeHandle.press('ArrowRight');
+      await resizeHandle.press('ArrowRight');
+      await resizeHandle.press('ArrowRight');
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').evaluate((node) => node.getBoundingClientRect().width)).toBe(340);
+      await resizeHandle.press('ArrowRight');
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').evaluate((node) => node.getBoundingClientRect().width)).toBe(340);
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await shellPage!.locator('[data-testid="companion-toggle"]').click();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
+      await shellPage!.locator('[data-testid="companion-toggle"]').click();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').evaluate((node) => node.getBoundingClientRect().width)).toBe(340);
+      await resizeHandle.dblclick();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').evaluate((node) => node.getBoundingClientRect().width)).toBe(380);
+      const initialHandleBounds = await resizeHandle.boundingBox();
+      if (initialHandleBounds === null) throw new Error('companion resize handle has no bounds');
+      await shellPage!.mouse.move(initialHandleBounds.x + 4, initialHandleBounds.y + 120);
+      await shellPage!.mouse.down();
+      await shellPage!.mouse.move(initialHandleBounds.x - 76, initialHandleBounds.y + 120, { steps: 4 });
+      await shellPage!.mouse.up();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').evaluate((node) => node.getBoundingClientRect().width)).toBe(460);
+      const expandedHandleBounds = await resizeHandle.boundingBox();
+      if (expandedHandleBounds === null) throw new Error('expanded companion resize handle has no bounds');
+      await shellPage!.mouse.move(expandedHandleBounds.x + 4, expandedHandleBounds.y + 120);
+      await shellPage!.mouse.down();
+      await shellPage!.mouse.move(expandedHandleBounds.x + 204, expandedHandleBounds.y + 120, { steps: 4 });
+      await shellPage!.mouse.up();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').evaluate((node) => node.getBoundingClientRect().width)).toBe(340);
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+
+      const originalContentSize = await electronApp!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getContentSize());
+      const verticalSamples: Array<{ height: number; stage: number; fileMinimum: string }> = [];
+      for (const height of [600, 720, 900]) {
+        await electronApp!.evaluate(({ BrowserWindow }, targetHeight) => {
+          BrowserWindow.getAllWindows()[0]?.setContentSize(1180, targetHeight);
+        }, height);
+        await shellPage!.waitForTimeout(80);
+        verticalSamples.push(await shellPage!.evaluate(() => ({
+          height: window.innerHeight,
+          stage: document.querySelector('[data-testid="pet-stage"]')?.getBoundingClientRect().height ?? 0,
+          fileMinimum: getComputedStyle(document.querySelector('[data-testid="review-browser"]') as Element).minHeight,
+        })));
+      }
+      expect(verticalSamples.map((sample) => Math.round(sample.stage))).toEqual([200, 200, 260]);
+      expect(verticalSamples.every((sample) => sample.fileMinimum === '220px')).toBe(true);
+      if (originalContentSize !== undefined) {
+        await electronApp!.evaluate(({ BrowserWindow }, size) => {
+          BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
+        }, { width: originalContentSize[0] as number, height: originalContentSize[1] as number });
+      }
       await expect
         .poll(readToolbarSidebarWidth, { timeout: 5_000 })
         .toBeCloseTo(280, 1);
@@ -436,6 +507,21 @@ describe('packaged desktop application', () => {
               );
               dark?.click();
               await waitFor(() => document.body.hasAttribute('data-ds-dark-theme'));
+              const pets = [...dialog.querySelectorAll('button')].find((button) =>
+                /^(宠物|Pets)$/.test(button.textContent?.trim() ?? ''),
+              );
+              pets?.click();
+              const petPage = await waitFor(() => dialog.querySelector('.dsh-desktop-pet-page'));
+              const petThumbnail = await waitFor(() => {
+                const image = dialog.querySelector('.dsh-desktop-pet-thumbnail');
+                return image instanceof HTMLImageElement
+                  && image.complete
+                  && image.naturalWidth > 0
+                  ? image
+                  : undefined;
+              });
+              const petImportButton = [...(petPage?.querySelectorAll('button') ?? [])]
+                .find((button) => /^(导入宠物包|Import pet package)$/.test(button.textContent?.trim() ?? ''));
               const about = [...dialog.querySelectorAll('button')].find((button) =>
                 /^(关于|About)$/.test(button.textContent?.trim() ?? ''),
               );
@@ -456,6 +542,12 @@ describe('packaged desktop application', () => {
                   .map((button) => button.textContent?.trim()),
                 themeLabels: themeButtons.map((button) => button.textContent?.trim()),
                 darkApplied: document.body.hasAttribute('data-ds-dark-theme'),
+                petPageLoaded: petPage instanceof HTMLElement,
+                petNavFound: pets instanceof HTMLButtonElement,
+                petDialogText: petPage instanceof HTMLElement ? petPage.textContent : dialog.textContent,
+                petThumbnailLoaded: petThumbnail instanceof HTMLImageElement,
+                petThumbnailSrc: petThumbnail instanceof HTMLImageElement ? petThumbnail.src : undefined,
+                petImportDisabled: petImportButton instanceof HTMLButtonElement ? petImportButton.disabled : undefined,
                 aboutLogoLoaded: aboutLogo instanceof HTMLImageElement,
                 aboutLogoDiagnostics: (() => {
                   const image = dialog.querySelector('.dsh-desktop-about-logo');
@@ -495,6 +587,7 @@ describe('packaged desktop application', () => {
       expect(settingsResult?.navLabels).toEqual(
         expect.arrayContaining([
           expect.stringMatching(/^(外观|Appearance)$/),
+          expect.stringMatching(/^(宠物|Pets)$/),
           expect.stringMatching(/^(关于|About)$/),
         ]),
       );
@@ -506,6 +599,18 @@ describe('packaged desktop application', () => {
         ]),
       );
       expect(settingsResult?.darkApplied).toBe(true);
+      if (!settingsResult?.petPageLoaded) {
+        throw new Error(`pet settings failed: ${JSON.stringify({
+          navLabels: settingsResult?.navLabels,
+          petNavFound: settingsResult?.petNavFound,
+          petDialogText: settingsResult?.petDialogText,
+        })}`);
+      }
+      expect(settingsResult?.petThumbnailLoaded).toBe(true);
+      expect(settingsResult?.petThumbnailSrc).toMatch(
+        /^dsh-pet:\/\/thumbnail\/builtin\.yukiryou-whale-maid-preview\/[a-f0-9]{16}$/,
+      );
+      expect(settingsResult?.petImportDisabled).toBe(true);
       if (!settingsResult?.aboutLogoLoaded) {
         throw new Error(
           `about logo failed: ${JSON.stringify(settingsResult?.aboutLogoDiagnostics)}`,

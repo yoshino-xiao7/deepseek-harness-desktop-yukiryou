@@ -1,4 +1,4 @@
-export type RendererTarget = 'toolbar' | 'harness';
+export type RendererTarget = 'toolbar' | 'harness' | 'pet-player';
 
 export interface RendererRecoveryPolicy {
   nextDelay(target: RendererTarget, now?: number): number | undefined;

@@ -17,7 +17,9 @@
 - `SafeMarkdown`：HTML、SVG/MathML、iframe/object、远程与 data 图片、`javascript:`/`file:` 链接、事件属性、深层列表和 fenced script 只产生安全结构和 inert text；只有受限相对文件链接产生 workspace-link，随后仍需 WorkspaceInspector containment 复核。
 - `ReviewTargetStore`：先到 preview 可重放；Workspace capability 改变后清空正文并通知当前 renderer 释放内存。
 - `BoundedLruCache`：按最近使用顺序维持 64 MiB preview 上限，单项超限不保留，文件 revision 改变后不得命中旧正文。
-- `companionLayout`：固定覆盖 820/980/1180/1480px，分别验证 overlay、docked、Review Focus 与 wide review，不允许最小窗口宽度令某个模式不可达。
+- `companionLayout`：固定覆盖 820/980/1180/1480px，分别验证 overlay、docked、Review Focus 与 wide review，不允许最小窗口宽度令某个模式不可达；宠物阶段增加 `open`/preferredWidth 分离、340px min clamp、动态 max、继续右拖不关闭及重开恢复。
+- `PetPackageValidator` / `PetLibrary`（规划）：archive/schema/hash/MIME/runtime/动作契约、重复导入、内置不可删、expected revision、无确认 remove 拒绝、可恢复 Trash、active fallback、索引重建和 future schema fail-closed。
+- `PetDirector` / `PetPlayer`（规划）：fake clock/random/completion generation、快速 run/idle、睡眠中运行、用户唤醒、隐藏暂停、resize 不重置和 dispose。
 
 内部 I/O 使用 production adapter 与 fake adapter。fake 必须模拟失败和时间，不使用真实 `sleep`。
 
@@ -46,6 +48,14 @@
 - Quit 后不存在本应用拥有的子进程。
 - `sidebar.footer.action` 余额卡在宽栏可见、rail 可收起；Harness bridge 形状固定且本地 shell 页面检测不到余额 bridge。
 - 本地 toolbar 可开关 Desktop Companion；干净用户目录无 Session 时显示安全空状态，shell bridge 拒绝绝对路径，关闭面板恢复 Harness 宽度。
+- 宠物阶段：设置页中英文资产库、导入取消/拒绝/成功、选择/删除/重启恢复；左边界指针与键盘 resize 到最小值后不关闭，右上开关仍可完全隐藏；Pet Stage wake、running/eating、reduced motion 和 player failure 不影响文件区/Harness。
+
+### 宠物真机与敌意输入矩阵（规划）
+
+- hostile `.yukipet` 覆盖 Zip Slip、压缩炸弹、重复/NFD/大小写冲突路径、symlink/hardlink、假 MIME、hash 不符、future schema、未知 runtime/asset format、缺动作、remote/script 和超时 payload。
+- 选定动画运行时前，先验证非动画专业用户只用角色参考图和自然语言即可由项目流程生成技术样片；依赖手工专有编辑器导出的候选直接淘汰。随后仅对 Creator Gate 通过项在 packaged arm64 Electron 中比较离线、许可、流畅度、资源和稳定性，并只保留一个 Adapter。
+- production player 执行 30 分钟连续播放、100 次切换/隐藏、系统休眠恢复、player view/renderer recovery、light/dark/system、340/380/560px 面板和 820/980/1320px 窗口矩阵；隔离测试证明 one-shot bootstrap 只转交一个 port 且不暴露 API，player 页面看不到 shell/Harness bridge、Electron/Node、父 DOM、Workspace preview 或其他 session data，其崩溃只重建该 view。
+- 自动 frame-time/CPU/内存/bounds/anchor 检查之外，必须输出 1x、0.25x 与慢放录制供产品所有者验收角色身份和动作自然度。
 
 ### 稳定性命令
 

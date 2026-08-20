@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "fps": 60,
+  "stage": {
+    "width": 1024,
+    "height": 640,
+    "baseline": 600
+  },
+  "automation": {
+    "userProvidedEngineAsset": false,
+    "proprietaryEditorRequired": false,
+    "manualEditorSteps": 0,
+    "extraProviderCredentialRequired": false
+  },
+  "motions": {
+    "standing": { "durationMs": 4000, "frameCount": 240, "loop": true },
+    "drowsy": { "durationMs": 2000, "frameCount": 120, "loop": false },
+    "lying-down": { "durationMs": 2000, "frameCount": 120, "loop": false },
+    "sleeping": { "durationMs": 3000, "frameCount": 180, "loop": true },
+    "waking": { "durationMs": 2000, "frameCount": 120, "loop": false },
+    "rubbing-eyes": { "durationMs": 2000, "frameCount": 120, "loop": false },
+    "work-enter": { "durationMs": 1500, "frameCount": 90, "loop": false },
+    "eating": { "durationMs": 4000, "frameCount": 240, "loop": true },
+    "work-exit": { "durationMs": 1500, "frameCount": 90, "loop": false }
+  },
+  "sequences": {
+    "fallAsleep": ["standing", "drowsy", "lying-down", "sleeping"],
+    "wakeUp": ["sleeping", "waking", "rubbing-eyes", "standing"],
+    "work": ["standing", "work-enter", "eating", "work-exit", "standing"]
+  }
+}

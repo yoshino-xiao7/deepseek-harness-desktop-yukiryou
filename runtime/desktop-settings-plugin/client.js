@@ -16,6 +16,24 @@ window.__ModuleLoader__.load({
         'appearance.light': '浅色',
         'appearance.dark': '深色',
         'appearance.system': '跟随系统',
+        'pet.nav': '宠物',
+        'pet.title': '宠物资产',
+        'pet.description': '管理应用提供的宠物与本地导入资产。动画运行时冻结前，导入包只会进入隔离开发验证区。',
+        'pet.enabled': '显示宠物活动区',
+        'pet.import': '导入宠物包',
+        'pet.importing': '正在验证…',
+        'pet.builtIn': '内置',
+        'pet.imported': '已导入',
+        'pet.ready': '可用',
+        'pet.incompatible': '开发中',
+        'pet.damaged': '不可用',
+        'pet.empty': '当前没有宠物资产。',
+        'pet.inboxTitle': '开发验证区',
+        'pet.inboxStatus': '等待动画运行时深层验证',
+        'pet.inboxCompatible': '运行时验证通过，等待格式冻结',
+        'pet.inboxRejected': '未通过动画运行时验证',
+        'pet.cancelled': '已取消导入。',
+        'pet.rejected': '宠物包未通过安全检查。',
         'about.nav': '关于',
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Apple Silicon 原生应用',
@@ -55,6 +73,24 @@ window.__ModuleLoader__.load({
         'appearance.light': 'Light',
         'appearance.dark': 'Dark',
         'appearance.system': 'System',
+        'pet.nav': 'Pets',
+        'pet.title': 'Pet assets',
+        'pet.description': 'Manage bundled pets and locally imported assets. Until the animation runtime is frozen, imports remain in an isolated development validation area.',
+        'pet.enabled': 'Show the pet activity area',
+        'pet.import': 'Import pet package',
+        'pet.importing': 'Validating…',
+        'pet.builtIn': 'Built in',
+        'pet.imported': 'Imported',
+        'pet.ready': 'Ready',
+        'pet.incompatible': 'In development',
+        'pet.damaged': 'Unavailable',
+        'pet.empty': 'No pet assets are available.',
+        'pet.inboxTitle': 'Development validation',
+        'pet.inboxStatus': 'Awaiting deep animation-runtime validation',
+        'pet.inboxCompatible': 'Runtime validation passed; awaiting format freeze',
+        'pet.inboxRejected': 'Animation runtime validation failed',
+        'pet.cancelled': 'Import cancelled.',
+        'pet.rejected': 'The pet package did not pass safety checks.',
         'about.nav': 'About',
         'about.title': 'DeepSeek YukiRyou',
         'about.badge': 'Native for Apple Silicon',
@@ -173,6 +209,67 @@ window.__ModuleLoader__.load({
         font-weight: 500;
         text-align: center;
       }
+      .dsh-desktop-pet-toolbar,
+      .dsh-desktop-pet-enable {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .dsh-desktop-pet-enable {
+        min-height: 48px;
+        margin-bottom: 16px;
+        padding: 0 14px;
+        border: 1px solid var(--dsw-alias-border-l2);
+        border-radius: 12px;
+        background: var(--dsw-alias-bg-layer-1);
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .dsh-desktop-pet-enable input { width: 16px; height: 16px; accent-color: var(--dsw-static-deepseek-500, #4d6bfe); }
+      .dsh-desktop-pet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+      .dsh-desktop-pet-card {
+        appearance: none;
+        display: grid;
+        min-height: 82px;
+        padding: 14px;
+        grid-template-columns: 42px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        border: 1px solid var(--dsw-alias-border-l2);
+        border-radius: 13px;
+        color: var(--dsw-alias-label-primary);
+        background: var(--dsw-alias-bg-layer-1);
+        font: inherit;
+        text-align: left;
+      }
+      button.dsh-desktop-pet-card { cursor: pointer; }
+      button.dsh-desktop-pet-card:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+      .dsh-desktop-pet-card[aria-pressed='true'] { border-color: var(--dsw-static-deepseek-500, #4d6bfe); box-shadow: 0 0 0 1px var(--dsw-static-deepseek-500, #4d6bfe); }
+      .dsh-desktop-pet-card:disabled { cursor: default; opacity: .72; }
+      .dsh-desktop-pet-avatar { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 11px; background: var(--dsw-alias-interactive-bg-hover); font-size: 18px; font-weight: 650; }
+      .dsh-desktop-pet-thumbnail { width: 42px; height: 42px; border-radius: 11px; background: var(--dsw-alias-interactive-bg-hover); object-fit: contain; }
+      .dsh-desktop-pet-copy { min-width: 0; }
+      .dsh-desktop-pet-name { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+      .dsh-desktop-pet-meta { margin-top: 3px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+      .dsh-desktop-pet-button {
+        appearance: none;
+        min-height: 36px;
+        padding: 0 14px;
+        border: 1px solid var(--dsw-alias-border-l2);
+        border-radius: 10px;
+        color: var(--dsw-alias-label-primary);
+        background: var(--dsw-alias-bg-layer-1);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .dsh-desktop-pet-button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+      .dsh-desktop-pet-button:disabled { cursor: default; opacity: .55; }
+      .dsh-desktop-pet-inbox { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--dsw-alias-border-l2); }
+      .dsh-desktop-pet-inbox h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+      .dsh-desktop-pet-message { margin: 10px 0 0; color: var(--dsw-alias-label-secondary); font-size: 12px; }
       .dsh-desktop-about-page {
         width: min(760px, 100%);
         padding-top: 0;
@@ -389,6 +486,7 @@ window.__ModuleLoader__.load({
         .dsh-desktop-update-card { grid-template-columns: 38px minmax(0, 1fr); }
         .dsh-desktop-update-button { grid-column: 1 / -1; }
         .dsh-desktop-about-card { grid-template-columns: 1fr 1fr; }
+        .dsh-desktop-pet-grid { grid-template-columns: 1fr; }
       }
     `;
     if (!document.querySelector('style[data-plugin-css="dsh-desktop-settings"]')) {
@@ -444,6 +542,108 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+      );
+    }
+
+    function PetSection({ t, petStore }) {
+      const snapshot = React.useSyncExternalStore(
+        petStore.subscribe,
+        petStore.getSnapshot,
+        petStore.getSnapshot,
+      );
+      const [busy, setBusy] = React.useState(false);
+      const [message, setMessage] = React.useState('');
+      const preferChinese = document.documentElement.lang.toLowerCase().startsWith('zh');
+      const request = async (command) => {
+        setBusy(true);
+        setMessage('');
+        try {
+          const result = await petStore.request({ ...command, expectedRevision: snapshot.revision });
+          if (result.status === 'cancelled') setMessage(t('pet.cancelled'));
+          else if (result.status === 'rejected') setMessage(t('pet.rejected'));
+        } finally {
+          setBusy(false);
+        }
+      };
+      const statusKey = { ready: 'pet.ready', incompatible: 'pet.incompatible', damaged: 'pet.damaged' };
+      const inboxStatusKey = {
+        'awaiting-runtime-validation': 'pet.inboxStatus',
+        'runtime-compatible': 'pet.inboxCompatible',
+        'runtime-rejected': 'pet.inboxRejected',
+      };
+      return React.createElement(
+        'section',
+        { className: 'dsh-desktop-settings-page dsh-desktop-pet-page' },
+        React.createElement('h2', null, t('pet.title')),
+        React.createElement('p', { className: 'dsh-desktop-settings-description' }, t('pet.description')),
+        React.createElement(
+          'label',
+          { className: 'dsh-desktop-pet-enable' },
+          React.createElement('span', null, t('pet.enabled')),
+          React.createElement('input', {
+            type: 'checkbox',
+            checked: snapshot.enabled,
+            disabled: busy,
+            onChange: (event) => void request({ kind: 'set-enabled', enabled: event.target.checked }),
+          }),
+        ),
+        React.createElement(
+          'div',
+          { className: 'dsh-desktop-pet-toolbar' },
+          React.createElement('strong', null, t('pet.title')),
+          React.createElement(
+            'button',
+            { type: 'button', className: 'dsh-desktop-pet-button', disabled: busy || !snapshot.canImport, onClick: () => void request({ kind: 'import' }) },
+            busy ? t('pet.importing') : t('pet.import'),
+          ),
+        ),
+        snapshot.assets.length === 0
+          ? React.createElement('p', { className: 'dsh-desktop-pet-message' }, t('pet.empty'))
+          : React.createElement(
+              'div',
+              { className: 'dsh-desktop-pet-grid' },
+              ...snapshot.assets.map((asset) => React.createElement(
+                'button',
+                {
+                  key: asset.id,
+                  type: 'button',
+                  className: 'dsh-desktop-pet-card',
+                  disabled: busy || asset.status !== 'ready',
+                  'aria-pressed': snapshot.activePetId === asset.id,
+                  onClick: () => void request({ kind: 'select', petId: asset.id }),
+                },
+                React.createElement('img', { className: 'dsh-desktop-pet-thumbnail', src: asset.thumbnailUrl, alt: '' }),
+                React.createElement(
+                  'span',
+                  { className: 'dsh-desktop-pet-copy' },
+                  React.createElement('span', { className: 'dsh-desktop-pet-name' }, asset.name),
+                  React.createElement(
+                    'span',
+                    { className: 'dsh-desktop-pet-meta' },
+                    `${t(asset.origin === 'built-in' ? 'pet.builtIn' : 'pet.imported')} · ${t(statusKey[asset.status])}`,
+                  ),
+                ),
+              )),
+            ),
+        snapshot.inbox.length === 0
+          ? null
+          : React.createElement(
+              'div',
+              { className: 'dsh-desktop-pet-inbox' },
+              React.createElement('h3', null, t('pet.inboxTitle')),
+              ...snapshot.inbox.map((item) => React.createElement(
+                'div',
+                { className: 'dsh-desktop-pet-card', key: item.id },
+                React.createElement('span', { className: 'dsh-desktop-pet-avatar', 'aria-hidden': true }, (preferChinese ? item.name['zh-CN'] : item.name.en).slice(0, 1)),
+                React.createElement(
+                  'span',
+                  { className: 'dsh-desktop-pet-copy' },
+                  React.createElement('span', { className: 'dsh-desktop-pet-name' }, preferChinese ? item.name['zh-CN'] : item.name.en),
+                  React.createElement('span', { className: 'dsh-desktop-pet-meta' }, t(inboxStatusKey[item.status])),
+                ),
+              )),
+            ),
+        message ? React.createElement('p', { className: 'dsh-desktop-pet-message', role: 'status' }, message) : null,
       );
     }
 
@@ -632,6 +832,24 @@ window.__ModuleLoader__.load({
     }
 
     const inject = ['slots', 'locale', 'theme'];
+    function createPetStore(api) {
+      let snapshot = api.getSnapshot();
+      const listeners = new Set();
+      const unsubscribe = api.subscribe((next) => {
+        snapshot = next;
+        for (const listener of listeners) listener();
+      });
+      return {
+        getSnapshot: () => snapshot,
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        request: (command) => api.request(command),
+        dispose: unsubscribe,
+      };
+    }
+
     function apply(ctx) {
       ctx.effect(
         () => ctx.locale.register(namespace, dictionaries),
@@ -657,6 +875,26 @@ window.__ModuleLoader__.load({
             }),
           },
           AppearanceSection,
+        ),
+      );
+      const petApi = window.deepSeekYukiRyouPets ?? {
+        getSnapshot: () => ({ enabled: false, canImport: false, assets: [], inbox: [], revision: 0 }),
+        subscribe: () => () => {},
+        request: async () => ({ status: 'rejected', code: 'inbox-disabled' }),
+      };
+      const petStore = createPetStore(petApi);
+      ctx.effect(() => () => petStore.dispose(), 'dsh-desktop: pet library bridge');
+      ctx.slots.inject('settings.section', () =>
+        ctx.slots.register(
+          {
+            name: 'settings.section',
+            id: 'desktop-pets',
+            order: 50,
+            label: () => t('pet.nav'),
+            locale: namespace,
+            inject: () => ({ petStore }),
+          },
+          PetSection,
         ),
       );
       ctx.slots.inject('settings.section', () =>

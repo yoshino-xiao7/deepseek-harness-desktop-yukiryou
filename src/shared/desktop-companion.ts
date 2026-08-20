@@ -2,7 +2,9 @@ export const HARNESS_CONTEXT_CHANNEL = 'deepseek-yukiryou:companion:harness-cont
 export const COMPANION_STATE_CHANNEL = 'deepseek-yukiryou:companion:state';
 export const COMPANION_COMMAND_CHANNEL = 'deepseek-yukiryou:companion:command';
 
-export const COMPANION_PANEL_WIDTH = 340;
+export const COMPANION_PANEL_MIN_WIDTH = 340;
+export const COMPANION_PANEL_DEFAULT_WIDTH = 380;
+export const COMPANION_PANEL_MAX_WIDTH = 560;
 export const COMPANION_PREVIEW_WIDTH = 520;
 export const COMPANION_DOCKED_MIN_WIDTH = 980;
 export const COMPANION_WIDE_REVIEW_MIN_WIDTH = 1_320;
@@ -28,12 +30,16 @@ export type CompanionWorkspaceSnapshot =
 export interface DesktopCompanionSnapshot {
   readonly active: boolean;
   readonly open: boolean;
+  /** Always present on validated snapshots; optional here for draft-0 source compatibility. */
+  readonly preferredWidth?: number;
   readonly previewOpen: boolean;
   readonly workspace: CompanionWorkspaceSnapshot;
 }
 
 export type CompanionCommand =
   | { readonly kind: 'toggle' }
+  | { readonly kind: 'resize'; readonly preferredWidth: number }
+  | { readonly kind: 'resize-end'; readonly preferredWidth: number }
   | { readonly kind: 'preview'; readonly open: boolean };
 
 export function transitionCompanion(
@@ -42,6 +48,9 @@ export function transitionCompanion(
 ): DesktopCompanionSnapshot {
   if (command.kind === 'preview') {
     return { ...state, previewOpen: command.open, ...(command.open ? { open: true } : {}) };
+  }
+  if (command.kind === 'resize' || command.kind === 'resize-end') {
+    return { ...state, preferredWidth: clampCompanionPreferredWidth(command.preferredWidth) };
   }
   return state.open
     ? { ...state, open: false, previewOpen: false }
@@ -81,21 +90,45 @@ export function validatedHarnessContext(value: unknown): HarnessContextSnapshot 
 export function validatedCompanionCommand(value: unknown): CompanionCommand | undefined {
   if (!isRecord(value)) return undefined;
   if (value.kind === 'toggle') return { kind: 'toggle' };
+  if (
+    (value.kind === 'resize' || value.kind === 'resize-end')
+    && typeof value.preferredWidth === 'number'
+    && Number.isFinite(value.preferredWidth)
+  ) return { kind: value.kind, preferredWidth: clampCompanionPreferredWidth(value.preferredWidth) };
   return value.kind === 'preview' && typeof value.open === 'boolean'
     ? { kind: 'preview', open: value.open }
     : undefined;
 }
 
 export function validatedDesktopCompanionSnapshot(value: unknown): DesktopCompanionSnapshot | undefined {
-  if (!isRecord(value) || typeof value.active !== 'boolean' || typeof value.open !== 'boolean' || typeof value.previewOpen !== 'boolean' || !isRecord(value.workspace)) return undefined;
+  if (!isRecord(value) || typeof value.active !== 'boolean' || typeof value.open !== 'boolean' || typeof value.preferredWidth !== 'number' || !Number.isFinite(value.preferredWidth) || typeof value.previewOpen !== 'boolean' || !isRecord(value.workspace)) return undefined;
+  const base = { active: value.active, open: value.open, preferredWidth: clampCompanionPreferredWidth(value.preferredWidth), previewOpen: value.previewOpen };
   const workspace = value.workspace;
-  if (workspace.status === 'none') return { active: value.active, open: value.open, previewOpen: value.previewOpen, workspace: { status: 'none' } };
+  if (workspace.status === 'none') return { ...base, workspace: { status: 'none' } };
   if ((workspace.status === 'authorizing' || workspace.status === 'unavailable') && typeof workspace.running === 'boolean') {
-    return { active: value.active, open: value.open, previewOpen: value.previewOpen, workspace: { status: workspace.status, running: workspace.running } };
+    return { ...base, workspace: { status: workspace.status, running: workspace.running } };
   }
   const workspaceId = validatedId(workspace.workspaceId);
   if (workspace.status !== 'ready' || workspaceId === undefined || typeof workspace.title !== 'string' || workspace.title.length === 0 || workspace.title.length > 200 || typeof workspace.running !== 'boolean') return undefined;
-  return { active: value.active, open: value.open, previewOpen: value.previewOpen, workspace: { status: 'ready', workspaceId, title: workspace.title, running: workspace.running } };
+  return { ...base, workspace: { status: 'ready', workspaceId, title: workspace.title, running: workspace.running } };
+}
+
+export function clampCompanionPreferredWidth(value: number): number {
+  if (!Number.isFinite(value)) return COMPANION_PANEL_DEFAULT_WIDTH;
+  return Math.round(Math.max(COMPANION_PANEL_MIN_WIDTH, Math.min(COMPANION_PANEL_MAX_WIDTH, value)));
+}
+
+export function resolvedCompanionPanelWidth(
+  viewportWidth: number,
+  preferredWidth: number,
+  previewBesidePanel: boolean,
+): number {
+  if (viewportWidth < COMPANION_DOCKED_MIN_WIDTH) {
+    return Math.min(clampCompanionPreferredWidth(preferredWidth), Math.max(COMPANION_PANEL_MIN_WIDTH, viewportWidth - 32));
+  }
+  const contentBudget = viewportWidth - 480 - (previewBesidePanel ? COMPANION_PREVIEW_WIDTH : 0);
+  const dynamicMaximum = Math.max(COMPANION_PANEL_MIN_WIDTH, Math.min(COMPANION_PANEL_MAX_WIDTH, contentBudget));
+  return Math.min(clampCompanionPreferredWidth(preferredWidth), dynamicMaximum);
 }
 
 function validatedId(value: unknown): string | undefined {

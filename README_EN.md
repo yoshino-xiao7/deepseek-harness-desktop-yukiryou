@@ -99,7 +99,7 @@ Every public release includes SHA-256 checksums. The app and update artifacts ar
 
 | Feature | Status | Planned scope |
 | --- | --- | --- |
-| DeepSeek pet | **In development** | A bounded Companion activity area with a consistent character, idle blinking, drowsy/sleep/wake sequences, and a “devouring tokens” running state. High-frame-rate animation and visual QA begin after the character assets are finalized. |
+| DeepSeek pet | **In development** | The current beta includes a deeply validated YukiRyou Whale Maid development preview with idle, drowsy, sleep, wake/rub-eyes, and work/eating states. Settings provides the pet library, while the bounded Pet Stage supports a minimum visible width, drag resizing, and an independent full-hide action. The final creator flow accepts character art and plain language without extra model keys; local import and the authoring Skill open only after visual approval and format stabilization. |
 | Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
 | Plugin marketplace | **Planned** | Plugin discovery, details, install, update, removal, and permission disclosure, opened only after source verification, signing, compatibility, and recovery boundaries are designed. |
 

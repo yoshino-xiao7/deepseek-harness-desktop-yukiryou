@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "motion": "standing",
+  "durationMs": 4000,
+  "columns": 16,
+  "rows": 15,
+  "frameCount": 240,
+  "loop": true,
+  "mediaType": "image/png",
+  "atlas": "atlases/standing.png",
+  "synthesis": {
+    "atlas": "/Users/yukiryou/Documents/ChatGPT/deepseek/prototypes/yukiryou-semantic-pet-v1/run/generated/atlases/standing.png",
+    "engine": "apple-vision-optical-flow-r1-v1",
+    "height": 208,
+    "inputFrames": 6,
+    "loop": true,
+    "outputFrames": 240,
+    "status": "complete",
+    "width": 192
+  }
+}

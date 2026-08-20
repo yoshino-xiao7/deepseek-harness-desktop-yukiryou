@@ -33,6 +33,14 @@ import {
   shouldShowHeaderUpdate,
   validatedUpdateState,
 } from '../shared/update-bridge.js';
+import {
+  PET_LIBRARY_REQUEST_CHANNEL,
+  PET_LIBRARY_STATE_CHANNEL,
+  parsePetLibraryCommand,
+  type PetLibraryResult,
+  type PetLibrarySnapshot,
+  validatedPetLibrarySnapshot,
+} from '../shared/pet-library.js';
 
 let updateState: DesktopUpdateState = {
   status: 'disabled',
@@ -41,6 +49,34 @@ let updateState: DesktopUpdateState = {
 const updateListeners = new Set<(state: DesktopUpdateState) => void>();
 let balanceState: AccountBalanceSnapshot = { status: 'loading' };
 const balanceListeners = new Set<(state: AccountBalanceSnapshot) => void>();
+let petLibraryState: PetLibrarySnapshot = Object.freeze({
+  enabled: false,
+  canImport: false,
+  assets: Object.freeze([]),
+  inbox: Object.freeze([]),
+  revision: 0,
+});
+const petLibraryListeners = new Set<(state: PetLibrarySnapshot) => void>();
+
+ipcRenderer.on(PET_LIBRARY_STATE_CHANNEL, (_event, value: unknown) => {
+  const snapshot = validatedPetLibrarySnapshot(value);
+  if (snapshot === undefined) return;
+  petLibraryState = snapshot;
+  for (const listener of petLibraryListeners) listener(snapshot);
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouPets', {
+  getSnapshot: (): PetLibrarySnapshot => petLibraryState,
+  subscribe: (listener: (state: PetLibrarySnapshot) => void): (() => void) => {
+    petLibraryListeners.add(listener);
+    return () => petLibraryListeners.delete(listener);
+  },
+  request: async (value: unknown): Promise<PetLibraryResult> => {
+    const command = parsePetLibraryCommand(value);
+    if (command === undefined) return { status: 'rejected', code: 'invalid-command' };
+    return ipcRenderer.invoke(PET_LIBRARY_REQUEST_CHANNEL, command) as Promise<PetLibraryResult>;
+  },
+});
 
 ipcRenderer.on(ACCOUNT_BALANCE_STATE_CHANNEL, (_event, value: unknown) => {
   const snapshot = validatedAccountBalanceSnapshot(value);

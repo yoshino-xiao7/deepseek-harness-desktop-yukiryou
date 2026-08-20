@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
+      content="default-src 'self'; img-src 'self' data: dsh-pet:; style-src 'self'; script-src 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DeepSeek YukiRyou</title>
@@ -61,6 +61,7 @@
         </nav>
       </main>
       <aside class="companion-panel" data-testid="companion-panel" hidden>
+        <div class="companion-resize" data-testid="companion-resize" role="separator" aria-label="调整工作区侧栏宽度" aria-orientation="vertical" tabindex="0"></div>
         <header class="companion-header">
           <div>
             <span class="companion-eyebrow">工作区</span>
@@ -68,6 +69,16 @@
           </div>
           <span class="companion-running" data-testid="companion-running" hidden>运行中</span>
         </header>
+        <section class="pet-stage" data-testid="pet-stage" tabindex="0" hidden>
+          <div class="pet-player-surface" data-testid="pet-player-surface" aria-hidden="true">
+            <img data-testid="pet-stage-thumbnail" alt="" />
+          </div>
+          <div class="pet-bubble" data-testid="pet-bubble" role="status" hidden>疯狂进食 token 中</div>
+          <div class="pet-stage-copy">
+            <strong data-testid="pet-stage-name">YukiRyou</strong>
+            <span>开发预览</span>
+          </div>
+        </section>
         <div class="companion-empty" data-testid="companion-empty">
           <span class="companion-empty-icon" aria-hidden="true">⌘</span>
           <strong>选择一个工作区会话</strong>
