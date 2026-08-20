@@ -1,6 +1,6 @@
 # 当前实现状态
 
-更新时间：2026-08-19。
+更新时间：2026-08-20。
 
 ## 已完成
 
@@ -67,4 +67,10 @@ Artifacts:   arm64 DMG + ZIP generated
 
 - Harness 缺少已验证的稳定任务事件接口，因此通知功能按方案延期，不使用 DOM 文本猜测。
 - Intel 原生机器上的 x64 E2E；当前用户设备与交付目标为 Apple Silicon。
-- Desktop Companion 非宠物阶段已完成，详见 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。下一阶段是产品所有者冻结角色素材后的宠物动画；宠物失败必须继续与余额、Workspace Review、Harness 和更新隔离。
+- Desktop Companion 非宠物阶段已完成，详见 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。宠物实验已经停止，不属于当前产品线；后续开发与发布保持不包含宠物代码。
+
+## 冷备份分支
+
+- 宠物实验代码仅保存在远程冷备份分支 `yukiryou/pet-experiment-archive-20260820`，归档提交为 `a05117e`（`archive: preserve abandoned pet experiment`）。
+- 该分支只用于保留历史，不得自动合并、变基、挑拣、作为开发基线或进入发布构建。
+- 只有项目所有者在当前对话中明确要求恢复宠物开发时，才能创建新的 `yukiryou/` 分支并按明确范围选择性恢复；普通的“继续”或路线图推进不构成授权。

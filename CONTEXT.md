@@ -43,3 +43,7 @@ _Avoid_: IDE、自动修改
 **Workspace Authority / Capability**：
 Authority 是 Runtime 对 Session 所属 canonical Workspace 的权威解析；Capability 是主进程据此建立的短期不透明文件访问权限。
 _Avoid_: 浏览器传入路径、永久目录授权
+
+## Archived experiments
+
+`yukiryou/pet-experiment-archive-20260820` 是已放弃宠物实验的冷备份分支，归档提交为 `a05117e`。它不属于当前产品线，禁止自动合并、变基、挑拣或作为开发基线。只有项目所有者在当前对话中明确要求恢复宠物开发时，才可从该分支按获批范围选择性恢复；“继续”“推进下一阶段”等泛化指令不构成授权。
