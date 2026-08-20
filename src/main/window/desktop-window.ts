@@ -252,7 +252,14 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#cancelLayoutAnimation();
     ipcMain.removeHandler(WORKSPACE_REVIEW_REQUEST_CHANNEL);
     this.#window.contentView.removeChildView(this.#harnessView);
-    this.#harnessView.webContents.close();
+    // Harness may install beforeunload guards for drafts. Application shutdown
+    // has already stopped the owned Runtime, so a renderer prompt cannot save
+    // anything and would strand the hidden Electron main process in a native
+    // modal loop.
+    this.#harnessView.webContents.once('will-prevent-unload', (event) => {
+      event.preventDefault();
+    });
+    this.#harnessView.webContents.close({ waitForBeforeUnload: false });
     this.#window.destroy();
   }
 

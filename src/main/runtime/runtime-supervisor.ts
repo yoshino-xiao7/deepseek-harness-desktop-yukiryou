@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:net';
 import { delimiter } from 'node:path';
 
@@ -7,7 +8,9 @@ export type RuntimeFailureCode =
   | 'exited-before-ready'
   | 'unexpected-exit'
   | 'startup-timeout'
-  | 'renderer-crashed';
+  | 'renderer-crashed'
+  | 'runtime-endpoint-occupied'
+  | 'upgrade-preparation-failed';
 
 export interface RuntimeFailure {
   readonly code: RuntimeFailureCode;
@@ -41,6 +44,7 @@ export interface RuntimeSupervisorOptions {
   readonly version: string;
   readonly startupTimeoutMs: number;
   readonly shutdownTimeoutMs: number;
+  readonly port?: number;
   readonly createCompanionToken?: () => string;
   readonly onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }
@@ -94,16 +98,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
       return;
     }
 
-    this.#signalOwnedProcess(child, 'SIGTERM');
-    const exited = await waitForExit(child, this.#options.shutdownTimeoutMs);
-    if (!exited) {
-      this.#signalOwnedProcess(child, 'SIGKILL');
-      await waitForExit(child, this.#options.shutdownTimeoutMs);
-    }
-
-    if (this.#child === child) {
-      this.#child = undefined;
-    }
+    await this.#terminateOwnedProcess(child);
     this.#setState({ kind: 'stopped' });
     this.#stopping = false;
   }
@@ -113,7 +108,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
   > {
     this.#stopping = false;
     this.#setState({ kind: 'starting', attempt: 1 });
-    const port = await allocateLoopbackPort();
+    const port = this.#options.port ?? await allocateLoopbackPort();
     const origin = `http://127.0.0.1:${port}`;
     const companionToken = this.#options.createCompanionToken?.();
 
@@ -150,26 +145,6 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     child.stderr?.on('data', (chunk: string) =>
       this.#options.onOutput?.('stderr', chunk),
     );
-
-    const failure = await waitUntilReady(
-      child,
-      origin,
-      this.#options.startupTimeoutMs,
-      () => spawnError,
-      companionToken !== undefined,
-    );
-    if (failure !== undefined) {
-      this.#setState({ kind: 'failed', failure });
-      this.#signalOwnedProcess(child, 'SIGTERM');
-      throw new Error(failure.message);
-    }
-
-    const ready: Extract<RuntimeState, { kind: 'ready' }> = {
-      kind: 'ready',
-      origin,
-      version: this.#options.version,
-    };
-    this.#setState(ready);
     child.once('exit', (code) => {
       if (this.#child === child) {
         this.#child = undefined;
@@ -185,6 +160,26 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
         });
       }
     });
+
+    const failure = await waitUntilReady(
+      child,
+      origin,
+      this.#options.startupTimeoutMs,
+      () => spawnError,
+      companionToken,
+    );
+    if (failure !== undefined) {
+      this.#setState({ kind: 'failed', failure });
+      await this.#terminateOwnedProcess(child);
+      throw new Error(failure.message);
+    }
+
+    const ready: Extract<RuntimeState, { kind: 'ready' }> = {
+      kind: 'ready',
+      origin,
+      version: this.#options.version,
+    };
+    this.#setState(ready);
     return ready;
   }
 
@@ -203,6 +198,16 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
         throw error;
       }
     }
+  }
+
+  async #terminateOwnedProcess(child: ChildProcess): Promise<void> {
+    this.#signalOwnedProcess(child, 'SIGTERM');
+    const exited = await waitForExit(child, this.#options.shutdownTimeoutMs);
+    if (!exited) {
+      this.#signalOwnedProcess(child, 'SIGKILL');
+      await waitForExit(child, this.#options.shutdownTimeoutMs);
+    }
+    if (this.#child === child) this.#child = undefined;
   }
 
   #setState(state: RuntimeState): void {
@@ -247,6 +252,7 @@ function buildRuntimeEnvironment(
   companionToken?: string,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { DSH_HOME: runtimeHome };
+  environment.DSH_DESKTOP_OWNER_PID = String(process.pid);
   if (companionToken !== undefined) {
     environment.DSH_DESKTOP_COMPANION_TOKEN = companionToken;
   }
@@ -267,9 +273,10 @@ async function waitUntilReady(
   origin: string,
   timeoutMs: number,
   getSpawnError: () => Error | undefined,
-  requireCompanionRoute: boolean,
+  companionToken: string | undefined,
 ): Promise<RuntimeFailure | undefined> {
   const deadline = Date.now() + timeoutMs;
+  const healthNonce = randomBytes(32).toString('base64url');
   while (Date.now() < deadline) {
     const spawnError = getSpawnError();
     if (spawnError !== undefined) {
@@ -291,8 +298,18 @@ async function waitUntilReady(
       });
       const rootReady = response.ok;
       await response.body?.cancel();
-      if (rootReady && (!requireCompanionRoute || await companionRouteReady(origin, timeoutMs))) {
-        return undefined;
+      if (
+        rootReady &&
+        (companionToken === undefined ||
+          await companionRouteReady(
+            origin,
+            timeoutMs,
+            companionToken,
+            healthNonce,
+          ))
+      ) {
+        await delay(0);
+        if (child.exitCode === null) return undefined;
       }
     } catch {
       // The runtime is still starting.
@@ -308,16 +325,67 @@ async function waitUntilReady(
 async function companionRouteReady(
   origin: string,
   timeoutMs: number,
+  companionToken: string,
+  nonce: string,
 ): Promise<boolean> {
   const response = await fetch(new URL(COMPANION_RPC_ROUTE, origin), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: '{"kind":"account.balance"}',
+    body: JSON.stringify({ kind: 'runtime.health', nonce }),
     signal: AbortSignal.timeout(Math.min(500, timeoutMs)),
   });
-  const ready = response.status === 403;
-  await response.body?.cancel();
-  return ready;
+  if (response.status !== 200) {
+    await response.body?.cancel();
+    return false;
+  }
+  const payload = await readBoundedJson(response, 4_096);
+  if (
+    payload === null ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload) ||
+    (payload as Record<string, unknown>).status !== 'ready' ||
+    typeof (payload as Record<string, unknown>).proof !== 'string'
+  ) {
+    return false;
+  }
+  const expected = createHmac('sha256', companionToken)
+    .update(nonce)
+    .digest();
+  let actual: Buffer;
+  try {
+    actual = Buffer.from(
+      (payload as Record<string, unknown>).proof as string,
+      'base64url',
+    );
+  } catch {
+    return false;
+  }
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+async function readBoundedJson(
+  response: Response,
+  maxBytes: number,
+): Promise<unknown> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return undefined;
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > maxBytes) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks, length).toString('utf8')) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {

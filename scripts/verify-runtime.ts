@@ -19,6 +19,7 @@ interface InstalledRuntimeManifest extends SourceRuntimeManifest {
 }
 
 interface RuntimePackageJson {
+  readonly dependencies: Record<string, string>;
   readonly allowScripts: Record<string, boolean>;
 }
 
@@ -44,6 +45,14 @@ const runtimeNodeModules = join(runtimeDirectory, 'dsh', 'node_modules');
 const nodePtyDirectory = join(runtimeNodeModules, 'node-pty');
 const sharpDirectory = join(runtimeNodeModules, 'sharp');
 const koffiDirectory = join(runtimeNodeModules, 'koffi');
+for (const [packageName, expectedVersion] of Object.entries(
+  runtimePackage.dependencies,
+)) {
+  const installed = await readJson<DependencyPackageJson>(
+    join(runtimeNodeModules, packageName, 'package.json'),
+  );
+  expectValue(`${packageName} version`, installed.version, expectedVersion);
+}
 const nodePtyManifest = await readJson<DependencyPackageJson>(
   join(nodePtyDirectory, 'package.json'),
 );

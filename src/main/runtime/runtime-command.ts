@@ -16,10 +16,11 @@ export function createHarnessRuntimeCommand(runtimeRoot: string): {
         'lib',
         'bin.js',
       ),
-      '--profile',
-      'web',
       '--patch',
       join(runtimeRoot, 'desktop-extensions.patch.yml'),
+      '--profile',
+      'web',
+      '--no-open',
     ],
   };
 }

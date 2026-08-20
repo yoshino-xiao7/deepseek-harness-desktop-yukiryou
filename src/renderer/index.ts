@@ -9,6 +9,7 @@ import {
   parseSafeMarkdown,
   type SafeMarkdownInline,
 } from './safe-markdown.js';
+import { startupFailureCopy } from './startup-failure-copy.js';
 
 const parameters = new URLSearchParams(window.location.search);
 const failed = parameters.get('state') === 'failure';
@@ -467,7 +468,7 @@ if (failed) {
   }
   if (status !== null) {
     const code = parameters.get('code') ?? 'unknown';
-    status.textContent = `错误类型：${code}。你可以重试，或导出诊断信息。`;
+    status.textContent = startupFailureCopy(code);
   }
   document.querySelector('.progress-track')?.remove();
   const actions = document.querySelector<HTMLElement>('.failure-actions');

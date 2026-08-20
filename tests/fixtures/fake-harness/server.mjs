@@ -1,4 +1,6 @@
 import { createServer } from 'node:http';
+import { createHmac } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 2) {
@@ -14,15 +16,35 @@ if (!Number.isInteger(port) || port <= 0) {
   throw new Error('A positive --port is required');
 }
 
-const server = createServer((request, response) => {
+const server = createServer(async (request, response) => {
   if (
     request.url === '/plugins/@dsh-desktop/companion/rpc' &&
     request.method === 'POST'
   ) {
-    response.writeHead(
-      Date.now() - startedAt >= companionReadyDelayMs ? 403 : 405,
-    );
-    response.end();
+    if (Date.now() - startedAt < companionReadyDelayMs) {
+      response.writeHead(405);
+      response.end();
+      return;
+    }
+    const payload = JSON.parse(await readRequest(request));
+    const secret = process.env.DSH_DESKTOP_COMPANION_TOKEN ?? '';
+    const proof =
+      payload.kind === 'runtime.health' &&
+      typeof payload.nonce === 'string' &&
+      secret.length >= 32
+        ? createHmac('sha256', secret).update(payload.nonce).digest('base64url')
+        : undefined;
+    if (proof === undefined) {
+      response.writeHead(403);
+      response.end();
+      return;
+    }
+    const body = JSON.stringify({ status: 'ready', proof });
+    response.writeHead(200, {
+      'content-type': 'application/json',
+      'content-length': Buffer.byteLength(body),
+    });
+    response.end(body);
     return;
   }
   response.writeHead(200, { 'content-type': 'application/json' });
@@ -47,3 +69,9 @@ function shutdown() {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+async function readRequest(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}

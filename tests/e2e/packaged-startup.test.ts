@@ -15,7 +15,7 @@ describe('packaged Runtime startup', () => {
     if (userData !== undefined) {
       await rm(userData, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it('starts the exact packaged application and reaches the Harness UI', async () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-startup-e2e-'));

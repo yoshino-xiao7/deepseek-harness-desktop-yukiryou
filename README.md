@@ -99,9 +99,9 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 
 | 功能 | 状态 | 计划范围 |
 | --- | --- | --- |
-| DeepSeek 宠物 | **开发中** | 在 Companion 宠物活动区实现稳定角色形象、待机眨眼、打瞌睡/睡眠/唤醒，以及运行时“疯狂进食 token”状态。动作不会越出活动区；角色素材冻结后进入高帧率动画制作与视觉验收。 |
 | 手机远程控制 | **规划中** | 通过明确配对和权限边界，在手机端查看任务状态、接收必要提醒，并在用户确认后继续任务；不会直接暴露本机 Harness 端口。 |
-| 插件市场 | **规划中** | 提供插件发现、详情、安装、更新、移除和权限说明；在设计签名、来源验证、兼容性与回滚边界后再开放安装能力。 |
+| 插件市场 | **规划中** | 提供插件发现、详情、安装、更新、移除和真实信任说明；冻结完整依赖图并完成 registry provenance/integrity、兼容性与回滚边界后再开放安装能力。 |
+| Windows x64 发行 | **规划中** | 以 Windows 11 x64 为首发基线，共用 Plugin-first 产品能力，以 DesktopProductCarrier 与 DesktopFramePlugin 分离窗口载体和根布局，并为原生标题栏、Runtime、代码签名、安装和更新提供独立发布门。 |
 
 路线图表示产品方向，不承诺具体发布日期。安全模型、上游 Harness 接口或素材准备不足时，相关功能会继续保持不可用，而不是通过不稳定的 DOM 注入或降低系统安全要求提前上线。
 
@@ -112,17 +112,19 @@ flowchart LR
     A["DeepSeek YukiRyou.app"] --> B["Electron 主进程"]
     B --> C["应用内置 Node.js"]
     C --> D["固定版本 DeepSeek Harness"]
-    D --> E["随机 127.0.0.1 端口"]
+    D --> E["稳定 127.0.0.1 origin + HMAC secret 持有证明"]
     E --> F["隔离的 Harness WebContentsView"]
     B --> G["原生窗口、更新与恢复"]
     G --> F
 ```
 
-Harness 只监听随机回环地址，不向局域网暴露服务。网页运行在关闭 Node 集成、启用上下文隔离与沙盒的独立视图中；桌面桥只开放经过校验的少量能力。更完整的边界与威胁模型见[安全设计](docs/03-security.md)。
+Harness 只监听由应用持久选择的稳定回环地址，不向局域网暴露服务；每次 Runtime 启动还必须通过随机密钥的 HMAC 挑战证明响应者持有本次 secret。一次性旧日志迁移会采用物理顺序中的最后 ready origin，但轮转日志里保留的全部不同 ready 端口都必须先释放；任一遗留 Runtime 仍占用端口，都会在复制或打开 Runtime Home 前失败关闭。网页运行在关闭 Node 集成、启用上下文隔离与沙盒的独立视图中；桌面桥只开放经过校验的少量能力。该证明不等于 OS 级进程隔离，更完整的边界见[安全设计](docs/03-security.md)。
 
 ## 版本与更新
 
 应用启动后会自动检查公开 GitHub Release，也可以在“设置 → 关于”中手动检查。下载完成后由用户确认重启安装。
+
+从 `v0.2.1-beta.2` 升级到首个 rc.8 版本前，请先通过应用菜单完整退出旧版。若旧版曾被强制退出、主进程崩溃，或你手动清理过桌面日志，请先重启 macOS 再安装；旧版 Runtime 没有 owner watchdog，且本次一次性 origin 迁移需要保留的最后 ready 记录。重启可避免新旧 Runtime 并发写数据，但 ready 记录已经丢失时，升级后可能需要从侧栏手动重新选择一次原会话。
 
 桌面壳、Node.js 与 Harness 被视为一个原子发布单元：应用不会在后台单独升级运行时，避免新旧组件组合产生不可复现的问题。正式发布固定执行一次 DMG 公证，再从已 staple 的 App 生成自动更新 ZIP。详细流程见[发布 Runbook](docs/09-github-and-apple-release.md)。
 
@@ -165,7 +167,7 @@ pnpm release:mac:candidate
 
 | 组件 | 当前版本 | 策略 |
 | --- | --- | --- |
-| DeepSeek Harness | `0.1.0-rc.7` | 随应用固定并验证 |
+| DeepSeek Harness | `0.1.0-rc.8` | 随应用固定并验证 |
 | Node.js | `24.19.0` | Apple Silicon 内置运行时 |
 | pnpm | `10.34.5` | 仅供内置 Harness 使用 |
 | Electron | `43.4.0` | 桌面壳运行时 |

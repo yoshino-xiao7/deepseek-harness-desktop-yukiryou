@@ -29,7 +29,7 @@ webPreferences: {
 }
 ```
 
-- 本地顶栏 renderer 与 Harness 使用不同的 webContents；Harness 只加载到下方 `WebContentsView`。隔离 preload 只读观察侧栏宽度，并通过固定 IPC channel 上报数值；主进程校验数值有限且位于当前窗口宽度内后才转发给本地顶栏。更新存在时，preload 只在 Harness 自有品牌行挂载一个无数据输入的小按钮；找不到预期品牌结构或更新消失时立即移除。
+- 本地顶栏 renderer 与 Harness 使用不同的 webContents；Harness 只加载到下方 `WebContentsView`。隔离 preload 只读观察侧栏宽度，并通过固定 IPC channel 上报数值；主进程校验数值有限且位于当前窗口宽度内后才转发给本地顶栏。更新存在时，preload 只在 Harness 侧栏右下角显示固定图标入口；找不到预期侧栏结构或更新消失时立即移除。
 - 外观与关于页使用 Harness 官方插件插槽。桌面扩展随应用离线打包，只获得 Harness 的 slots、locale 和 theme 服务，不暴露 Electron/Node API，也不通过任意用户路径加载代码。外观同步 IPC 只接受 `light|dark` 和浏览器归一化的 `rgb/rgba` 颜色，拒绝选择器、CSS 代码、URL 与任意属性。
 - 启动恢复只检查 Runtime Home 根目录下的常规文件 `settings.yaml`，使用与 Harness 相同的结构化 YAML 解析器。仅语法损坏或根节点不是映射时触发恢复；原文件以原权限重命名保存，新的空设置文件使用 `0600`，会话、凭据、工作区缓存和符号链接均不在自动恢复范围内。
 - macOS 更新器仅在打包的 arm64 应用启用，feed 固定为公开仓库在 `update.electronjs.org` 上的架构专属 HTTPS 端点。Squirrel.Mac 要求当前应用和下载的更新均通过代码签名验证；开发包不会进入安装流程，更新安装前先停止本应用拥有的 Harness 进程。
@@ -42,9 +42,10 @@ webPreferences: {
 ### 网络与进程
 
 - dsh 必须显式绑定 `127.0.0.1`，不能使用 `0.0.0.0`、`::` 或局域网地址。
-- 主窗口 origin 来自本次启动结果，不来自配置文件、URL 参数或页面消息。
-- 当前记录 child handle、PID 与进程组；终止前的启动时间所有权复核尚未实现。Companion RPC 使用的随机实例 token 只用于 loopback 请求鉴权，不能替代操作系统进程所有权证明。
-- 每次 Runtime 启动生成新的 256-bit Companion token，只通过固定 allowlist child env 传递。主进程仅向固定 loopback route 发送该 token；禁止写入 RuntimeState、URL、renderer、日志或诊断包，旧 Runtime token 在重启后失效。
+- `runtime-endpoint.json` 与旧版 ready 日志只提供候选 loopback endpoint，不直接建立信任。一次性旧日志迁移按物理顺序采用最后 ready origin，但会等待轮转日志中保留的全部不同 ready 端口释放；任一仍被占用时必须在写入 endpoint 状态、复制或打开 Runtime Home 前失败关闭，绝不加载占用者页面，也不另起 rc.8 与可能遗留的 rc.7 并发写同一目录。该保护以候选 endpoint 仍可从状态或旧日志恢复为前提；`v0.2.1-beta.2` 被强杀且 ready 日志同时丢失时无法可靠发现 detached rc.7 Runtime，因此规范升级路径要求先重启系统。URL 参数、页面消息和任意配置不能指定可信 origin。
+- 每次 Runtime 启动生成新的 256-bit Companion secret，只通过固定 allowlist child env 传递。就绪探测向固定 route 发送随机 nonce，响应者必须返回该 secret 计算的 HMAC；secret 本身不进入请求、RuntimeState、URL、renderer、日志或诊断包。只有 child 仍存活、首页就绪且 HMAC 正确时，候选 endpoint 才升级为可信 origin。
+- HMAC 只证明响应者持有本次启动 secret，不等于 OS PID/启动时间身份，也不防御已经以同一用户权限运行、能够读取进程环境或注入 Runtime 的恶意代码。主进程仍只终止自己持有的 child/进程组；Companion 内的 owner watchdog 在父 PID 改变后主动退出，端口释放超时则呈现可操作故障，禁止按进程名清理。
+- 同一 secret 同时鉴权 Companion RPC；旧 Runtime secret 在重启后失效。终止前的 OS 启动时间复核尚未实现，不能把应用描述为提供操作系统级进程隔离。
 - 子进程环境使用 allowlist 构造。API Key 若由 Harness 依赖环境变量读取，可以传递但永不记录。
 - 运行时目录权限尽可能设为用户私有；日志与导出文件创建时使用保守权限。
 
@@ -52,7 +53,7 @@ webPreferences: {
 
 - 桌面壳不新增第二份 API Key 存储；V1 由 Harness UI 和 Runtime Home 管理。
 - 日志默认包含时间、版本、状态转换、退出码和错误分类，不包含请求正文、模型内容、环境变量全集和文件内容。
-- 对常见 token 形态、Authorization header、查询参数做最终输出前脱敏。
+- 对常见 token 形态、Authorization header、查询参数以及 Companion secret 的 env/object/JSON 形态做最终输出前脱敏。
 - “复制诊断信息”必须先展示将复制的内容；诊断包生成需要用户显式操作。
 
 ### Workspace Preview

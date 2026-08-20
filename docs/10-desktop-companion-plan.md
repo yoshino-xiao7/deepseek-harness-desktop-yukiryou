@@ -1,7 +1,7 @@
 ---
 status: accepted
 implementation: in-progress
-updated: 2026-08-18
+updated: 2026-08-21
 ---
 
 # Desktop Companion 完整实现方案
@@ -12,11 +12,13 @@ updated: 2026-08-18
 
 本文同时记录已接受的目标设计与分阶段实现状态；只有明确标为“已实现”的条目才描述当前能力。
 
+> 2026-08-21 决策更新：本文的 Workspace Authority、WorkspaceInspector、只读审阅与能力安全规则继续有效；未来窗口呈现归属、统一 Frame、插件市场和双平台迁移改由 [`11-integrated-desktop-shell-and-plugin-market.md`](./11-integrated-desktop-shell-and-plugin-market.md) 定义。本文中“Companion 永久由本地 Shell renderer 承载”的目标设计已被替代，但仍准确描述当前已实现形态。本文所有宠物设计、Phase 6、测试项与 Issue 切分均已废弃，仅作为历史实验记录保留；宠物实验已归档且不属于当前产品线，除非项目所有者在未来对话中明确恢复，否则不得据此实现或合入发行分支。
+
 ## 已确认的产品决定
 
 1. Harness 左侧栏“设置”上方只显示**当前凭据所属账户余额**，不显示今日消费，不把账户余额称为“Key 余额”。
-2. Desktop Shell 增加可展开的 Desktop Companion：上层最终为宠物活动区，下层为变更、文件树和预览入口。
-3. 文件、Git 变更和预览先实现；宠物功能最后实现，素材阶段由产品所有者补充角色设定与分层资源。
+2. Desktop Shell 增加可展开的 Desktop Companion，承载变更、文件树和预览入口。
+3. 文件、Git 变更和预览已实现；已归档的宠物实验不再属于本方案的目标。
 4. 第一版变更语义是“当前工作区相对 HEAD 的变更”。没有可靠证据时，不得写成“本轮编辑”。
 5. Markdown 默认渲染为安全的排版预览，同时提供“源码”切换；不得只显示原始 Markdown 代码。
 6. Workspace Review 第一版完全只读，不提供保存、删除、撤销、stage、commit 或自动修复。
@@ -26,7 +28,7 @@ updated: 2026-08-18
 
 本文沿用 [`CONTEXT.md`](../CONTEXT.md) 中的 Desktop App、Desktop Shell、Harness Runtime、Harness UI、Runtime Home、Runtime Version 和 App Version。
 
-**Desktop Companion**：由 Desktop Shell 承载的桌面专属只读辅助面。包含右栏、Workspace Review、响应式预览，以及最后阶段加入的宠物活动区。它不复制 Harness 的会话、Agent、设置或工具详情 UI。
+**Desktop Companion**：由 Desktop Shell 承载的桌面专属只读辅助面。包含右栏、Workspace Review 与响应式预览。它不复制 Harness 的会话、Agent、设置或工具详情 UI。
 
 **Workspace Review**：针对当前 Harness Session 所属 Workspace 的只读文件树、Git 变更摘要、diff 和文件预览能力。
 
@@ -66,7 +68,7 @@ updated: 2026-08-18
 - `DesktopWindow` 已包含本地 `BrowserWindow` renderer 与唯一一个 Harness `WebContentsView`。
 - Harness Runtime 已随 App Version 固定交付，并支持随包 profile extension。
 - `@dsh-desktop/settings` 已通过官方 `settings.section` 注册外观与关于页。
-- 固定 Runtime `0.1.0-rc.7` 已完成 arm64 基线装配、真实 PTY/原生模块、官方 Harness 和 packaged E2E 验证，并提供 `sidebar.footer.action`、`conversation.chat.turnTail`、Session store 与 Workspace registry 等 seam；Companion 实施时仍需为实际使用的 seam 增加独立契约测试。
+- 固定 Runtime `0.1.0-rc.8` 已完成 arm64 基线装配、真实 PTY/原生模块与官方 Harness 集成验证，并继续提供 `sidebar.footer.action`、`conversation.chat.turnTail`、Session store 与 Workspace registry 等 seam；Companion 对实际使用的 seam 保留独立契约测试。
 - 本地顶栏已具备主题快照、renderer 独立恢复和可信 origin 策略。
 
 ### 实施前置差异
@@ -141,7 +143,6 @@ Local renderer
 ├── CompanionPanel
 ├── Change/File views
 ├── Safe Preview
-└── PetDirector (final phase)
 ```
 
 ## 依赖分类与 seam
@@ -153,9 +154,8 @@ Local renderer
 | 文件系统                    | local-substitutable | `WorkspaceInspector` 内部 seam | Node fs Adapter                                      | 临时目录/内存 Adapter         |
 | Git                         | local-substitutable | `WorkspaceInspector` 内部 seam | Git argv process Adapter                             | 临时 Git repo/fixture Adapter |
 | Markdown                    | in-process          | `SafeMarkdown` Interface       | 结构化 parser + sanitizer                            | 同一实现 + hostile corpus     |
-| 宠物行为                    | in-process          | `PetDirector` Interface        | reducer + animation implementation                   | fake clock/random/completion  |
 
-外部调用方不学习 fs、Git、MIME、Markdown AST、Provider response 或动画 clip 名；这些全部留在相应 Module implementation 内，以获得 leverage 和 locality。
+外部调用方不学习 fs、Git、MIME、Markdown AST 或 Provider response；这些全部留在相应 Module implementation 内，以获得 leverage 和 locality。
 
 ## Deep Module 与 Interface
 
@@ -362,8 +362,7 @@ type CompanionCommand =
       readonly entryId: EntryId;
       readonly mode?: "rendered" | "source" | "diff";
     }
-  | { readonly kind: "preview.close" }
-  | { readonly kind: "pet.wake" };
+  | { readonly kind: "preview.close" };
 
 interface DesktopCompanion {
   connect(input: {
@@ -555,12 +554,10 @@ type InspectorDocument =
 
 ### 右栏结构
 
-宠物上线前不预留空白区域，文件区占满右栏。宠物最后阶段上线后：
+Workspace Review 占满右栏，不为已归档实验预留空白区域：
 
 ```text
 ┌────────────────────┐
-│ Pet Activity       │ 220-260px，可折叠
-├────────────────────┤
 │ 变更 | 文件        │
 ├────────────────────┤
 │ lazy tree / list   │ flex: 1
@@ -595,9 +592,9 @@ Review Focus 只隐藏 Harness view，不 reload、不停止任务。退出 revi
 - Workspace 改变时立即清空旧树和 preview，显示新 Workspace loading。
 - 辅助技术可以读出文件名、状态和 `+/-`，颜色不是唯一状态信号。
 
-## 宠物最终阶段设计
+## 已归档的宠物实验设计（不执行）
 
-宠物不会阻塞前述任何阶段。其资产缺失、损坏或性能不达标时，Desktop Companion 继续只显示 Workspace Review。
+本节仅保留 2026-08-20 前的实验设计历史，不是已接受的产品目标、待办或恢复授权。当前 Desktop Companion 只显示 Workspace Review；后续开发不得创建下述 Module、素材或 UI。
 
 ### 素材输入门
 
@@ -719,7 +716,6 @@ eating + idle -> work-exit -> standing
 | `git-unavailable`                 | 非 Git、Git 缺失、安全拒绝          | 文件树继续工作                           |
 | `git-no-baseline`                 | unborn HEAD                         | 显示无 HEAD 基线                         |
 | `git-timeout` / `git-truncated`   | Git 超时/输出过大                   | 显示部分结果和刷新                       |
-| `pet-assets-unavailable`          | 素材缺失/校验失败                   | 静态降级或隐藏宠物                       |
 
 所有错误给 renderer 的 detail 只允许稳定分类与相对展示路径，禁止原始 OS stack、绝对路径、Provider body 或 shell stderr 原文。
 
@@ -811,7 +807,7 @@ src/main/companion/
 └── *.test.ts
 ```
 
-`AppCoordinator` 只负责组合、connect/dispose 与 lifecycle，不解析 Git、读取文件、计算 bounds、渲染 Markdown 或驱动宠物帧。
+`AppCoordinator` 只负责组合、connect/dispose 与 lifecycle，不解析 Git、读取文件、计算 bounds 或渲染 Markdown。
 
 ### DesktopWindow 与 renderer
 
@@ -828,7 +824,6 @@ src/renderer/companion/
 ├── file-tree-view.ts
 ├── file-preview-view.ts
 ├── safe-markdown.ts
-└── pet/                            # 最后阶段才创建
 ```
 
 需要调整：
@@ -841,7 +836,7 @@ src/renderer/companion/
 
 ## 分阶段实施计划
 
-每个阶段形成独立可评审 PR；不得把 preload 隔离、安全预览与宠物资产压进同一个发布。
+每个阶段形成独立可评审 PR；不得把 preload 隔离与安全预览压进同一个发布。
 
 ### Phase 0：契约、安全 seam 与文档同步
 
@@ -921,7 +916,7 @@ src/renderer/companion/
 
 ### Phase 4：Git 变更、diff 与 review 集成
 
-状态：**已实现**。右栏显示当前 worktree 相对 HEAD 的目录化状态和 numstat，点击变更显示带双侧行号、hunk 与未修改行折叠的真实单文件 diff，点击文件显示当前内容；历史轮次 Markdown 审核保留当时 mutation 的有界 old/new 片段并转换为红删绿增 diff，不回退为当前 Markdown 排版预览。Git 使用固定 argv、无 shell/无 prompt/无 optional lock、禁用 external diff 与 fsmonitor，并有超时和输出上限。逐轮卡片使用 rc.7 `conversationEvents` 对成功 mutation 工具事件建立 turn-local 事实，不从结束文案或当前 worktree 反推归因。由于 rc.7 `conversation.chat.turnTail` 是 first-match chain 且禁止跨插件导入 UI 值，Desktop profile 关闭官方独立 registration，由 Companion 在同一正式 slot 中保留相同的“产物”路径按钮行为并在下方组合新卡；不做 DOM 注入。
+状态：**已实现**。右栏显示当前 worktree 相对 HEAD 的目录化状态和 numstat，点击变更显示带双侧行号、hunk 与未修改行折叠的真实单文件 diff，点击文件显示当前内容；历史轮次 Markdown 审核保留当时 mutation 的有界 old/new 片段并转换为红删绿增 diff，不回退为当前 Markdown 排版预览。Git 使用固定 argv、无 shell/无 prompt/无 optional lock、禁用 external diff 与 fsmonitor，并有超时和输出上限。逐轮卡片使用 rc.8 `conversationEvents` 对成功 mutation 工具事件建立 turn-local 事实，不从结束文案或当前 worktree 反推归因。由于 rc.8 `conversation.chat.turnTail` 是 first-match chain 且禁止跨插件导入 UI 值，Desktop profile 关闭官方独立 registration，由 Companion 在同一正式 slot 中保留相同的“产物”路径按钮行为并在下方组合新卡；不做 DOM 注入。
 
 目标：实现类似 Codex 的只读变更卡和旁侧审阅体验。
 
@@ -941,9 +936,9 @@ src/renderer/companion/
 
 ### Phase 5：稳定性、发布与文档收口
 
-状态：**已实现并随 `v0.2.1-beta.1` 公开发布**。预览硬化、100 次审核/工作区切换/面板收放状态压力、2500 次长会话 working-set profile、旧 Runtime Home 升级、完整单元/集成、arm64 打包 E2E、异机候选安装、30 分钟真实打包应用 soak、Apple 公证与最终 DMG/ZIP 异机复验均已通过。独立 5 小时扩展 soak 保留为手动和每周低峰非阻塞门禁。宠物前收尾进一步完成 820/980/1180/1480 响应式矩阵、Markdown 相对链接安全重入和 64 MiB revision-aware preview LRU。
+状态：**已实现并随 `v0.2.1-beta.1` 公开发布**。预览硬化、100 次审核/工作区切换/面板收放状态压力、2500 次长会话 working-set profile、旧 Runtime Home 升级、完整单元/集成、arm64 打包 E2E、异机候选安装、30 分钟真实打包应用 soak、Apple 公证与最终 DMG/ZIP 异机复验均已通过。独立 5 小时扩展 soak 保留为手动和每周低峰非阻塞门禁。该阶段进一步完成 820/980/1180/1480 响应式矩阵、Markdown 相对链接安全重入和 64 MiB revision-aware preview LRU。
 
-目标：让前四阶段可以独立作为无宠物版本发布。
+目标：让前四阶段作为完整 Desktop Companion 主体发布。
 
 - 完成 100 次 open/close/switch/review stress 和长会话 memory profile。
 - 验证 Runtime crash/restart、toolbar renderer crash、Harness renderer crash 和离线恢复。
@@ -955,13 +950,13 @@ src/renderer/companion/
 
 - Companion fail-closed；关闭或故障时 Harness 能完整工作。
 - 所有安全发布门槛无例外。
-- 余额、Workspace Review 可在不含宠物的 App Version 中公开交付。
+- 余额、Workspace Review 可在 App Version 中公开交付。
 
 ### Phase 6：宠物素材与动画
 
-状态：**等待产品所有者提供并冻结角色素材，尚未开始实现**。
+状态：**已废弃并归档，不执行**。
 
-目标：在核心能力稳定后增加完整宠物体验。
+以下内容仅保留历史，不构成当前目标、下一阶段或恢复授权。
 
 - 冻结 canonical character source、identity checklist 和动作清单。
 - 选择并只实现一条 production animation 路径；不同时维护多套运行时。
@@ -980,7 +975,7 @@ src/renderer/companion/
 
 - 不引入远程 feature flag 后台。能力由 App Version 内的固定 capability handshake 决定。
 - Runtime companion handshake 失败时，余额卡不注册、右栏入口隐藏、Harness 全宽运行。
-- Phase 1 余额与 Phase 2-4 Workspace Review 可独立启用；宠物 capability 独立且最后启用。
+- Phase 1 余额与 Phase 2-4 Workspace Review 可独立启用。
 - `desktop.json` 只新增向后兼容的 panel open/width/tab 偏好；不保存 canonical root、EntryId、文件内容或余额。
 - 未知新字段被旧版本忽略；迁移失败回到默认 panel closed，不改 Runtime Home。
 - App Version 原子更新仍同时固定 Runtime Version 和 companion extension，不支持在线单独升级插件。
@@ -988,13 +983,13 @@ src/renderer/companion/
 
 ## 测试矩阵
 
-| 层级                | AccountBalance                              | Workspace/文件                         | Git                              | Markdown/Preview               | Harness seam                   | Pet                          |
-| ------------------- | ------------------------------------------- | -------------------------------------- | -------------------------------- | ------------------------------ | ------------------------------ | ---------------------------- |
-| Module interface    | schema、decimal、cache、single-flight、错误 | Capability、分页、类型、大小、失效     | NUL parser、状态合并、超限       | hostile corpus、URL、深度/大小 | schema、revision、sender、rate | reducer、timer generation    |
-| 本地集成            | mock HTTPS，无真实 API                      | 临时 FS、symlink、FIFO、权限、并发改名 | 临时 repo、怪异文件名、submodule | Blob/CSP/无网络                | in-memory Runtime Adapter      | manifest/atlas validator     |
-| pinned Runtime 契约 | credential resolve 不泄露 Key               | registry 复核 Session/Workspace        | —                                | client slot 正常装配           | footer/turnTail/session seams  | running 驱动                 |
-| Electron E2E        | wide/rail、离线/未配置/stale                | toggle、tree、refresh、切 Workspace    | 变更数、diff、截断               | rendered/source、XSS、链接     | restart 后旧 Capability 失效   | bounds、wake、reduced motion |
-| 发布安全            | 无 Key/余额落盘或日志                       | 诊断包无项目内容                       | helper 不执行                    | CSP 不放宽、SVG/remote 拒绝    | 无通用 emit/任意参数           | 无联网素材                   |
+| 层级                | AccountBalance                              | Workspace/文件                         | Git                              | Markdown/Preview               | Harness seam                  |
+| ------------------- | ------------------------------------------- | -------------------------------------- | -------------------------------- | ------------------------------ | ----------------------------- |
+| Module interface    | schema、decimal、cache、single-flight、错误 | Capability、分页、类型、大小、失效     | NUL parser、状态合并、超限       | hostile corpus、URL、深度/大小 | schema、revision、sender、rate |
+| 本地集成            | mock HTTPS，无真实 API                      | 临时 FS、symlink、FIFO、权限、并发改名 | 临时 repo、怪异文件名、submodule | Blob/CSP/无网络                | in-memory Runtime Adapter     |
+| pinned Runtime 契约 | credential resolve 不泄露 Key               | registry 复核 Session/Workspace        | —                                | client slot 正常装配           | footer/turnTail/session seams |
+| Electron E2E        | wide/rail、离线/未配置/stale                | toggle、tree、refresh、切 Workspace    | 变更数、diff、截断               | rendered/source、XSS、链接     | restart 后旧 Capability 失效  |
+| 发布安全            | 无 Key/余额落盘或日志                       | 诊断包无项目内容                       | helper 不执行                    | CSP 不放宽、SVG/remote 拒绝    | 无通用 emit/任意参数          |
 
 ### 必须加入的负向 fixtures
 
@@ -1034,8 +1029,6 @@ pnpm test:e2e
 12. `harness: add rich turn-tail change card and review intent`
 13. `test: harden companion security, recovery and performance gates`
 14. `release: ship account balance and Workspace Review without pet`
-15. `pet: freeze canonical art and animation manifest`
-16. `pet: implement state machine, assets and visual QA`
 
 ## 风险登记
 
@@ -1051,7 +1044,6 @@ pnpm test:e2e
 | 把 Workspace diff 误称本轮变更      | 错误归因、误导用户       | 明确 source/coverage，没有证据不使用该文案                 |
 | 右栏挤压 Harness/tool details       | 中心内容不可用           | 响应式 dock/overlay/Review Focus，一次只显示一个辅助面     |
 | 大仓库扫描卡顿                      | main 阻塞、内存增长      | lazy page、无递归 watcher、timeout、LRU、hard limits       |
-| 宠物身份漂移或性能不达标            | 视觉质量差、拖慢主体验   | canonical source、同一 rig/atlas、最后阶段、独立 gate      |
 
 ## 明确拒绝的方案
 
@@ -1064,7 +1056,7 @@ pnpm test:e2e
 - 不使用余额差值、网页抓取或本地 token 估算显示今日消费。
 - 不把当前 Workspace diff 冒充精确的本轮编辑。
 - 不直接用 `file://`、raw HTML 或可执行 SVG 做 preview。
-- 不为宠物生成彼此独立、身份不一致的逐帧角色图。
+- 不从已归档宠物实验恢复或生成资产，除非项目所有者明确重启该方向。
 
 ## 文档同步清单
 
@@ -1083,7 +1075,7 @@ Phase 0 开始实现时同步：
 
 ## 总体完成定义
 
-Desktop Companion 主体（不含宠物）完成，必须同时满足：
+Desktop Companion 主体完成，必须同时满足：
 
 1. 账户余额语义、错误状态和 Key 隔离全部通过。
 2. shell/Harness 双 preload、owned event 和 authenticated Runtime seam 无例外。
@@ -1094,4 +1086,4 @@ Desktop Companion 主体（不含宠物）完成，必须同时满足：
 7. 项目文件、Key、余额不进入不允许的存储、日志或诊断。
 8. 自动化检查、packaged E2E、Apple Silicon 真机矩阵和发布门禁全部通过。
 
-宠物完成还需额外满足素材输入门、状态机、identity QA、活动区约束与性能预算；宠物未完成不影响主体版本发布。
+已归档宠物实验不属于完成定义。

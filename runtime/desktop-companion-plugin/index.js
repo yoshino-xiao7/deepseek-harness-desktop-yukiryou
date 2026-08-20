@@ -1,6 +1,7 @@
 /* global Buffer, process */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { clearInterval, setInterval } from 'node:timers';
 
 import { createAccountBalance } from './account-balance.js';
 
@@ -14,33 +15,64 @@ export function apply(ctx) {
   const expectedToken = process.env.DSH_DESKTOP_COMPANION_TOKEN ?? '';
   const accountBalance = createAccountBalance({ credentials: ctx.credentials });
   ctx.effect(
+    () => monitorDesktopOwner(process.env.DSH_DESKTOP_OWNER_PID),
+    'deepseek-yukiryou: desktop owner watchdog',
+  );
+  ctx.effect(
     () => ctx.webServer.register({
       kind: 'exact',
       path: ROUTE,
       handler: async (request, response) => {
         response.setHeader('cache-control', 'no-store');
         if (request.method !== 'POST') return end(response, 405);
-        if (!authorized(expectedToken, request.headers[TOKEN_HEADER])) return end(response, 403);
         if (!String(request.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return end(response, 415);
         try {
           const payload = JSON.parse(await readRequest(request));
           if (!isRecord(payload)) return end(response, 400);
+          if (payload.kind === 'runtime.health') {
+            const proof = createRuntimeHealthProof(expectedToken, payload.nonce);
+            return proof === undefined
+              ? end(response, 403)
+              : endJson(response, 200, { status: 'ready', proof });
+          }
+          if (!authorized(expectedToken, request.headers[TOKEN_HEADER])) return end(response, 403);
           const snapshot = payload.kind === 'account.balance'
             ? await readBalance(accountBalance, payload)
             : payload.kind === 'workspace.authorize'
               ? await authorizeWorkspace(ctx.workspaceRegistry, payload)
               : undefined;
           if (snapshot === undefined) return end(response, 400);
-          const body = JSON.stringify(snapshot);
-          response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) });
-          response.end(body);
+          return endJson(response, 200, snapshot);
         } catch {
-          end(response, 400);
+          return end(response, 400);
         }
       },
     }),
     'deepseek-yukiryou: authenticated companion rpc',
   );
+}
+
+export function monitorDesktopOwner(ownerPidValue, options = {}) {
+  const ownerPid = Number(ownerPidValue);
+  if (!Number.isInteger(ownerPid) || ownerPid <= 1) return () => undefined;
+  const readParentPid = options.readParentPid ?? (() => process.ppid);
+  const terminate = options.terminate ?? (() => process.exit(0));
+  const intervalMs = options.intervalMs ?? 250;
+  const timer = setInterval(() => {
+    if (readParentPid() !== ownerPid) terminate();
+  }, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+export function createRuntimeHealthProof(secret, nonce) {
+  if (
+    typeof secret !== 'string' ||
+    secret.length < 32 ||
+    typeof nonce !== 'string' ||
+    !/^[A-Za-z0-9_-]{43}$/.test(nonce)
+  ) return undefined;
+  return createHmac('sha256', secret).update(nonce).digest('base64url');
 }
 
 async function readBalance(accountBalance, payload) {
@@ -86,6 +118,15 @@ async function readRequest(request) {
 function end(response, status) {
   response.writeHead(status);
   response.end();
+}
+
+function endJson(response, status, value) {
+  const body = JSON.stringify(value);
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+  });
+  response.end(body);
 }
 
 function isRecord(value) {

@@ -4,6 +4,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     ignores: [
+      '.cache/**',
       '.vite/**',
       'node_modules/**',
       'out/**',

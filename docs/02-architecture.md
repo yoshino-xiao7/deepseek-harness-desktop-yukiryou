@@ -39,7 +39,7 @@
 
 ### `RuntimeSupervisor`
 
-负责隐藏端口选择、子进程创建、环境构造、就绪探测、崩溃恢复和进程树关闭。
+负责隐藏子进程创建、环境构造、带 HMAC secret 持有证明的就绪探测、崩溃恢复和进程树关闭。稳定端口的持久化、旧日志迁移和占用自愈集中在独立 `RuntimePort` Module。
 
 ```ts
 type RuntimeState =
@@ -58,15 +58,15 @@ interface RuntimeSupervisor {
 接口保证：
 
 - `start()` 幂等；并发调用共享同一次启动。
-- `ready` 只会在子进程仍存活、origin 精确匹配、HTTP 就绪探测成功后返回。
+- `ready` 只会在子进程仍存活、origin 精确匹配、HTTP 首页就绪且 Companion 对随机 nonce 返回正确 HMAC 后返回。
 - `stop()` 只作用于本模块创建并持有 PID/进程组的进程。
 - 日志和错误在模块内部脱敏，调用方收到结构化失败分类。
 
-内部测试 seam 包括 `ProcessAdapter`、`PortAllocator`、`ReadinessProbe` 和 `Clock`；这些不暴露给应用其他模块。
+端口与 secret 通过窄 options 输入，测试使用 fake Harness 和真实 loopback 服务覆盖启动、占用、伪造证明、超时和退出；这些 seam 不暴露给应用其他模块。
 
 ### `DesktopWindow`
 
-负责主窗口的可信导航、加载/诊断状态、窗口持久化以及外部链接处理。模块内部保持一个本地静态 renderer 作为 44px 可拖动顶栏和启动/失败页面，并将官方 Harness 放入受限的 `WebContentsView`。二者是独立的 webContents。隔离 preload 使用只读 `ResizeObserver` 采集 Harness 侧栏的实际动画宽度，经主进程校验后更新顶栏 CSS 变量。它还暴露一个只含更新快照、订阅与 `check|install` 命令的窄桥；更新存在时在 Harness 品牌行挂载临时按钮，结构不匹配时失效关闭。
+负责主窗口的可信导航、加载/诊断状态、窗口持久化以及外部链接处理。模块内部保持一个本地静态 renderer 作为 44px 可拖动顶栏和启动/失败页面，并将官方 Harness 放入受限的 `WebContentsView`。二者是独立的 webContents。隔离 preload 使用只读 `ResizeObserver` 采集 Harness 侧栏的实际动画宽度，经主进程校验后更新顶栏 CSS 变量。它还暴露一个只含更新快照、订阅与 `check|install` 命令的窄桥；更新存在时在 Harness 侧栏右下角显示固定图标入口，侧栏结构不匹配或更新状态消失时失效关闭并移除。
 
 ```ts
 interface DesktopWindow {
@@ -114,14 +114,14 @@ interface AppUpdater {
 
 1. 获取单实例锁并创建日志器。
 2. 初始化窗口并显示本地 Loading 页面。
-3. `RuntimeSupervisor` 校验随包资源清单与架构。
-4. 从回环地址分配可用端口，并以显式 `--host 127.0.0.1 --port <port>` 启动 dsh。
-5. 设置独立 `DSH_HOME`，只传递明确白名单环境变量；不复制父进程环境到日志。
-6. 对预期 origin 做带超时和退避的 HTTP 就绪探测，同时监控 child exit。
-7. 就绪后让 `DesktopWindow` 在本地顶栏下方的隔离 `WebContentsView` 中加载 Harness UI。
-8. 失败则终止残留进程并显示结构化诊断页。
+3. `RuntimePort` 优先复用持久 endpoint；进入旧日志迁移时，按轮转文件物理顺序选择最后 ready origin，同时枚举保留日志中的全部不同 ready 端口。任一端口在宽限期后仍被占用，都在写入 endpoint 状态、复制或打开 Runtime Home 前失败关闭。
+4. endpoint 所有权确认后，原子发布 rc.8 回退事务意图，在 Harness 打开 Runtime Home 前完成完整副本，再校验随包资源清单与架构。
+5. 生成每次启动的新 Companion secret 与 owner PID，以显式 `--host 127.0.0.1 --port <port>` 启动 dsh；设置独立 `DSH_HOME`，只传递明确白名单环境变量。
+6. 对预期 origin 做带超时和退避的首页探测与 HMAC nonce challenge，同时监控 child exit；错误响应、旧版 403 探针和伪造 proof 都不能就绪。
+7. 就绪后让 `DesktopWindow` 在本地顶栏下方的隔离 `WebContentsView` 中加载已验证的 Harness UI。
+8. 失败则等待 owned child 确认退出并显示结构化诊断页；诊断落盘失败不能阻塞重试或退出。
 
-不能假设 dsh 支持 `--port 0`。端口分配使用“临时监听获取端口后释放”的 adapter，并依靠后续 PID、origin 与就绪握手阻止误连；若绑定竞争失败，重新分配并重试。
+不能假设 dsh 支持 `--port 0`。首次分配仍使用“临时监听获取端口后释放”，后续依靠稳定 endpoint 保留 Harness 的 origin-scoped 会话选择。启动前持续占用会失败关闭；availability 检查与 spawn 之间的绑定竞态仍由 secret challenge 拒绝，Failure 页重试会完整重启并重新验证，但不会静默连接或杀死未知服务。
 
 ## 退出与崩溃策略
 
@@ -129,7 +129,7 @@ interface AppUpdater {
 - `Cmd+Q` / Quit：停止接受重启，向 Harness 发送优雅终止，超时后只强制结束已记录的进程组。
 - Harness 意外退出：指数退避重启，单次应用会话最多两次；连续失败进入诊断页。
 - Electron renderer 崩溃：重建窗口并连接仍健康的 Harness；不立即重启 Harness。
-- Electron main 崩溃：由操作系统结束应用；下次启动检测并清理本应用遗留的、具备所有权证明的进程记录。不能仅凭进程名清理。
+- Electron main 崩溃：Companion owner watchdog 检测父 PID 改变并结束 Runtime；下次启动先等待稳定端口释放，超时则失败关闭并提示用户结束遗留进程。不能仅凭进程名清理未知进程。
 
 ## 数据目录
 
@@ -139,8 +139,9 @@ interface AppUpdater {
 ├── runtime/               # DSH_HOME，Harness 自有数据
 ├── logs/                  # 轮转且脱敏的桌面壳/运行时日志
 ├── diagnostics/           # 用户显式导出的诊断包
-└── state/
-    └── runtime-owner.json # PID、启动时间、随机实例标识、版本
+├── runtime-endpoint.json  # 稳定 loopback host/port 与选择时间
+├── .dsh-0.1.0-rc.8-storage-v1.json # rc.8 回退副本事务意图
+└── runtime.pre-dsh-0.1.0-rc.8[.N]/ # 升级前 Runtime Home 回退副本
 ```
 
 缓存放入 `~/Library/Caches/<BundleId>/`，不与持久数据混放。应用升级不删除 `runtime/`；卸载说明必须明确数据不会随 `.app` 删除。

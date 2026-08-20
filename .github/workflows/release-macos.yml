@@ -22,6 +22,7 @@ env:
   ARTIFACT_NAME: DeepSeek.YukiRyou
   RELEASE_VERSION: ${{ inputs.version }}
   RELEASE_TAG: v${{ inputs.version }}
+  UPGRADE_FROM_VERSION: 0.2.1-beta.2
   MACOS_SIGN_IDENTITY: 'Developer ID Application: HanTao Cao (7G6J4S76PN)'
 
 jobs:
@@ -100,7 +101,7 @@ jobs:
           retention-days: 7
 
   verify_candidate:
-    name: Fresh-runner install and smoke gate
+    name: Fresh-runner install, upgrade, and smoke gate
     needs: build_candidate
     runs-on: macos-15
     steps:
@@ -127,10 +128,28 @@ jobs:
             --require-notarized=false \
             --candidate-manifest=out/release-candidate/candidate-manifest.json \
             --receipt=out/release-candidate/portable-verification.json
-      - name: Start the exact installed candidate and wait for Harness
+      - name: Start and restart the exact installed candidate
         env:
           DSH_E2E_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
-        run: pnpm exec vitest run tests/e2e/packaged-startup.test.ts --no-file-parallelism
+        run: pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts --no-file-parallelism
+      - name: Download and extract the previous public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/previous-release" "${RUNNER_TEMP}/previous-app"
+          gh release download "v${UPGRADE_FROM_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "${ARTIFACT_NAME}-darwin-arm64-${UPGRADE_FROM_VERSION}.zip" \
+            --dir "${RUNNER_TEMP}/previous-release"
+          ditto -x -k \
+            "${RUNNER_TEMP}/previous-release/${ARTIFACT_NAME}-darwin-arm64-${UPGRADE_FROM_VERSION}.zip" \
+            "${RUNNER_TEMP}/previous-app"
+      - name: Verify upgrade from the previous public release
+        env:
+          DSH_E2E_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
+          DSH_PREVIOUS_EXECUTABLE_PATH: ${{ runner.temp }}/previous-app/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
+          DSH_PREVIOUS_EXPECTED_VERSION: ${{ env.UPGRADE_FROM_VERSION }}
+        run: pnpm test:upgrade
       - uses: actions/upload-artifact@v4
         with:
           name: macos-portable-verification

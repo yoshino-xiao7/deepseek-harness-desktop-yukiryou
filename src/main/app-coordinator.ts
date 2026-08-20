@@ -17,6 +17,17 @@ import {
 import { createRuntimeRecoveryPolicy } from './runtime/runtime-recovery-policy.js';
 import { createHarnessRuntimeCommand } from './runtime/runtime-command.js';
 import { createRuntimeCompanionClient } from './runtime/runtime-companion-client.js';
+import { ensureRc8RuntimeHomeBackup } from './runtime/runtime-home-upgrade.js';
+import { createRuntimeStderrScrubber } from './runtime/runtime-stderr-scrubber.js';
+import {
+  resolveStableRuntimePort,
+  StableRuntimePortOccupiedError,
+} from './runtime/runtime-port.js';
+import {
+  finalizeApplicationExit,
+  relaunchAfterStartupFailure,
+  startupPreparationFailureLogDetails,
+} from './startup-recovery.js';
 import {
   createWorkspaceInspector,
   type WorkspaceInspector,
@@ -50,6 +61,9 @@ export class AppCoordinator {
   #recovering = false;
   #lastFailure: RuntimeFailure | undefined;
   #companionToken = '';
+  readonly #runtimeStderr = createRuntimeStderrScrubber({
+    onLine: (line) => this.#log?.write('runtime.stderr', line),
+  });
   #workspaceAuthorityRevision = 0;
   #workspaceInspector: WorkspaceInspector | undefined;
 
@@ -74,7 +88,6 @@ export class AppCoordinator {
     const logDirectory = join(userData, 'logs');
     await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
     this.#log = await createAppLog(logDirectory);
-    const recoveredPreferences = await this.#recoverPreferences(runtimeHome);
     this.#updater = createAppUpdater({
       enabled: process.env.DSH_DESKTOP_E2E !== '1' &&
         isUpdaterSupported({
@@ -93,7 +106,7 @@ export class AppCoordinator {
       loadingUrl: loadingLocation,
       shellPreloadPath: join(moduleDirectory, 'shell-preload-entry.cjs'),
       harnessPreloadPath: join(moduleDirectory, 'harness-preload-entry.cjs'),
-      onRetry: () => void this.restartRuntime(),
+      onRetry: () => void this.#retryStartup(),
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
@@ -106,11 +119,51 @@ export class AppCoordinator {
       onRendererCrash: (target, reason) =>
         this.#log?.write('renderer.crashed', `target=${target} reason=${reason}`),
     });
+    await this.#window.showLoading();
+
+    let recoveredPreferences: string | undefined;
+    let runtimePort: Awaited<ReturnType<typeof resolveStableRuntimePort>>;
+    try {
+      // Resolve endpoint ownership before copying or opening Runtime Home. An
+      // orphaned rc.7 process may still be writing the incompatible storage.
+      runtimePort = await resolveStableRuntimePort(userData);
+      const upgradeBackup = await ensureRc8RuntimeHomeBackup(runtimeHome);
+      if (upgradeBackup.status === 'created') {
+        this.#log.write(
+          'runtime.upgrade-backup-created',
+          `backup=${basename(upgradeBackup.backupPath)}`,
+        );
+      }
+      recoveredPreferences = await this.#recoverPreferences(runtimeHome);
+      this.#log.write(
+        'runtime.endpoint-selected',
+        `port=${String(runtimePort.port)} source=${runtimePort.source}`,
+      );
+    } catch (error) {
+      const failureDetails = startupPreparationFailureLogDetails(error);
+      const failure: RuntimeFailure = {
+        code: error instanceof StableRuntimePortOccupiedError
+          ? 'runtime-endpoint-occupied'
+          : 'upgrade-preparation-failed',
+        message: `Runtime preparation failed (${failureDetails})`,
+      };
+      this.#lastFailure = failure;
+      this.#log.write(
+        'runtime.upgrade-preparation-failed',
+        failureDetails,
+      );
+      await this.#window.showFailure(failure);
+      return;
+    }
+
+    // Do not enqueue or rotate this process's log until the previous ready
+    // origin has been read. That log is the one-time migration source for
+    // releases that predate runtime-endpoint.json.
     this.#updater.subscribe((state) => {
       this.#log?.write('update.state', JSON.stringify(state));
       this.#window?.setUpdateState(state);
     });
-    await this.#window.showLoading();
+
     if (recoveredPreferences !== undefined) {
       this.#notifyPreferenceRecovery(recoveredPreferences);
     }
@@ -129,20 +182,26 @@ export class AppCoordinator {
         join(runtimeRoot, 'node', 'bin'),
       ],
       workspaceRoot: app.getPath('documents'),
-      version: '0.1.0-rc.7',
+      version: '0.1.0-rc.8',
       startupTimeoutMs: 20_000,
       shutdownTimeoutMs: 5_000,
+      port: runtimePort.port,
       createCompanionToken: () => {
-        this.#companionToken = randomBytes(32).toString('base64url');
-        return this.#companionToken;
+        const companionToken = randomBytes(32).toString('base64url');
+        this.#runtimeStderr.rotateCompanionSecret(companionToken);
+        this.#companionToken = companionToken;
+        return companionToken;
       },
       onOutput: (stream, chunk) => {
         if (stream === 'stderr') {
-          this.#log?.write('runtime.stderr', chunk);
+          this.#runtimeStderr.write(chunk);
         }
       },
     });
     this.#runtime.subscribe((state) => {
+      if (state.kind === 'stopped' || state.kind === 'failed') {
+        this.#runtimeStderr.flush();
+      }
       this.#log?.write('runtime.state', JSON.stringify(state));
       if (state.kind === 'failed') {
         this.#lastFailure = state.failure;
@@ -222,7 +281,7 @@ export class AppCoordinator {
       [
         `Application: ${app.name} ${app.getVersion()}`,
         `Electron: ${process.versions.electron}`,
-        `Harness: 0.1.0-rc.7`,
+        `Harness: 0.1.0-rc.8`,
         `Architecture: ${process.arch}`,
         `Failure: ${failure?.code ?? 'none'}`,
         `Details: ${redact(failure?.message ?? 'No failure recorded')}`,
@@ -301,7 +360,7 @@ export class AppCoordinator {
           application: app.name,
           applicationVersion: app.getVersion(),
           electronVersion: process.versions.electron,
-          harnessVersion: '0.1.0-rc.7',
+          harnessVersion: '0.1.0-rc.8',
           architecture: process.arch,
           macOSVersion: release(),
           failureCode: failure?.code ?? 'none',
@@ -323,6 +382,30 @@ export class AppCoordinator {
     await this.#window?.showLoading();
     await this.#runtime?.stop('restart');
     await this.#startRuntime();
+  }
+
+  async #retryStartup(): Promise<void> {
+    const runtimeState = this.#runtime?.getState();
+    if (this.#runtime !== undefined && runtimeState?.kind !== 'failed') {
+      await this.restartRuntime();
+      return;
+    }
+    try {
+      await this.#runtime?.stop('restart');
+    } catch {
+      // A full relaunch will rebuild endpoint and process state from disk.
+    }
+    this.#runtimeStderr.flush();
+    this.#quitting = true;
+    await relaunchAfterStartupFailure({
+      log: this.#log,
+      relaunch: () => app.relaunch(),
+      dispose: () => {
+        this.#window?.dispose();
+        this.#updater?.dispose();
+      },
+      quit: () => app.quit(),
+    });
   }
 
   async #checkForUpdates(): Promise<void> {
@@ -398,11 +481,20 @@ export class AppCoordinator {
     }
     this.#quitting = true;
     this.#log?.write('update.installing');
-    await this.#runtime?.stop('update');
-    this.#window?.dispose();
-    this.#updater?.dispose();
-    await this.#log?.close();
-    this.#updater?.quitAndInstall();
+    const updater = this.#updater;
+    try {
+      await this.#runtime?.stop('update');
+    } finally {
+      this.#runtimeStderr.flush();
+      await finalizeApplicationExit({
+        log: this.#log,
+        dispose: () => {
+          this.#window?.dispose();
+          updater?.dispose();
+        },
+        exit: () => updater?.quitAndInstall(),
+      });
+    }
   }
 
   async #recoverRuntime(failure: RuntimeFailure): Promise<void> {
@@ -432,11 +524,19 @@ export class AppCoordinator {
     }
     this.#quitting = true;
     this.#log?.write('app.quit');
-    await this.#runtime?.stop('quit');
-    this.#window?.dispose();
-    this.#updater?.dispose();
-    await this.#log?.close();
-    app.quit();
+    try {
+      await this.#runtime?.stop('quit');
+    } finally {
+      this.#runtimeStderr.flush();
+      await finalizeApplicationExit({
+        log: this.#log,
+        dispose: () => {
+          this.#window?.dispose();
+          this.#updater?.dispose();
+        },
+        exit: () => app.quit(),
+      });
+    }
   }
 
   async #startRuntime(): Promise<void> {
@@ -446,6 +546,7 @@ export class AppCoordinator {
         await this.#window?.showHarness(ready.origin);
       }
     } catch (error) {
+      this.#runtimeStderr.flush();
       const state = this.#runtime?.getState();
       const failure =
         state?.kind === 'failed' ? state.failure : failureFrom(error);

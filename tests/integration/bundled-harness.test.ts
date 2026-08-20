@@ -22,7 +22,7 @@ describe('bundled Harness runtime', () => {
     await supervisor?.stop('quit');
   });
 
-  it('ships the version-scoped per-model capability editor patch', async () => {
+  it('ships the rc.8-scoped per-model capability editor patch', async () => {
     const client = await readFile(
       join(
         projectRoot,
@@ -68,7 +68,7 @@ describe('bundled Harness runtime', () => {
         ),
         '--version',
       ]);
-      expect(dshVersion.stdout.trim()).toBe('0.1.0-rc.7');
+      expect(dshVersion.stdout.trim()).toBe('0.1.0-rc.8');
       supervisor = createRuntimeSupervisor({
         command: runtimeCommand.command,
         args: runtimeCommand.args,
@@ -78,7 +78,7 @@ describe('bundled Harness runtime', () => {
           join(runtimeRoot, 'node', 'bin'),
         ],
         workspaceRoot,
-        version: '0.1.0-rc.7',
+        version: '0.1.0-rc.8',
         startupTimeoutMs: 20_000,
         shutdownTimeoutMs: 5_000,
         createCompanionToken: () => 'integration-token-that-is-long-enough-123456789',

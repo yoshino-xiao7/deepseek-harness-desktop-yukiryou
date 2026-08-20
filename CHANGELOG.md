@@ -6,15 +6,28 @@
 
 ## [未发布]
 
+## [0.2.2-beta.1] - 2026-08-21
+
+### 新增
+
+- Runtime 基线升级至 DeepSeek Harness `0.1.0-rc.8`，获得上游原生多模态配置、命令图文输入、文件/会话引用及子代理改进。
+- 首次使用 rc.8 启动前自动保留完整的 rc.7 Runtime Home 副本，作为不兼容存储格式迁移的回退点。
+
+### 修复
+
+- 修复本版安装后桌面应用重启或手动重启 Harness 时进入空会话的问题：Harness 回环 origin 现在跨启动保持稳定；从正常退出且保留 ready 日志的上一公开版升级时也会一次性迁移，因此官方 `dsh.sessions.current` 可以继续恢复最后活跃会话，升级门禁还会确认没有新增空白 Session。
+
 ### 改进
 
-- Markdown 排版预览中的安全相对文件链接现在可以在当前工作区继续打开；协议 URL、绝对路径、越界路径和 symlink 仍被拒绝。
-- 文件预览新增按 revision 校验的 64 MiB LRU，Workspace 切换会随 Inspector 一起释放缓存。
-- 窗口最小宽度调整为 820px，并补齐 820/980/1180/1480px 的 overlay、docked、Review Focus 与宽屏审核布局验证。
+- 桌面壳启动 rc.8 Web Profile 时显式禁止打开系统浏览器，Harness UI 只在应用窗口内显示。
+- 模型输入能力补丁已复核并严格迁移到 rc.8：上游新增的是官方 DeepSeek adapter 的 `inputModalities`，自定义 Provider 的 `models[].input` 仍需临时 UI 控件。
+- 修复打包后启动页品牌图路径，改由 Vite 的 public asset 机制提供，不再出现开发环境正常、安装包图片缺失。
+- 固定回环端口使用每次 Runtime 启动生成的 secret 与 HMAC 挑战证明响应者持有本次 secret；本机其他服务即使抢占端口也不能被误判为可信 Harness。一次性旧日志迁移还会要求轮转日志中保留的全部不同 ready 端口先释放；任一遗留 Runtime 仍占用端口，都会在复制或打开 Runtime Home 前失败关闭。
+- `v0.2.1-beta.2` 升级合同明确要求先正常退出旧版；若旧版被强杀、崩溃或 ready 日志已清理，需先重启 macOS。日志已经丢失时可能需要在升级后手动重新选择一次原会话。
 
 ### 文档
 
-- 修正 Desktop Companion 和 `v0.2.1-beta.1` 发布门禁状态；明确非宠物阶段已经收口。
+- 接受 Plugin-first、main 层可替换 DesktopProductCarrier 与 Runtime 层 DesktopFramePlugin 的长期架构决定，并把 Windows 11 x64 纳入后续发行方向；这些规划不表示本版已经支持 Windows 或插件市场。
 
 ## [0.2.1-beta.2] - 2026-08-19
 
@@ -24,9 +37,19 @@
 - 未配置模型时，账户余额说明改为纵向排布并与“设置”图标对齐，不再发生文字挤压、截断和起始位置偏移。
 - 自定义模型目录新增逐模型输入能力选择，可明确设置为自动继承、仅文本或文本与图片；不会把同一 Provider 的所有模型一起误标为多模态。
 
+### 改进
+
+- Markdown 排版预览中的安全相对文件链接现在可以在当前工作区继续打开；协议 URL、绝对路径、越界路径和 symlink 仍被拒绝。
+- 文件预览新增按 revision 校验的 64 MiB LRU，Workspace 切换会随 Inspector 一起释放缓存。
+- 窗口最小宽度调整为 820px，并补齐 820/980/1180/1480px 的 overlay、docked、Review Focus 与宽屏审核布局验证。
+
 ### 维护
 
 - 模型能力 UI 以仅适用于 Harness `0.1.0-rc.7` 的可逆临时补丁交付；升级 Harness 时会强制复核，官方修复后可以逐字撤回。
+
+### 文档
+
+- 修正 Desktop Companion 和 `v0.2.1-beta.1` 发布门禁状态；明确非宠物阶段已经收口。
 
 ## [0.2.1-beta.1] - 2026-08-18
 
@@ -108,6 +131,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[0.2.2-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.2-beta.1
 [0.2.1-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.2
 [0.2.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.1
 [0.2.0-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.0-beta.1

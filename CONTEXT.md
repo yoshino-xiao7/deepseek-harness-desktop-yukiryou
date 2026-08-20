@@ -1,15 +1,15 @@
-# DeepSeek YukiRyou for macOS
+# DeepSeek YukiRyou Desktop
 
-本项目把本机运行的 DeepSeek Harness 交付为可信、可安装、可维护的 macOS 桌面应用。
+本项目把本机运行的 DeepSeek Harness 交付为可信、可安装、可维护的桌面应用。当前公开发行面向 Apple Silicon macOS，后续目标包含 Windows 11 x64。
 
 ## Language
 
 **桌面应用（Desktop App）**：
-用户安装和启动的 macOS 应用整体，包含桌面壳与随包运行时。
+用户安装和启动的桌面应用整体，包含桌面壳与随包运行时。
 _Avoid_: 客户端、GUI、套壳
 
 **桌面壳（Desktop Shell）**：
-负责窗口、菜单、通知、生命周期和更新的 macOS/Electron 部分，不实现 Agent 行为。
+负责窗口、菜单、通知、生命周期和更新的 Electron 部分，不实现 Agent 行为。
 _Avoid_: Harness、后端
 
 **Harness 运行时（Harness Runtime）**：
@@ -33,7 +33,7 @@ _Avoid_: 最新版、用户安装版本
 _Avoid_: Harness 版本
 
 **桌面伴侣（Desktop Companion）**：
-由桌面壳承载的只读辅助能力集合。当前包含 Harness 官方 slot 账户余额、右栏与 Workspace Review，但不复制 Agent、会话或工具详情 UI；宠物活动区仍属于最后阶段。
+由桌面壳承载的只读辅助能力集合。当前包含 Harness 官方 slot 账户余额、右栏与 Workspace Review，但不复制 Agent、会话或工具详情 UI。宠物实验已归档，不属于当前产品线。
 _Avoid_: 新 Harness UI、文件编辑器
 
 **Workspace Review**：

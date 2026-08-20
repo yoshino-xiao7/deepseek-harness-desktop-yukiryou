@@ -526,7 +526,7 @@ describe('packaged desktop application', () => {
         getSnapshot: 'function',
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
-      expect(settingsResult?.aboutText).toContain('0.1.0-rc.7');
+      expect(settingsResult?.aboutText).toContain('0.1.0-rc.8');
       expect(settingsResult?.aboutText).toMatch(/Apple Silicon.*arm64/);
 
       await electronApp.evaluate(({ webContents }) => {
@@ -725,6 +725,28 @@ describe('packaged desktop application', () => {
         sandbox: true,
         webSecurity: true,
       });
+
+      // A Harness draft guard must never strand Cmd-Q / test teardown in a
+      // native beforeunload prompt after the owned Runtime has stopped.
+      await electronApp.evaluate(async ({ webContents }) => {
+        const harness = webContents
+          .getAllWebContents()
+          .find((contents) =>
+            contents.getURL().startsWith('http://127.0.0.1:'),
+          );
+        await harness?.executeJavaScript(`
+          window.addEventListener('beforeunload', (event) => {
+            event.preventDefault();
+            event.returnValue = '';
+          });
+        `);
+      });
+      const applicationProcess = electronApp.process();
+      const closeStartedAt = Date.now();
+      await electronApp.close();
+      expect(applicationProcess.exitCode).toBe(0);
+      expect(Date.now() - closeStartedAt).toBeLessThan(20_000);
+      electronApp = undefined;
     },
     45_000,
   );

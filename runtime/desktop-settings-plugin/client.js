@@ -500,7 +500,7 @@ window.__ModuleLoader__.load({
       const update = updatePresentation(state, t);
       const rows = [
         ['about.application', state.currentVersion],
-        ['about.harness', '0.1.0-rc.7'],
+        ['about.harness', '0.1.0-rc.8'],
         ['about.node', '24.19.0'],
         ['about.pnpm', '10.34.5'],
         ['about.architecture', t('about.architectureValue')],

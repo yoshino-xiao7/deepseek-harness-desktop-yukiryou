@@ -99,9 +99,9 @@ Every public release includes SHA-256 checksums. The app and update artifacts ar
 
 | Feature | Status | Planned scope |
 | --- | --- | --- |
-| DeepSeek pet | **In development** | A bounded Companion activity area with a consistent character, idle blinking, drowsy/sleep/wake sequences, and a “devouring tokens” running state. High-frame-rate animation and visual QA begin after the character assets are finalized. |
 | Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
-| Plugin marketplace | **Planned** | Plugin discovery, details, install, update, removal, and permission disclosure, opened only after source verification, signing, compatibility, and recovery boundaries are designed. |
+| Plugin marketplace | **Planned** | Plugin discovery, details, install, update, removal, and accurate trust disclosure, opened only after the full dependency graph is frozen and registry provenance/integrity, compatibility, and recovery boundaries are implemented. |
+| Windows x64 release | **Planned** | Windows 11 x64 is the initial target, sharing the Plugin-first product layer while separating the Electron carrier and Runtime root frame through DesktopProductCarrier and DesktopFramePlugin, with dedicated release gates for native chrome, Runtime, signing, installation, and updates. |
 
 The roadmap describes direction, not committed dates. If the security model, upstream Harness contracts, or required assets are not ready, the feature remains unavailable instead of shipping through brittle DOM injection or weakened system protections.
 
@@ -112,17 +112,19 @@ flowchart LR
     A["DeepSeek YukiRyou.app"] --> B["Electron main process"]
     B --> C["Bundled Node.js"]
     C --> D["Pinned DeepSeek Harness"]
-    D --> E["Random 127.0.0.1 port"]
+    D --> E["Stable 127.0.0.1 origin + HMAC secret-possession proof"]
     E --> F["Isolated Harness WebContentsView"]
     B --> G["Window, updates, and recovery"]
     G --> F
 ~~~
 
-Harness listens on a random loopback port and is not exposed to the LAN. Its renderer runs without Node integration, with context isolation, sandboxing, and web security enabled. The desktop bridge exposes only a small validated capability surface. See the [security design](docs/03-security.md) for the complete trust boundary.
+Harness listens on a stable loopback endpoint selected and persisted by the app, never on the LAN. Every Runtime start must prove that the responder possesses the fresh per-start secret through an HMAC challenge. During one-time legacy-log migration, the final ready record in physical log order selects the stable origin, but every distinct ready port retained across rotated logs must first become free; any surviving Runtime fails closed before Runtime Home is copied or opened. Its renderer runs without Node integration, with context isolation, sandboxing, and web security enabled. This is not OS-level process isolation; see the [security design](docs/03-security.md) for the complete trust boundary.
 
 ## Versions and updates
 
 The app checks public GitHub Releases after startup, and updates can also be checked from **Settings → About**. After an update is downloaded, installation starts only after user confirmation.
+
+Before upgrading from `v0.2.1-beta.2` to the first rc.8 build, quit the old app completely from its application menu. If the old app was force-quit, its main process crashed, or desktop logs were manually removed, restart macOS before installing. The previous Runtime has no owner watchdog, and this one-time origin migration relies on its retained final ready record. Rebooting prevents old and new Runtimes from writing concurrently; if that record was already lost, you may need to select the previous session once from the sidebar after upgrading.
 
 The desktop shell, Node.js, pnpm, and Harness form one atomic release. Runtime pieces are never upgraded independently in the background. A release is signed, installed and smoke-tested on a fresh runner, soaked, notarized, and verified again before it becomes a draft. Publication is a separate explicit step. See the [release runbook](docs/09-github-and-apple-release.md).
 
@@ -158,7 +160,7 @@ Signing, notarization, and public distribution run only through the GitHub Actio
 
 | Component | Current version | Policy |
 | --- | --- | --- |
-| DeepSeek Harness | <code>0.1.0-rc.7</code> | Pinned and verified with the app |
+| DeepSeek Harness | <code>0.1.0-rc.8</code> | Pinned and verified with the app |
 | Node.js | <code>24.19.0</code> | Bundled Apple Silicon runtime |
 | pnpm | <code>10.34.5</code> | Used only by the bundled Harness |
 | Electron | <code>43.4.0</code> | Desktop shell runtime |

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -20,6 +20,9 @@ describe('diagnostic redaction', () => {
     const value = [
       'sk-abcdefghijk12345',
       'Authorization: Bearer private-value',
+      'DSH_DESKTOP_COMPANION_TOKEN=desktop-runtime-secret',
+      "DSH_DESKTOP_COMPANION_TOKEN: 'object-runtime-secret'",
+      '{"DSH_DESKTOP_COMPANION_TOKEN":"json-runtime-secret"}',
       'https://example.test/path?api_key=top-secret&mode=safe&token=also-secret',
     ].join(' ');
 
@@ -29,6 +32,9 @@ describe('diagnostic redaction', () => {
     expect(result).not.toContain('private-value');
     expect(result).not.toContain('top-secret');
     expect(result).not.toContain('also-secret');
+    expect(result).not.toContain('desktop-runtime-secret');
+    expect(result).not.toContain('object-runtime-secret');
+    expect(result).not.toContain('json-runtime-secret');
     expect(result).toContain('mode=safe');
   });
 
@@ -50,5 +56,17 @@ describe('diagnostic redaction', () => {
     expect(await readFile(join(directory, 'desktop.log'), 'utf8')).toContain(
       'record-7',
     );
+  });
+
+  it('observes queued write failures immediately while flush still reports them', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'yukiryou-log-failure-test-'));
+    temporaryDirectories.push(directory);
+    await mkdir(join(directory, 'desktop.log'));
+    const log = await createAppLog(directory);
+
+    log.write('test.unwritable');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    await expect(log.flush()).rejects.toMatchObject({ code: 'EISDIR' });
   });
 });

@@ -143,6 +143,34 @@ describe('macOS release workflow contract', () => {
     expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
   });
 
+  it('gates notarization on candidate restart and previous-release upgrade checks', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const steps = workflow.jobs?.verify_candidate?.steps ?? [];
+    const restartIndex = steps.findIndex((step) =>
+      step.run?.includes('tests/e2e/session-selection-restart.test.ts'),
+    );
+    const downloadIndex = steps.findIndex((step) =>
+      step.run?.includes('gh release download "v${UPGRADE_FROM_VERSION}"'),
+    );
+    const upgradeIndex = steps.findIndex(
+      (step) => step.run?.trim() === 'pnpm test:upgrade',
+    );
+
+    expect(restartIndex).toBeGreaterThan(-1);
+    expect(downloadIndex).toBeGreaterThan(restartIndex);
+    expect(upgradeIndex).toBeGreaterThan(downloadIndex);
+    expect(steps[downloadIndex]?.run).toContain(
+      '${ARTIFACT_NAME}-darwin-arm64-${UPGRADE_FROM_VERSION}.zip',
+    );
+    expect(workflow.jobs?.soak_candidate?.needs).toBe('verify_candidate');
+    expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
+  });
+
   it('keeps the five-hour soak in an independent scheduled workflow', async () => {
     const workflow = parse(
       await readFile(

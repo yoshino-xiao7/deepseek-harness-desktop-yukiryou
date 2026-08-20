@@ -1,5 +1,7 @@
 # 实施计划
 
+> 本文保留已完成的 Phase 0–5 基线和最初 Issue 切分，不再作为实时状态看板。当前事实见 [`07-current-status.md`](07-current-status.md)，下一阶段采用 [`11-integrated-desktop-shell-and-plugin-market.md`](11-integrated-desktop-shell-and-plugin-market.md)。宠物实验已归档，不属于当前产品线。
+
 每个阶段都应形成一个可评审 PR；不得把签名、运行时装配和核心生命周期压到最后一次性处理。
 
 ## Phase 0：仓库基线
@@ -69,9 +71,9 @@
 
 ## 已接受的后续专题计划
 
-Desktop Companion 的完整产品语义、架构、安全 seam、文件落点、测试矩阵与阶段退出条件已冻结在 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。非宠物阶段已实现并随 `v0.2.1-beta.1` 完成签名、公证和异机发布验证；相对 Markdown 文件链接、64 MiB 有界预览缓存和 820px 最小窗口响应式矩阵也已收口。下一实施阶段是等待角色素材冻结后的宠物动画。
+Desktop Companion 的完整产品语义、架构、安全 seam、文件落点、测试矩阵与阶段退出条件已冻结在 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。非宠物阶段已实现并随 `v0.2.1-beta.1` 完成签名、公证和异机发布验证；相对 Markdown 文件链接、64 MiB 有界预览缓存和 820px 最小窗口响应式矩阵也已收口。下一实施阶段是一体化 DesktopProductCarrier、DesktopFramePlugin、受管插件目录与 Windows 发行适配。
 
-实施顺序固定为：安全契约与双 preload → 账户余额 → 右栏与 Workspace Capability → 文件树和安全预览 → Git 变更与审阅 → 无宠物版本稳定性验收 → 用户提供角色素材后的宠物动画。该专题阶段不得反向改写上文已经完成的基础 Phase 0–4。
+Desktop Companion 已完成的实施顺序为：安全契约与双 preload → 账户余额 → 右栏与 Workspace Capability → 文件树和安全预览 → Git 变更与审阅 → 无宠物版本稳定性验收。宠物实验已停止并存入冷备份分支；不得把它自动恢复到后续开发或发行分支。该专题阶段不得反向改写上文已经完成的基础 Phase 0–4。
 
 ## 首批 Issue 切分
 
@@ -95,7 +97,7 @@ Desktop Companion 的完整产品语义、架构、安全 seam、文件落点、
 | dsh Developer Preview 破坏性变化 | 启动/UI/数据不兼容 | 固定版本、契约测试、原子应用发布 |
 | dsh 依赖原生模块 | 双架构打包或签名失败 | 每架构原生构建、清单扫描所有 Mach-O |
 | Web UI 无稳定任务事件 | 通知不可靠 | 不使用 DOM 猜测，延期或开发官方插件 |
-| Harness 无认证 | 本机其他进程可访问 | loopback-only、随机端口；持续跟踪官方认证能力 |
+| Harness HTTP 服务位于 loopback | 本机进程可能探测或抢占固定端口 | 稳定 origin、旧日志全部历史 ready 端口迁移检查、每次启动随机 secret 的 HMAC 持有证明、owner watchdog、持续占用失败关闭与可信导航；持续跟踪官方认证能力 |
 | macOS 进程树退出差异 | 遗留工具进程 | 进程组、所有权记录、真实集成测试，不按名称清理 |
 | 公证/自动更新配置晚暴露 | 无法发布 | Phase 0 保留配置，Phase 2 进行首次开发签名演练 |
 | 用户数据格式不可逆 | 回滚困难 | 升级前兼容检查；必要时快照 Runtime Home |

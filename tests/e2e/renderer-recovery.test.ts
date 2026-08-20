@@ -17,7 +17,7 @@ describe('renderer recovery', () => {
     if (userData !== undefined) {
       await rm(userData, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it(
     'recovers Harness and toolbar renderers without restarting the other',

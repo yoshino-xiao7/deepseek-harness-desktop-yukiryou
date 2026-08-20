@@ -57,7 +57,7 @@ class FileAppLog implements AppLog {
       details: redact(details).slice(0, 8_192),
     };
     const line = `${JSON.stringify(record)}\n`;
-    this.#pending = this.#pending.then(async () => {
+    const pending = this.#pending.then(async () => {
       const bytes = Buffer.byteLength(line);
       if (this.#size > 0 && this.#size + bytes > this.#maxFileBytes) {
         await rotateLog(this.#logPath, this.#backupCount);
@@ -66,6 +66,10 @@ class FileAppLog implements AppLog {
       await appendFile(this.#logPath, line, { encoding: 'utf8', mode: 0o600 });
       this.#size += bytes;
     });
+    // Observe failures immediately so a full/read-only disk cannot terminate
+    // the main process before a later flush() reports the same rejection.
+    void pending.catch(() => undefined);
+    this.#pending = pending;
   }
 
   async close(): Promise<void> {
@@ -133,6 +137,14 @@ export function redact(value: string): string {
     .replaceAll(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, '$1[REDACTED]')
     .replaceAll(
       /([?&](?:api[_-]?key|access[_-]?token|token)=)[^&#\s]+/gi,
+      '$1[REDACTED]',
+    )
+    .replaceAll(
+      /(["']?DSH_DESKTOP_COMPANION_TOKEN["']?\s*[:=]\s*["'])[^"']+(["'])/gi,
+      '$1[REDACTED]$2',
+    )
+    .replaceAll(
+      /(DSH_DESKTOP_COMPANION_TOKEN\s*[:=]\s*)[^\s,;}]+/gi,
       '$1[REDACTED]',
     )
     .replaceAll(/("?(?:api[_-]?key|token)"?\s*[:=]\s*")([^"]+)(")/gi, '$1[REDACTED]$3')

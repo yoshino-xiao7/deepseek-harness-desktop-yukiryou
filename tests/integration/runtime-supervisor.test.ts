@@ -1,4 +1,5 @@
 import { mkdtemp, realpath } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,9 @@ import {
 
 const fakeHarness = fileURLToPath(
   new URL('../fixtures/fake-harness/server.mjs', import.meta.url),
+);
+const idleChild = fileURLToPath(
+  new URL('../fixtures/fake-harness/idle-child.mjs', import.meta.url),
 );
 
 describe('RuntimeSupervisor', () => {
@@ -86,5 +90,67 @@ describe('RuntimeSupervisor', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it.each([
+    {
+      label: 'returns a forged proof',
+      status: 200,
+      body: JSON.stringify({ status: 'ready', proof: 'forged' }),
+    },
+    {
+      label: 'only matches the legacy unauthenticated 403 probe',
+      status: 403,
+      body: '',
+    },
+  ])('rejects a fixed-port service that $label', async ({ status, body }) => {
+    const impostor = createServer(async (request, response) => {
+      for await (const chunk of request) void chunk;
+      if (request.url === '/') {
+        response.writeHead(200);
+        response.end('{}');
+        return;
+      }
+      response.writeHead(status, { 'content-type': 'application/json' });
+      response.end(body);
+    });
+    await new Promise<void>((resolve, reject) => {
+      impostor.once('error', reject);
+      impostor.listen(0, '127.0.0.1', resolve);
+    });
+    const address = impostor.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('impostor did not bind a TCP port');
+    }
+
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-runtime-test-'));
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-workspace-test-'));
+    supervisor = createRuntimeSupervisor({
+      command: process.execPath,
+      args: [idleChild],
+      runtimeHome,
+      workspaceRoot,
+      version: 'fake-1.0.0',
+      startupTimeoutMs: 500,
+      shutdownTimeoutMs: 1_000,
+      port: address.port,
+      createCompanionToken: () =>
+        'fixed-port-ownership-secret-that-is-long-enough',
+    });
+
+    try {
+      await expect(supervisor.start()).rejects.toThrow();
+      expect(supervisor.getState()).toMatchObject({
+        kind: 'failed',
+        failure: { code: 'startup-timeout' },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        impostor.close((error) => {
+          if (error !== undefined) reject(error);
+          else resolve();
+        });
+      });
+    }
   });
 });

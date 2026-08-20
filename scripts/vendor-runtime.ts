@@ -91,6 +91,10 @@ run(nodeExecutable, [
   npmCli,
   'ci',
   '--omit=dev',
+  // rc.8 publishes composition services as peers. runtime/package.json pins
+  // that complete composition explicitly, avoiding npm's conflicting UI-peer
+  // backtracking while still making every runtime peer a locked dependency.
+  '--legacy-peer-deps',
   '--strict-allow-scripts',
   '--prefix',
   dshDirectory,
@@ -104,7 +108,7 @@ run(nodeExecutable, [
 
 if (manifest.dsh.version !== MODEL_CAPABILITIES_PATCH_DSH_VERSION) {
   throw new Error(
-    `Temporary model-capabilities patch targets dsh ${MODEL_CAPABILITIES_PATCH_DSH_VERSION}; review and remove or update it before vendoring ${manifest.dsh.version}`,
+    `Temporary model-capabilities patch targets dsh ${MODEL_CAPABILITIES_PATCH_DSH_VERSION}; review it before vendoring ${manifest.dsh.version}`,
   );
 }
 const modelsSettingsClient = join(

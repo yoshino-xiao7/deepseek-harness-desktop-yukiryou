@@ -4,7 +4,7 @@
     - id: desktop-companion
       name: '@dsh-desktop/companion'
 
-# The rc.7 turn-tail is a first-match chain. The Companion entry reuses the
+# The rc.8 turn-tail is a first-match chain. The Companion entry reuses the
 # exported official ProducedFiles component and appends its read-only card.
 - id: ui-deliverables
   disabled: true
