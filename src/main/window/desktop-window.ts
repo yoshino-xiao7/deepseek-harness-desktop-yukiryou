@@ -2,53 +2,42 @@ import { BrowserWindow, ipcMain, shell, WebContentsView } from 'electron';
 
 import type { RuntimeFailure } from '../runtime/runtime-supervisor.js';
 import {
-  HARNESS_REVIEW_INTENT_CHANNEL,
   SHELL_REVIEW_TARGET_CHANNEL,
   WORKSPACE_REVIEW_REQUEST_CHANNEL,
   type ChangedFileReviewIntent,
   type WorkspaceReviewRequest,
   type WorkspaceReviewResponse,
   validatedWorkspaceReviewRequest,
-  validatedChangedFileReviewIntent,
 } from '../../shared/workspace-review.js';
 import {
   COMPANION_COMMAND_CHANNEL,
   COMPANION_STATE_CHANNEL,
-  HARNESS_CONTEXT_CHANNEL,
   type CompanionWorkspaceSnapshot,
   type DesktopCompanionSnapshot,
   type HarnessContextSnapshot,
   validatedCompanionCommand,
-  validatedHarnessContext,
   transitionCompanion,
   transitionCompanionWorkspace,
 } from '../../shared/desktop-companion.js';
 import {
-  ACCOUNT_BALANCE_REQUEST_CHANNEL,
-  ACCOUNT_BALANCE_STATE_CHANNEL,
   type AccountBalanceSnapshot,
 } from '../../shared/account-balance.js';
 import {
-  HARNESS_APPEARANCE_CHANNEL,
   TOOLBAR_APPEARANCE_CHANNEL,
-  validatedAppearanceSnapshot,
+  type DesktopAppearanceSnapshot,
 } from '../../shared/appearance-sync.js';
 import {
-  HARNESS_SIDEBAR_WIDTH_CHANNEL,
   TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
-  validatedSidebarWidth,
 } from '../../shared/sidebar-width-sync.js';
 import {
-  UPDATE_COMMAND_CHANNEL,
-  UPDATE_STATE_CHANNEL,
   type DesktopUpdateState,
   type UpdateCommand,
-  validatedUpdateCommand,
 } from '../../shared/update-bridge.js';
 import { createDesktopWindowOptions } from './desktop-window-options.js';
 import {
   animatedReservedWidth,
   companionLayout,
+  companionLayoutStateChanged,
   COMPANION_LAYOUT_ANIMATION_MS,
   harnessContentBounds,
 } from './desktop-window-layout.js';
@@ -58,10 +47,17 @@ import {
 } from './renderer-recovery-policy.js';
 import {
   classifyLocalAction,
-  classifyNavigation,
   createTrustedHarnessOrigin,
   type TrustedHarnessOrigin,
 } from './trusted-navigation.js';
+import { createProductWindowReadiness } from './product-window-readiness.js';
+import { createProductWebPreferences } from './product-web-preferences.js';
+import {
+  createHarnessProductBridge,
+  type HarnessProductBridge,
+} from './harness-product-bridge.js';
+import type { DesktopCarrierMode } from './desktop-carrier-mode.js';
+import { createIntegratedDesktopWindow } from './integrated-desktop-window.js';
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
@@ -75,6 +71,7 @@ export interface DesktopWindow {
 }
 
 export interface DesktopWindowOptions {
+  readonly carrierMode: DesktopCarrierMode;
   readonly loadingUrl: string;
   readonly shellPreloadPath: string;
   readonly harnessPreloadPath: string;
@@ -97,30 +94,28 @@ export interface DesktopWindowOptions {
 export function createDesktopWindow(
   options: DesktopWindowOptions,
 ): DesktopWindow {
-  return new ElectronDesktopWindow(options);
+  return options.carrierMode === 'integrated'
+    ? createIntegratedDesktopWindow(options)
+    : new ElectronDesktopWindow(options);
 }
 
 class ElectronDesktopWindow implements DesktopWindow {
   readonly #window: BrowserWindow;
   readonly #harnessView: WebContentsView;
+  readonly #productBridge: HarnessProductBridge;
   readonly #loadingUrl: string;
   readonly #options: DesktopWindowOptions;
   #trustedOrigin: TrustedHarnessOrigin | undefined;
   #disposing = false;
   #showingHarness = false;
   #sidebarWidth: number | undefined;
-  #appearance: ReturnType<typeof validatedAppearanceSnapshot>;
-  #updateState: DesktopUpdateState | undefined;
-  #balanceRequestRevision = 0;
+  #appearance: DesktopAppearanceSnapshot | undefined;
   #companionState: DesktopCompanionSnapshot = {
     active: false,
     open: true,
     previewOpen: false,
     workspace: { status: 'none' },
   };
-  #lastHarnessContextRevision = -1;
-  #contextRateWindowStartedAt = 0;
-  #contextRateCount = 0;
   #reservedRightWidth = 0;
   #layoutAnimationRevision = 0;
   #layoutAnimationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -129,6 +124,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     30_000,
   );
   readonly #recoveringRenderers = new Set<RendererTarget>();
+  readonly #productReadiness = createProductWindowReadiness('legacy');
 
   constructor(options: DesktopWindowOptions) {
     this.#options = options;
@@ -137,12 +133,27 @@ class ElectronDesktopWindow implements DesktopWindow {
       createDesktopWindowOptions(options.shellPreloadPath),
     );
     this.#harnessView = new WebContentsView({
-      webPreferences: {
-        preload: options.harnessPreloadPath,
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
+      webPreferences: createProductWebPreferences(options.harnessPreloadPath),
+    });
+    this.#productBridge = createHarnessProductBridge({
+      webContents: this.#harnessView.webContents,
+      viewportWidth: () => this.#window.contentView.getBounds().width,
+      openExternal: (url) => void shell.openExternal(url),
+      onSidebarWidth: (width) => {
+        this.#sidebarWidth = width;
+        this.#window.webContents.send(TOOLBAR_SIDEBAR_WIDTH_CHANNEL, width);
+      },
+      onAppearance: (appearance) => {
+        this.#appearance = appearance;
+        this.#window.webContents.send(TOOLBAR_APPEARANCE_CHANNEL, appearance);
+      },
+      onUpdateCommand: options.onUpdateCommand,
+      onAccountBalanceRequest: options.onAccountBalanceRequest,
+      onHarnessContext: options.onHarnessContext,
+      onHarnessReviewIntent: options.onHarnessReviewIntent,
+      onHarnessReviewResponse: (response) => this.#handleHarnessReviewResponse(response),
+      onFrameHealth: (health) => {
+        this.#productReadiness.acceptFrameHealth(health);
       },
     });
     this.#window.contentView.addChildView(this.#harnessView);
@@ -165,7 +176,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     });
     this.#harnessView.webContents.on(
       'did-finish-load',
-      () => this.#restoreHarnessState(),
+      () => this.#productBridge.restoreAfterLoad(),
     );
     this.#harnessView.webContents.on(
       'render-process-gone',
@@ -173,19 +184,16 @@ class ElectronDesktopWindow implements DesktopWindow {
         void this.#recoverRenderer('harness', details.reason);
       },
     );
-    this.#installNavigationPolicy();
-    this.#installSidebarWidthSync();
-    this.#installAppearanceSync();
-    this.#installUpdateBridge();
-    this.#installAccountBalanceBridge();
+    this.#installLocalNavigationPolicy();
     this.#installCompanionBridge();
     this.#installWorkspaceReviewBridge();
-    this.#installHarnessReviewIntentBridge();
   }
 
   async showLoading(): Promise<void> {
     this.#rendererRecovery.reset('toolbar');
     this.#trustedOrigin = undefined;
+    this.#productBridge.setTrustedOrigin(undefined);
+    this.#productReadiness.hide();
     this.#showingHarness = false;
     this.#companionState = { ...this.#companionState, active: false, previewOpen: false, workspace: { status: 'none' } };
     this.#sendCompanionState();
@@ -196,8 +204,14 @@ class ElectronDesktopWindow implements DesktopWindow {
   async showHarness(origin: string): Promise<void> {
     const trustedOrigin = createTrustedHarnessOrigin(origin);
     this.#trustedOrigin = trustedOrigin;
+    this.#productBridge.setTrustedOrigin(trustedOrigin);
+    this.#productReadiness.begin(trustedOrigin);
     this.#rendererRecovery.reset('harness');
     await this.#harnessView.webContents.loadURL(trustedOrigin);
+    const productState = this.#productReadiness.documentLoaded();
+    if (productState.kind !== 'ready') {
+      throw new Error('Legacy product window did not reach document readiness');
+    }
     this.#showingHarness = true;
     this.#companionState = { ...this.#companionState, active: true };
     this.#sendCompanionState();
@@ -208,6 +222,8 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   async showFailure(failure: RuntimeFailure): Promise<void> {
     this.#trustedOrigin = undefined;
+    this.#productBridge.setTrustedOrigin(undefined);
+    this.#productReadiness.hide();
     this.#showingHarness = false;
     this.#companionState = { ...this.#companionState, active: false, previewOpen: false, workspace: { status: 'none' } };
     this.#sendCompanionState();
@@ -236,20 +252,22 @@ class ElectronDesktopWindow implements DesktopWindow {
   }
 
   setUpdateState(state: DesktopUpdateState): void {
-    this.#updateState = state;
-    if (!this.#harnessView.webContents.isDestroyed()) {
-      this.#harnessView.webContents.send(UPDATE_STATE_CHANNEL, state);
-    }
+    this.#productBridge.setUpdateState(state);
   }
 
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void {
-    this.#companionState = transitionCompanionWorkspace(this.#companionState, state);
+    const previous = this.#companionState;
+    this.#companionState = transitionCompanionWorkspace(previous, state);
     this.#sendCompanionState();
+    if (companionLayoutStateChanged(previous, this.#companionState)) {
+      this.#layoutHarnessView(true);
+    }
   }
 
   dispose(): void {
     this.#disposing = true;
     this.#cancelLayoutAnimation();
+    this.#productBridge.dispose();
     ipcMain.removeHandler(WORKSPACE_REVIEW_REQUEST_CHANNEL);
     this.#window.contentView.removeChildView(this.#harnessView);
     // Harness may install beforeunload guards for drafts. Application shutdown
@@ -309,7 +327,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     }
   }
 
-  #installNavigationPolicy(): void {
+  #installLocalNavigationPolicy(): void {
     this.#window.webContents.on('will-navigate', (event, target) => {
       const localAction = classifyLocalAction(target);
       if (localAction !== undefined) {
@@ -325,69 +343,6 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#window.webContents.setWindowOpenHandler(() => {
       return { action: 'deny' };
     });
-    this.#harnessView.webContents.on('will-navigate', (event, target) => {
-      const decision = this.#navigationDecision(target);
-      if (decision === 'allow') {
-        return;
-      }
-      event.preventDefault();
-      if (decision === 'open-external') {
-        void shell.openExternal(target);
-      }
-    });
-    this.#harnessView.webContents.setWindowOpenHandler(({ url }) => {
-      if (this.#navigationDecision(url) === 'open-external') {
-        void shell.openExternal(url);
-      }
-      return { action: 'deny' };
-    });
-    this.#harnessView.webContents.session.setPermissionRequestHandler(
-      (_webContents, _permission, callback) => callback(false),
-    );
-    this.#harnessView.webContents.session.on('will-download', (event) => {
-      event.preventDefault();
-    });
-  }
-
-  #installSidebarWidthSync(): void {
-    this.#harnessView.webContents.on(
-      'ipc-message',
-      (_event, channel, value: unknown) => {
-        if (channel !== HARNESS_SIDEBAR_WIDTH_CHANNEL) {
-          return;
-        }
-        const width = validatedSidebarWidth(
-          value,
-          this.#window.contentView.getBounds().width,
-        );
-        if (width !== undefined) {
-          this.#sidebarWidth = width;
-          this.#window.webContents.send(
-            TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
-            width,
-          );
-        }
-      },
-    );
-  }
-
-  #installAppearanceSync(): void {
-    this.#harnessView.webContents.on(
-      'ipc-message',
-      (_event, channel, value: unknown) => {
-        if (channel !== HARNESS_APPEARANCE_CHANNEL) {
-          return;
-        }
-        const appearance = validatedAppearanceSnapshot(value);
-        if (appearance !== undefined) {
-          this.#appearance = appearance;
-          this.#window.webContents.send(
-            TOOLBAR_APPEARANCE_CHANNEL,
-            appearance,
-          );
-        }
-      },
-    );
   }
 
   #restoreToolbarState(): void {
@@ -406,24 +361,6 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#sendCompanionState();
   }
 
-  #installUpdateBridge(): void {
-    this.#harnessView.webContents.on(
-      'ipc-message',
-      (_event, channel, value: unknown) => {
-        if (channel !== UPDATE_COMMAND_CHANNEL) return;
-        const command = validatedUpdateCommand(value);
-        if (command !== undefined) this.#options.onUpdateCommand(command);
-      },
-    );
-  }
-
-  #restoreHarnessState(): void {
-    this.#lastHarnessContextRevision = -1;
-    if (this.#updateState !== undefined) {
-      this.#harnessView.webContents.send(UPDATE_STATE_CHANNEL, this.#updateState);
-    }
-  }
-
   #installCompanionBridge(): void {
     this.#window.webContents.on('ipc-message', (_event, channel, value: unknown) => {
       if (channel !== COMPANION_COMMAND_CHANNEL) return;
@@ -432,13 +369,6 @@ class ElectronDesktopWindow implements DesktopWindow {
       this.#companionState = transitionCompanion(this.#companionState, command);
       this.#sendCompanionState();
       this.#layoutHarnessView(command.kind === 'toggle');
-    });
-    this.#harnessView.webContents.on('ipc-message', (_event, channel, value: unknown) => {
-      if (channel !== HARNESS_CONTEXT_CHANNEL) return;
-      const snapshot = validatedHarnessContext(value);
-      if (snapshot === undefined || snapshot.revision <= this.#lastHarnessContextRevision || !this.#acceptContextEvent()) return;
-      this.#lastHarnessContextRevision = snapshot.revision;
-      this.#options.onHarnessContext(snapshot);
     });
   }
 
@@ -455,51 +385,22 @@ class ElectronDesktopWindow implements DesktopWindow {
     });
   }
 
-  #installHarnessReviewIntentBridge(): void {
-    this.#harnessView.webContents.on('ipc-message', (_event, channel, value: unknown) => {
-      if (channel !== HARNESS_REVIEW_INTENT_CHANNEL) return;
-      const intent = validatedChangedFileReviewIntent(value);
-      if (intent === undefined) return;
-      void this.#options.onHarnessReviewIntent(intent).then((response) => {
-        if (response.kind !== 'preview' || this.#disposing || this.#window.webContents.isDestroyed()) return;
-        this.#companionState = { ...this.#companionState, open: true, previewOpen: true };
-        this.#sendCompanionState();
-        this.#layoutHarnessView(true);
-        this.#window.webContents.send(SHELL_REVIEW_TARGET_CHANNEL, response);
-      });
-    });
-  }
-
-  #acceptContextEvent(): boolean {
-    const now = Date.now();
-    if (now - this.#contextRateWindowStartedAt >= 1_000) {
-      this.#contextRateWindowStartedAt = now;
-      this.#contextRateCount = 0;
-    }
-    this.#contextRateCount += 1;
-    return this.#contextRateCount <= 20;
+  #handleHarnessReviewResponse(response: WorkspaceReviewResponse): void {
+    if (
+      response.kind !== 'preview' ||
+      this.#disposing ||
+      this.#window.webContents.isDestroyed()
+    ) return;
+    this.#companionState = { ...this.#companionState, open: true, previewOpen: true };
+    this.#sendCompanionState();
+    this.#layoutHarnessView(true);
+    this.#window.webContents.send(SHELL_REVIEW_TARGET_CHANNEL, response);
   }
 
   #sendCompanionState(): void {
     if (!this.#window.webContents.isDestroyed()) {
       this.#window.webContents.send(COMPANION_STATE_CHANNEL, this.#companionState);
     }
-  }
-
-  #installAccountBalanceBridge(): void {
-    this.#harnessView.webContents.on(
-      'ipc-message',
-      (_event, channel, value: unknown) => {
-        if (channel !== ACCOUNT_BALANCE_REQUEST_CHANNEL || typeof value !== 'boolean') return;
-        const revision = ++this.#balanceRequestRevision;
-        this.#harnessView.webContents.send(ACCOUNT_BALANCE_STATE_CHANNEL, { status: 'loading' });
-        void this.#options.onAccountBalanceRequest(value).then((snapshot) => {
-          if (revision === this.#balanceRequestRevision && !this.#harnessView.webContents.isDestroyed()) {
-            this.#harnessView.webContents.send(ACCOUNT_BALANCE_STATE_CHANNEL, snapshot);
-          }
-        });
-      },
-    );
   }
 
   #layoutHarnessView(animate = false): void {
@@ -558,12 +459,6 @@ class ElectronDesktopWindow implements DesktopWindow {
     callbacks[action]();
   }
 
-  #navigationDecision(target: string): 'allow' | 'open-external' | 'deny' {
-    if (this.#trustedOrigin !== undefined) {
-      return classifyNavigation(this.#trustedOrigin, target);
-    }
-    return isLocalRendererNavigation(this.#loadingUrl, target) ? 'allow' : 'deny';
-  }
 }
 
 async function delay(milliseconds: number): Promise<void> {

@@ -134,9 +134,18 @@ await cp(
   join(dshDirectory, 'node_modules', '@dsh-desktop', 'companion'),
   { recursive: true },
 );
+await cp(
+  join(projectRoot, 'runtime', 'desktop-frame-plugin'),
+  join(dshDirectory, 'node_modules', '@dsh-desktop', 'frame-prototype'),
+  { recursive: true },
+);
 await copyFile(
   join(projectRoot, 'runtime', 'desktop-extensions.patch.yml'),
   join(stagingDirectory, 'desktop-extensions.patch.yml'),
+);
+await copyFile(
+  join(projectRoot, 'runtime', 'desktop-integrated.patch.yml'),
+  join(stagingDirectory, 'desktop-integrated.patch.yml'),
 );
 
 const installedManifest = {

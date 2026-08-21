@@ -16,4 +16,13 @@ describe('Harness runtime command', () => {
       ],
     });
   });
+
+  it('selects the isolated Frame overlay only for the Integrated carrier', () => {
+    expect(createHarnessRuntimeCommand('/runtime', 'integrated').args).toContain(
+      '/runtime/desktop-integrated.patch.yml',
+    );
+    expect(createHarnessRuntimeCommand('/runtime', 'legacy').args).not.toContain(
+      '/runtime/desktop-integrated.patch.yml',
+    );
+  });
 });

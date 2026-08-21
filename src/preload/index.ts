@@ -33,6 +33,10 @@ import {
   shouldShowHeaderUpdate,
   validatedUpdateState,
 } from '../shared/update-bridge.js';
+import {
+  DESKTOP_FRAME_HEALTH_CHANNEL,
+  validatedDesktopFrameHealth,
+} from '../shared/desktop-frame-health.js';
 
 let updateState: DesktopUpdateState = {
   status: 'disabled',
@@ -71,6 +75,15 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouReview', {
   openChangedFile: (value: unknown): void => {
     const intent = validatedChangedFileReviewIntent(value);
     if (intent !== undefined) ipcRenderer.send(HARNESS_REVIEW_INTENT_CHANNEL, intent);
+  },
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouFrame', {
+  reportHealth: (value: unknown): void => {
+    const health = validatedDesktopFrameHealth(value);
+    if (health !== undefined) {
+      ipcRenderer.send(DESKTOP_FRAME_HEALTH_CHANNEL, health);
+    }
   },
 });
 

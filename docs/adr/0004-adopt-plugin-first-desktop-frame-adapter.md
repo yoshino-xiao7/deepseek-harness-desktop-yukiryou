@@ -23,11 +23,12 @@ date: 2026-08-21
 1. Harness 业务能力和 UI 默认实现为 Host/Client 插件，并优先贡献到准确的加法型 slot。
 2. 普通业务插件不得替换 `root`、`sidebar`、`conversation` 或 `details` 的既有 occupant，也不得依赖根布局 implementation。
 3. Electron 双/单 webContents 载体切换只允许存在于 main 层 `DesktopProductCarrier`；迁移期间保留完整的 `LegacyDesktopProductCarrier` 与 `IntegratedDesktopProductCarrier`。
-4. 根布局 composition、标题栏留白和 surface 空间关系只允许存在于 Runtime 的版本化 `DesktopFramePlugin`；该插件仅用于 Integrated carrier，不创建或回退 Electron 窗口。
+4. 根布局 composition、标题栏留白和 surface 空间关系只能通过上游正式 contract 实现。当前 rc.8 不提供所需 seam，`DesktopFramePlugin` 只保留不可见兼容性健康探针，不承载产品 UI。
 5. 文件、Git、PTY、原生窗口、进程、签名和更新继续位于 Electron 原生 Module，通过窄、类型化、失败关闭的 preload bridge 向产品插件提供能力。
 6. 插件间协作只使用 Cordis service、正式 Host/Client protocol、slot 与序列化 store，不跨包导入 implementation。
-7. 官方提供稳定 Electron Client composition/IPC carrier 后，通过新增 `NativeElectronProductCarrier` 替换本地 Web Profile transport，并按正式 root contract 缩小或删除 Frame 插件，不重写业务插件。
-8. DOM selector、页面 MutationObserver 和编译 bundle 字符串修改仅可作为版本锁定的临时补丁；每项必须有契约测试、失配拒绝和删除条件。
+7. 官方提供稳定 Electron Client composition/IPC carrier 后，通过新增 `NativeElectronProductCarrier` 替换本地 Web Profile transport，并按正式 root contract 重新评估 Frame 插件，不重写业务插件。
+8. 当前生产和开发预览均使用 `LegacyDesktopProductCarrier`。Integrated 传输原型只有同时设置 carrier 与内部 prototype 两个开关才可运行，不能作为用户界面展示。
+9. DOM selector、页面 MutationObserver 和编译 bundle 字符串修改仅可作为版本锁定的临时补丁；每项必须有契约测试、失配拒绝和删除条件。
 
 详细目标、双平台设计、插件市场和分阶段验收见 [`../11-integrated-desktop-shell-and-plugin-market.md`](../11-integrated-desktop-shell-and-plugin-market.md)。
 
@@ -42,10 +43,14 @@ date: 2026-08-21
 
 代价与约束：
 
-- Integrated Frame 在正式 root composition contract 稳定前仍需要固定 Runtime 与契约测试。
+- Integrated 产品迁移在正式 root composition、drag 和 theme contract 出现前保持暂停；内部传输原型仍需要固定 Runtime 与契约测试。
 - 迁移期同时维护 Legacy/Integrated 两个 carrier 和一个 Integrated Frame 插件，短期代码量增加。
 - Client 插件共享 renderer，不构成彼此隔离的安全沙箱；本地插件信任模型必须如实说明。
 - 新功能若缺少正式 seam，可能需要先推动上游能力或保持关闭，不能再用 DOM 猜测快速绕过。
+
+## 2026-08-21 实机修正
+
+`shell.overlay` Workspace Review 原型在真实打包应用中遮挡会话内容，无法提供自然窗口拖动区，浅色 Harness 下使用了错误的深色 fallback，并且简化预览不能保持 Legacy 功能等价。根因是 rc.8 只提供覆盖型全局 Slot，没有可占位的产品 Frame seam。原型 UI 已撤回，Legacy 继续作为当前产品载体；这一结果收窄了本 ADR 的实施范围，但不改变 Plugin-first 与可替换 carrier 的长期方向。
 
 ## 拒绝的替代方案
 

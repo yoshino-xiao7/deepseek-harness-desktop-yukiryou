@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   animatedReservedWidth,
+  companionLayoutStateChanged,
   companionLayout,
   harnessContentBounds,
 } from './desktop-window-layout.js';
@@ -21,6 +22,18 @@ describe('integrated desktop window layout', () => {
     expect(animatedReservedWidth(0, 340, 0.5)).toBe(298);
     expect(animatedReservedWidth(0, 340, 1)).toBe(340);
     expect(animatedReservedWidth(340, 0, 2)).toBe(0);
+  });
+
+  it('requires a relayout when a new-session workspace transition closes the preview', () => {
+    const before = {
+      active: true,
+      open: true,
+      previewOpen: true,
+      workspace: { status: 'ready' as const, workspaceId: 'workspace-1', title: 'Project', running: false },
+    };
+    const after = { ...before, previewOpen: false, workspace: { status: 'none' as const } };
+
+    expect(companionLayoutStateChanged(before, after)).toBe(true);
   });
 
   it.each([

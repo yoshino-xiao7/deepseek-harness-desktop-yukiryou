@@ -62,7 +62,7 @@
       </main>
       <aside class="companion-panel" data-testid="companion-panel" hidden>
         <header class="companion-header">
-          <div>
+          <div class="companion-heading">
             <span class="companion-eyebrow">工作区</span>
             <h2 data-testid="companion-workspace-title">当前工作区</h2>
           </div>
@@ -75,9 +75,14 @@
         </div>
         <div class="review-browser" data-testid="review-browser" hidden>
           <nav class="review-tabs" aria-label="工作区视图">
-            <button type="button" data-review-tab="changes" aria-selected="true">变更 <span data-testid="change-count">0</span></button>
+            <button type="button" data-review-tab="changes" aria-selected="true">变更 <span class="review-tab-count" data-testid="change-count">0</span></button>
             <button type="button" data-review-tab="files" aria-selected="false">文件</button>
-            <button type="button" class="review-refresh" data-testid="review-refresh" title="刷新">↻</button>
+            <button type="button" class="review-refresh" data-testid="review-refresh" aria-label="刷新工作区" title="刷新">
+              <svg class="review-refresh-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M20 11a8 8 0 1 0-2.34 5.66" />
+                <path d="M20 4v7h-7" />
+              </svg>
+            </button>
           </nav>
           <section class="review-list" data-review-view="changes" aria-label="工作区变更"></section>
           <section class="review-list file-tree" data-review-view="files" aria-label="文件树" hidden></section>
@@ -92,7 +97,7 @@
           </div>
           <div class="preview-actions">
             <button type="button" data-testid="preview-mode" hidden>源码</button>
-            <button type="button" data-testid="preview-close" aria-label="关闭预览">×</button>
+            <button type="button" data-testid="preview-close" aria-label="关闭预览"><span class="preview-close-glyph" aria-hidden="true"></span></button>
           </div>
         </header>
         <article class="preview-content" data-testid="preview-content"></article>

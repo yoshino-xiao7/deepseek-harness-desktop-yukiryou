@@ -1,6 +1,10 @@
 import { join } from 'node:path';
+import type { DesktopCarrierMode } from '../window/desktop-carrier-mode.js';
 
-export function createHarnessRuntimeCommand(runtimeRoot: string): {
+export function createHarnessRuntimeCommand(
+  runtimeRoot: string,
+  carrierMode: DesktopCarrierMode = 'legacy',
+): {
   readonly command: string;
   readonly args: readonly string[];
 } {
@@ -17,7 +21,12 @@ export function createHarnessRuntimeCommand(runtimeRoot: string): {
         'bin.js',
       ),
       '--patch',
-      join(runtimeRoot, 'desktop-extensions.patch.yml'),
+      join(
+        runtimeRoot,
+        carrierMode === 'integrated'
+          ? 'desktop-integrated.patch.yml'
+          : 'desktop-extensions.patch.yml',
+      ),
       '--profile',
       'web',
       '--no-open',

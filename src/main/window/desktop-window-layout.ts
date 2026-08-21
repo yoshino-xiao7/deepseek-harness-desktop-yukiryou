@@ -1,4 +1,5 @@
 import type { Rectangle } from 'electron';
+import type { DesktopCompanionSnapshot } from '../../shared/desktop-companion.js';
 
 import {
   COMPANION_DOCKED_MIN_WIDTH,
@@ -14,6 +15,15 @@ export interface CompanionLayout {
   readonly overlay: boolean;
   readonly reviewFocus: boolean;
   readonly reservedWidth: number;
+}
+
+export function companionLayoutStateChanged(
+  previous: DesktopCompanionSnapshot,
+  next: DesktopCompanionSnapshot,
+): boolean {
+  return previous.active !== next.active
+    || previous.open !== next.open
+    || previous.previewOpen !== next.previewOpen;
 }
 
 export function companionLayout(width: number, open: boolean, previewOpen: boolean): CompanionLayout {

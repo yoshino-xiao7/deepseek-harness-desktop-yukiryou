@@ -25,6 +25,10 @@ describe('desktop settings runtime extension', () => {
       join(runtimeRoot, 'dsh', 'node_modules', '@dsh-desktop', 'companion'),
       { recursive: true },
     );
+    await mkdir(
+      join(runtimeRoot, 'dsh', 'node_modules', '@dsh-desktop', 'frame-prototype'),
+      { recursive: true },
+    );
 
     await ensureDesktopSettingsExtension(runtimeHome, runtimeRoot);
 
@@ -51,6 +55,11 @@ describe('desktop settings runtime extension', () => {
       readlink(join(runtimeHome, 'profiles', 'node_modules', '@dsh-desktop', 'companion')),
     ).resolves.toBe(
       join(runtimeRoot, 'dsh', 'node_modules', '@dsh-desktop', 'companion'),
+    );
+    await expect(
+      readlink(join(runtimeHome, 'profiles', 'node_modules', '@dsh-desktop', 'frame-prototype')),
+    ).resolves.toBe(
+      join(runtimeRoot, 'dsh', 'node_modules', '@dsh-desktop', 'frame-prototype'),
     );
   });
 

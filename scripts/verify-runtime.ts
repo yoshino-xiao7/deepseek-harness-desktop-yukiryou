@@ -45,6 +45,17 @@ const runtimeNodeModules = join(runtimeDirectory, 'dsh', 'node_modules');
 const nodePtyDirectory = join(runtimeNodeModules, 'node-pty');
 const sharpDirectory = join(runtimeNodeModules, 'sharp');
 const koffiDirectory = join(runtimeNodeModules, 'koffi');
+const desktopFrameManifest = await readJson<DependencyPackageJson>(
+  join(runtimeNodeModules, '@dsh-desktop', 'frame-prototype', 'package.json'),
+);
+const legacyDesktopPatch = await readFile(
+  join(runtimeDirectory, 'desktop-extensions.patch.yml'),
+  'utf8',
+);
+const integratedDesktopPatch = await readFile(
+  join(runtimeDirectory, 'desktop-integrated.patch.yml'),
+  'utf8',
+);
 for (const [packageName, expectedVersion] of Object.entries(
   runtimePackage.dependencies,
 )) {
@@ -72,6 +83,13 @@ expectValue(
   sourceManifest.dsh.integrity,
 );
 expectValue('pnpm version', manifest.pnpm.version, sourceManifest.pnpm.version);
+expectValue('desktop frame prototype version', desktopFrameManifest.version, '0.0.1');
+if (legacyDesktopPatch.includes('@dsh-desktop/frame-prototype')) {
+  throw new Error('Legacy Runtime patch must not load the Integrated desktop frame');
+}
+if (!integratedDesktopPatch.includes('@dsh-desktop/frame-prototype')) {
+  throw new Error('Integrated Runtime patch must load the desktop frame prototype');
+}
 expectValue(
   'pnpm integrity',
   manifest.pnpm.integrity,

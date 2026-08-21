@@ -42,6 +42,7 @@ import {
   createDesktopWindow,
   type DesktopWindow,
 } from './window/desktop-window.js';
+import { resolveDesktopCarrierMode } from './window/desktop-carrier-mode.js';
 import type { UpdateCommand } from '../shared/update-bridge.js';
 import type { AccountBalanceSnapshot } from '../shared/account-balance.js';
 import type { HarnessContextSnapshot } from '../shared/desktop-companion.js';
@@ -83,11 +84,16 @@ export class AppCoordinator {
     });
 
     await app.whenReady();
+    const carrierMode = resolveDesktopCarrierMode(
+      process.env.DSH_DESKTOP_CARRIER_MODE,
+      process.env.DSH_DESKTOP_INTEGRATED_PROTOTYPE,
+    );
     const userData = app.getPath('userData');
     const runtimeHome = join(userData, 'runtime');
     const logDirectory = join(userData, 'logs');
     await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
     this.#log = await createAppLog(logDirectory);
+    this.#log.write('desktop.carrier-selected', `mode=${carrierMode}`);
     this.#updater = createAppUpdater({
       enabled: process.env.DSH_DESKTOP_E2E !== '1' &&
         isUpdaterSupported({
@@ -103,6 +109,7 @@ export class AppCoordinator {
 
     const loadingLocation = rendererLocation();
     this.#window = createDesktopWindow({
+      carrierMode,
       loadingUrl: loadingLocation,
       shellPreloadPath: join(moduleDirectory, 'shell-preload-entry.cjs'),
       harnessPreloadPath: join(moduleDirectory, 'harness-preload-entry.cjs'),
@@ -172,7 +179,7 @@ export class AppCoordinator {
       ? join(process.resourcesPath, 'runtime')
       : join(app.getAppPath(), 'resources', 'runtime');
     await ensureBundledRuntimeExtensions(runtimeHome, runtimeRoot);
-    const runtimeCommand = createHarnessRuntimeCommand(runtimeRoot);
+    const runtimeCommand = createHarnessRuntimeCommand(runtimeRoot, carrierMode);
     this.#runtime = createRuntimeSupervisor({
       command: runtimeCommand.command,
       args: runtimeCommand.args,

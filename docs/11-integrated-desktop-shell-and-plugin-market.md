@@ -19,7 +19,7 @@ updated: 2026-08-21
 - macOS：Apple Silicon arm64 为首要基线，Intel x64 是否提供由发布成本和实际需求另行决定。
 - Windows：Windows 11 x64 为首要基线，Windows on Arm 暂不承诺。
 
-macOS 与 Windows 使用同一个 Desktop Frame、DesktopLayout、插件市场合同和 Runtime 插件实现，只在原生窗口、文件系统、进程、签名、安装包与更新 feed 的真实平台 seam 上使用不同 Adapter。不得复制两套产品 UI，也不得在 Client Module 中散布大量 `process.platform` 分支。
+macOS 与 Windows 继续共享当前 Legacy 产品布局、插件市场合同和 Runtime 插件实现，只在原生窗口、文件系统、进程、签名、安装包与更新 feed 的真实平台 seam 上使用不同 Adapter。完整 Integrated Desktop Frame 只有在上游提供可占位 composition/drag/theme contract 后才恢复实施；不得用 overlay 冒充占位布局。
 
 新架构可以先在 macOS 完成 Phase 0–3，但移除 legacy 模式和宣布正式可用前，必须同时通过 Windows packaged E2E 与发行门。后续功能默认按双平台定义完成标准；“只在开发者 Mac 上可运行”不再视为完整交付。
 
@@ -54,7 +54,7 @@ Harness 的插件列表同时展示系统插件、依赖插件和用户可变插
 3. **Electron main 不理解产品布局。** main 只负责原生窗口、可信导航、生命周期和受限能力桥。
 4. **布局复杂性集中在一个深 Module。** 调用方只提交布局命令、读取布局快照，不计算像素 bounds。
 5. **Plugin-first，但不要求 plugin-only。** 产品 UI 与 Harness 业务能力优先使用正式 Host/Client 插件 seam；窗口、文件、进程和更新保留在 Electron 原生 Module。
-6. **加法型 slot 优先。** 普通功能不得接管 `root`、`sidebar`、`conversation` 或 `details` 的既有 occupant；只有 Integrated carrier 所需的 `DesktopFramePlugin` 可以在契约验证后处理根布局。
+6. **只使用上游支持的加法型 slot。** 固定 rc.8 明确禁止第三方接管 `root`；`details` 与 `conversation.details.tool` 也都是承载官方 UI 的单占用 Slot。`DesktopFramePlugin` 当前只在 `shell.overlay` 注册不可见健康探针；需要改变根布局时必须先获得上游 composition contract，不能复制或禁用官方 `AppFrame`。
 7. **插件目录不授予执行权限。** 远程来源只能提供经过 Schema 校验的展示 metadata。
 8. **安装必须由 Host 受管。** renderer 不接收文件系统、shell、环境变量或 package manager 能力。
 9. **系统插件与用户插件分层。** UI 必须解释“为什么停用”和“谁可以改变它”，不提供无效按钮。
@@ -81,17 +81,13 @@ Harness 的插件列表同时展示系统插件、依赖插件和用户可变插
                    v
 ┌──────────── Harness Runtime ──────────────┐
 │ DesktopFramePlugin (Integrated only)      │
-│ ├── root composition + health contract    │
-│ │   ├── native caption regions            │
-│ │   ├── Harness sidebar                   │
-│ │   ├── Harness conversation              │
-│ │   ├── Workspace Review / details        │
-│ │   └── shell overlay                     │
-│ └── DesktopLayout                         │
+│ ├── shell.overlay health probe            │
+│ ├── invisible compatibility health probe  │
+│ └── official AppFrame remains owner       │
 │                                           │
 │ Product Host/Client Plugins               │
-│ ├── Desktop Companion                     │
-│ ├── settings / balance / review           │
+│ ├── Desktop Companion service             │
+│ ├── settings / balance                    │
 │ └── additive official slots only          │
 │                                           │
 │ Community Market Host/Client Module       │
@@ -105,7 +101,7 @@ Harness 的插件列表同时展示系统插件、依赖插件和用户可变插
 
 Integrated 模式就绪时，`ProductWindow` 直接加载 Harness origin，不创建或持有 Harness `WebContentsView`。迁移期的 Legacy carrier 仍保留当前本地 renderer + `WebContentsView` 整条窗口路径；它位于 Electron main，不伪装成 Runtime 插件。`RecoveryWindow` 只显示本地静态资源，不加载社区内容，也不持有 Workspace 能力。
 
-`DesktopProductCarrier` 是 Electron main 中唯一知道“legacy 双 webContents / integrated 单 webContents”差异的 Module；`DesktopFramePlugin` 是 Runtime 中唯一允许理解根布局 composition 的 Module。所有业务插件只能依赖正式 Host/Client services 与加法型 slots，不得引用 carrier、Frame implementation、DOM selector 或根布局私有状态。这样窗口载体和 Frame composition 可以分别替换，而插件市场、余额、Workspace Review 和 Agent 扩展不需要随之重写。
+`DesktopProductCarrier` 是 Electron main 中唯一知道“legacy 双 webContents / integrated 单 webContents”差异的 Module；`DesktopFramePlugin` 只负责 Integrated 模式的正式加法型 Desktop seam 与健康报告，不拥有 rc.8 根布局。所有业务插件只能依赖正式 Host/Client services 与加法型 slots，不得引用 carrier、Frame implementation、DOM selector 或根布局私有状态。
 
 ## 架构决定
 
@@ -166,16 +162,16 @@ interface WindowChromeAdapter {
 
 这是一个真实 seam：macOS 与 Windows 分别有 production Adapter，测试提供只返回结构化描述的 fake Adapter。平台 Adapter 只能决定 Electron 原生窗口参数与 caption 安全区，不能决定 Sidebar、Companion 或 Preview 的产品布局。
 
-### 2. DesktopFramePlugin 隔离 Runtime 根布局 composition
+### 2. DesktopFramePlugin 隔离 Runtime 的 Integrated seam
 
-新增 `runtime/desktop-frame-plugin/`，把它定义为版本化的 Frame composition 插件，而不是普通业务插件。只有在固定 Runtime 的 root ownership、子 slot 声明和 teardown 契约通过 Phase 0 验证后，它才可在 Integrated carrier 中组合已有 Harness surface。它不创建 Electron 窗口、不实现 legacy 回退，也不复制会话、设置、Agent、工具详情等产品 UI；只决定 surface 的空间关系和原生 chrome 留白。
+新增 `runtime/desktop-frame-plugin/`，把它定义为版本化的 Integrated 兼容性探针。Phase 0 已实机确认 rc.8 的 `root` 是官方 `AppFrame` 独占的单 Slot：同优先级注册会失败，低优先级覆盖又无法合法复用其 entry-owned 子 Slot，因此本项目不替换 `root`。`details` 与 `conversation.details.tool` 同样不能加法使用。曾用 `shell.overlay` 承载 Workspace Review 的实机原型出现遮挡对话、无法提供自然拖动区、主题不一致和预览功能退化，现已撤回；该插件只保留不可见的版本化健康探针，不再承载产品 UI。
 
 两个回退层必须分开：
 
 - Electron main 通过 `LegacyDesktopProductCarrier | IntegratedDesktopProductCarrier` 切换整条窗口载体。
-- Runtime 只有 Integrated 模式加载 `DesktopFramePlugin`；Legacy 模式继续使用官方默认 root composition 与现有本地 renderer。
+- Runtime 只有 Integrated 模式加载 `DesktopFramePlugin`；两种模式都保留官方默认 `AppFrame`，Legacy 另外保留现有本地 renderer。
 
-未来官方提供稳定 Electron composition/carrier interface 后，以 `NativeElectronProductCarrier` 替换本地 Integrated carrier，并按官方 root contract 缩小或删除 `DesktopFramePlugin`；业务插件 interface 保持不变。legacy 删除后，测试 fake carrier 继续验证 main interface，Frame 测试则使用独立的 Harness composition fixture，不把内部 root props 暴露给调用方。
+未来官方提供稳定 Electron composition/carrier interface 后，以 `NativeElectronProductCarrier` 替换本地 Integrated carrier；只有上游同时提供受支持的 root composition contract，才重新评估完整 Desktop Frame。业务插件 interface 保持不变。
 
 main 与 Frame 之间只共享一个序列化健康合同，不共享 `activate()` 或 Electron 对象：
 
@@ -476,8 +472,8 @@ npm SHA-512 integrity 只证明下载字节与 registry metadata 一致，不证
 | `RecoveryWindow` | `AppCoordinator -> RecoveryWindow` | 本地 renderer、诊断动作、恢复窗口生命周期 |
 | `DesktopProductCarrier` | `AppCoordinator -> DesktopProductCarrier` | legacy/integrated 选择、双/单 webContents 生命周期与兼容回退 |
 | `ProductWindow` | `IntegratedDesktopProductCarrier -> ProductWindow` | BrowserWindow、可信导航、renderer 健康、原生 chrome |
-| `DesktopFramePlugin` | Harness root composition + 序列化健康合同 | root ownership、surface composition、teardown 与兼容性报告 |
-| `DesktopLayout` | Desktop Frame 内部 | Grid 算法、断点、拖动、宽度持久化、focus mode |
+| `DesktopFramePlugin` | Harness `shell.overlay` + 序列化健康合同 | 不可见健康探针、teardown 与兼容性报告；当前不承载产品 UI |
+| `DesktopLayout` | 官方 seam 可表达的桌面 surface 内部 | 面板状态、断点、拖动与宽度持久化；不接管 rc.8 root |
 | `DesktopCompanion` | Client command/snapshot | 面板状态、Workspace 请求、预览和取消 |
 | `Catalog` | Market Host route | 来源、Schema、Adapter、网络限制、缓存和索引 |
 | `PluginInventory` | Market Host route | 系统/受管/外部所有权、状态原因、允许动作 |
@@ -493,7 +489,7 @@ npm SHA-512 integrity 只证明下载字节与 registry metadata 一致，不证
 1. 新业务 UI 使用准确、加法型 slot；注册前验证 slot purpose、scope、kind、owner props 和当前 occupant。
 2. 跨插件协作只使用 Cordis service、Host/Client protocol 和序列化 store，不导入其他插件 implementation。
 3. 操作系统能力只通过窄、判别联合类型 preload bridge 暴露；禁止通用 IPC、任意 channel、路径或 argv。
-4. Electron 载体切换只存在于 `DesktopProductCarrier`，Runtime root composition 只存在于 `DesktopFramePlugin`；两者不得混成一个跨进程 Adapter，也不得扩散到业务插件。
+4. Electron 载体切换只存在于 `DesktopProductCarrier`，Runtime 的 Integrated 加法型装配只存在于 `DesktopFramePlugin`；两者不得混成一个跨进程 Adapter，也不得扩散到业务插件。
 5. 官方提供稳定 Electron Client composition 与 IPC carrier 后，新增 `NativeElectronProductCarrier` 并逐步替换本地 Web Profile transport。
 6. 官方没有所需 seam 时，优先提交通用上游能力；无法等待时才使用版本锁定、可撤回的兼容 Adapter。
 7. DOM selector、MutationObserver 页面猜测和编译 bundle 字符串修改只允许作为带删除条件的临时补丁，不得成为新功能的默认实现。
@@ -605,14 +601,30 @@ version tag
 
 - 为固定 rc.8 Runtime 增加 root ownership、sidebar、conversation、overlay 和 settings plugins slots 契约测试。
 - 查询并固定每个 slot 的 purpose、kind、scope、owner props、当前 occupant 与子 slot；禁止靠名称猜测。
-- 用最小 `DesktopFramePlugin` 验证 root composition 可替换且可完整 teardown，不破坏会话、设置、工具详情及其后代 slots。
+- 用最小 `DesktopFramePlugin` 验证可用的官方 seam；若 `root` 不支持第三方 composition，则记录红灯并收敛到真正加法型的 `shell.overlay`，不得复制官方布局或占用 `details`。
 - 验证设置和余额等 Runtime 业务插件在 Legacy/Integrated 两个 carrier 下都只依赖加法型 slots/services；Companion 的 command/snapshot 合同保持一致，但呈现分别由 legacy 本地 renderer 与 integrated Frame surface 承载。
 - 验证产品窗口直接加载 Harness 时 preload、CSP、可信导航和更新桥仍可工作。
 - 建立 `MacWindowChromeAdapter` 与 `WindowsWindowChromeAdapter` options 契约测试。
 - 在 Windows CI 建立可编译的 Adapter/窗口命中区 prototype 与 Runtime 装配 fixture；这一阶段不承诺完整 Windows 安装包。
-- 增加环境开关 `DSH_DESKTOP_CARRIER_MODE=legacy|integrated`，默认保持 `legacy`。
+- 增加环境开关 `DSH_DESKTOP_CARRIER_MODE=legacy|integrated`，默认保持 `legacy`；Integrated 还必须同时设置内部 `DSH_DESKTOP_INTEGRATED_PROTOTYPE=1`，避免误进入不具备产品适配能力的传输原型。
 
 退出门：所有必需 seam 都有稳定测试证据；否则先缩小功能或更新设计。
+
+#### Phase 0 当前进度（2026-08-21）
+
+已完成第一组不会改变默认产品载体的契约收口：
+
+- 已从固定 rc.8 的 `CLIENT_SLOT_API` 目录提取并锁定 `root`、`sidebar`、`conversation`、`details`、`shell.overlay`、`settings.section` 及桌面业务插件实际使用的 slot 元数据；单占用替换 seam 与加法型 seam 分开测试。
+- 已建立只在 Integrated patch 装配的 `DesktopFramePlugin` 最小原型。真实打包运行证明 rc.8 不支持第三方合法替换 `root`，原型已收敛为 `shell.overlay` 健康贡献，保留官方 `AppFrame` 和全部后代 Slot。
+- 已用 JavaScript AST 检查当前 Settings、余额与 Companion Client 插件，确保它们只注册 `replaceRisk: none` 的加法型 slot。
+- 已建立 `MacWindowChromeAdapter`、`WindowsWindowChromeAdapter` 与不透明材料降级的 options/descriptor 契约；Windows caption controls 的 138px 仅作为 CSS env 不可用时的 fallback。
+- 已建立双重保护：空值默认 `legacy`，未知值失败关闭，单独请求 `integrated` 仍回到 Legacy；只有附加内部 prototype 标志才运行打包 E2E。
+- 已建立版本化 `DesktopFrameHealth` 序列化合同与 ProductWindow readiness 状态机：Legacy 只等待产品文档完成，Integrated 必须同时收到文档完成和 Frame 健康报告，事件顺序不影响结果，不兼容与跨导航旧信号失败关闭。
+- 已把 Harness 的 preload、`nodeIntegration: false`、`contextIsolation: true`、`sandbox: true` 与 `webSecurity: true` 收敛到所有 Product carrier 共用的安全 Module；现有 Legacy `WebContentsView` 已改为消费该 Interface。
+- 已把产品 webContents 的可信导航、HTTPS 外开、权限/下载拒绝、更新命令与状态重放、余额请求竞态、Harness Context 限流去重、Review intent 和 Frame health 收敛到 `HarnessProductBridge` 深 Module；Legacy 与 Integrated 共用该 Module。
+- 固定 Runtime 已同时携带但隔离两份装配 patch：Legacy 只加载 Settings/Companion，Integrated 才额外加载 Frame prototype；`runtime:verify` 强制检查 Legacy 不含 Frame、Integrated 必须含 Frame，保证回退只需切换载体而不是改写安装内容。
+
+Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独立 `RecoveryWindow`、共用 Product bridge 与 Frame 健康门。真实 macOS 评审确认它缺少产品所需的占位侧栏、自然拖动区和主题 contract，`shell.overlay` Workspace Review 已撤回。该路径只允许双开关内部 E2E，默认和单开关请求都使用 Legacy；上游 seam 未补齐前不得继续迁移产品 UI或作为生产默认路径。
 
 ### Phase 1：ProductWindow 与 RecoveryWindow
 
@@ -623,9 +635,9 @@ version tag
 
 退出门：macOS 打包应用的 Integrated 模式只存在一个产品 webContents，Legacy 模式仍可完整回退，Loading/Failure 在两种 carrier 下都能独立恢复；Windows Adapter/窗口 prototype 在 CI 通过类型、DPI 命中区和 Runtime fixture 合同。Windows 完整 packaged E2E 是 Phase 6 与删除 legacy 的硬门。
 
-### Phase 2：DesktopFramePlugin 与原生 chrome
+### Phase 2：等待上游 composition seam（暂停）
 
-- 实现 root Grid、CaptionRow、主题令牌和 drag/no-drag 规则。
+- 向上游推动可占位 root/frame、原生 drag/no-drag 与主题 token contract；这些 seam 缺失时不在 Integrated 路径呈现 Workspace Review。
 - 迁移侧栏与 Companion toggle。
 - 增加 sidebar、Companion 和 Preview resize handles。
 - 持久化最终面板宽度，验证窄窗、全屏、深浅主题和 reduced motion。
@@ -720,7 +732,7 @@ version tag
 8. legacy 路径删除前，集成模式至少经过一个完整 beta 周期和 packaged soak 验证。
 9. 同一 Desktop Frame 与市场 Client 在 macOS、Windows 不分叉；平台差异只存在于已列出的 Adapter。
 10. macOS 与 Windows 都具备签名、干净机器安装、升级、启动和更新验证回执。
-11. `DesktopProductCarrier` 是唯一理解 Electron 载体切换的 main Module，`DesktopFramePlugin` 是唯一理解 root composition 的 Runtime Module；所有业务插件在 compatibility frame 下仍能独立加载或明确失败关闭。
+11. `DesktopProductCarrier` 是唯一理解 Electron 载体切换的 main Module，`DesktopFramePlugin` 是唯一理解 Integrated 加法型装配的 Runtime Module；固定 rc.8 的 root 始终归官方 `AppFrame` 所有。
 12. 运行时代码不新增 DOM selector、页面 MutationObserver 或编译 bundle 字符串补丁。
 
 ## 明确不做

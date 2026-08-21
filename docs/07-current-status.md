@@ -36,9 +36,9 @@
 ## 自动验证现状
 
 ```text
-Unit:        116 passed（38 files）
+Unit:        165 passed（48 files）
 Integration: 25 passed（9 files；fake Harness、真实 rc.8 dsh、内置 pnpm、发布流程契约、压力/soak 冒烟）
-E2E arm64:   4 passed（稳定启动、完整 UI/显式退出、renderer 恢复、正常退出与 SIGKILL 后 Session 选择恢复）
+E2E arm64:   5 passed（稳定启动、完整 UI/显式退出、renderer 恢复、Session 选择恢复、Integrated 单产品窗口/Frame 健康门）
 Upgrade:     3/3 consecutive runs passed（0.2.1-beta.2 → 0.2.2-beta.1；真实非空 Session、相同 origin/current selection/Session 集合、Runtime Home 回退副本）
 Prior stress baseline:    100/100 passed（启动、就绪、停止、端口回收）
 Prior companion baseline: 100/100 passed（审核、工作区切换、面板收起/展开状态循环）
@@ -67,6 +67,7 @@ Artifacts:   arm64 packaged `.app` generated；0.2.2-beta.1 DMG/ZIP 待 Release 
 
 - Harness 缺少已验证的稳定任务事件接口，因此通知功能按方案延期，不使用 DOM 文本猜测。
 - Intel 原生机器上的 x64 E2E；当前用户设备与交付目标为 Apple Silicon。
+- Integrated 仅保留双开关内部传输原型：直接 Harness ProductWindow、独立 RecoveryWindow、Frame 健康门与共用 Product bridge 可运行，但真实评审确认 rc.8 缺少占位侧栏、自然拖动区和稳定主题 seam。`shell.overlay` Workspace Review 已因遮挡、主题不一致和预览退化撤回；默认和单独请求 Integrated 都使用 Legacy。上游 composition contract 未补齐前，不继续迁移产品 UI。
 - Windows 11 x64 发行和插件市场仍处于架构与安全方案阶段；`v0.2.2-beta.1` 只交付 Apple Silicon macOS，不包含市场安装能力或 Windows 构建。
 - Desktop Companion 非宠物阶段已完成，详见 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。宠物实验已经停止，不属于当前产品线；后续开发与发布保持不包含宠物代码。
 

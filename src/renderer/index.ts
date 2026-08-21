@@ -103,10 +103,12 @@ if (companionBridge !== undefined) {
       currentPreview = undefined;
       showingMarkdownSource = false;
       previewContent?.replaceChildren();
+      setReviewSelection();
       return;
     }
     currentPreview = preview;
     showingMarkdownSource = false;
+    setReviewSelection(preview.nodeId);
     renderPreview();
   });
   companionToggle?.addEventListener('click', () => companionBridge.toggle());
@@ -127,6 +129,7 @@ async function loadOverview(workspaceId: string): Promise<void> {
   if (reviewBrowser !== null) reviewBrowser.hidden = false;
   renderChanges(response);
   renderFileTree(response.nodes);
+  setReviewSelection(currentPreview?.nodeId);
   if (reviewNote !== null) {
     reviewNote.textContent = response.truncated
       ? '内容较多，仅显示前一部分。'
@@ -186,7 +189,8 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     row.style.setProperty('--tree-depth', String(depth));
     row.setAttribute('aria-expanded', 'true');
     const chevron = document.createElement('span');
-    chevron.textContent = '⌄';
+    chevron.className = 'tree-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span');
     label.textContent = name;
     row.append(chevron, label);
@@ -206,6 +210,7 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     button.type = 'button';
     button.className = 'change-row';
     button.style.setProperty('--tree-depth', String(depth));
+    if (change.nodeId !== undefined) button.dataset.nodeId = change.nodeId;
     button.disabled = change.nodeId === undefined;
     const badge = document.createElement('span');
     badge.className = `change-badge status-${change.status}`;
@@ -243,8 +248,13 @@ function createNodeRow(node: WorkspaceNode, depth: number): HTMLElement {
   button.dataset.nodeId = node.id;
   const icon = document.createElement('span');
   icon.className = 'file-icon';
-  icon.textContent = node.kind === 'directory' ? '⌄' : fileIcon(node.extension);
+  icon.textContent = node.kind === 'directory' ? '' : fileIcon(node.extension);
+  if (node.kind === 'directory') {
+    icon.className = 'tree-chevron';
+  }
+  icon.setAttribute('aria-hidden', 'true');
   const name = document.createElement('span');
+  name.className = 'file-name';
   name.textContent = node.name;
   button.append(icon, name);
   wrapper.append(button);
@@ -283,6 +293,7 @@ async function openPreview(nodeId: string): Promise<void> {
   if (response.kind !== 'preview') return;
   currentPreview = response;
   showingMarkdownSource = false;
+  setReviewSelection(response.nodeId);
   companionBridge.setPreviewOpen(true);
   renderPreview();
 }
@@ -293,6 +304,7 @@ async function openRelativePreview(nodeId: string, target: string): Promise<void
   if (response.kind !== 'preview') return;
   currentPreview = response;
   showingMarkdownSource = false;
+  setReviewSelection(response.nodeId);
   companionBridge.setPreviewOpen(true);
   renderPreview();
 }
@@ -303,6 +315,7 @@ async function openDiff(nodeId: string): Promise<void> {
   if (response.kind !== 'preview') return;
   currentPreview = response;
   showingMarkdownSource = false;
+  setReviewSelection(response.nodeId);
   companionBridge.setPreviewOpen(true);
   renderPreview();
 }
@@ -310,6 +323,7 @@ async function openDiff(nodeId: string): Promise<void> {
 function closePreview(): void {
   if (currentPreview === undefined && previewPanel?.hidden !== false) return;
   currentPreview = undefined;
+  setReviewSelection();
   companionBridge?.setPreviewOpen(false);
   if (previewPanel !== null) previewPanel.hidden = true;
 }
@@ -436,13 +450,23 @@ function createEmptyRow(message: string): HTMLElement {
   return element;
 }
 
+function setReviewSelection(nodeId?: string): void {
+  for (const row of document.querySelectorAll<HTMLElement>('.change-row[data-node-id], .file-row[data-node-id]')) {
+    if (nodeId !== undefined && row.dataset.nodeId === nodeId) {
+      row.setAttribute('aria-current', 'true');
+    } else {
+      row.removeAttribute('aria-current');
+    }
+  }
+}
+
 function statusLabel(status: string): string {
   return ({ added: 'A', modified: 'M', deleted: 'D', renamed: 'R', untracked: 'U', conflicted: '!' } as Record<string, string>)[status] ?? 'M';
 }
 
 function fileIcon(extension?: string): string {
-  if (extension === 'md' || extension === 'markdown') return 'M↓';
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension ?? '')) return '▧';
+  if (extension === 'md' || extension === 'markdown') return 'MD';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension ?? '')) return 'IMG';
   return '·';
 }
 
