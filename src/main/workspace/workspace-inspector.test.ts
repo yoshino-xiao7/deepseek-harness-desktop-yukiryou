@@ -32,6 +32,33 @@ describe('WorkspaceInspector', () => {
     expect(await inspector.listDirectory(docs!.id)).toMatchObject({ kind: 'directory', nodes: [{ name: 'note.txt' }] });
   });
 
+  it('searches recursively without exposing paths as capabilities or entering excluded directories', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'workspace-inspector-search-'));
+    const outside = await mkdtemp(join(tmpdir(), 'workspace-inspector-search-outside-'));
+    await mkdir(join(root, 'src', 'renderer'), { recursive: true });
+    await mkdir(join(root, 'node_modules'));
+    await writeFile(join(root, 'src', 'renderer', 'WorkspacePanel.ts'), 'export {};');
+    await writeFile(join(root, 'src', 'renderer', 'other.ts'), 'export {};');
+    await writeFile(join(root, 'node_modules', 'WorkspacePanel.ts'), 'hidden');
+    await writeFile(join(outside, 'WorkspacePanel.ts'), 'hidden');
+    await symlink(outside, join(root, 'linked-outside'));
+    const inspector = createWorkspaceInspector(root);
+
+    const response = await inspector.search('workspace panel');
+
+    expect(response).toMatchObject({
+      kind: 'search',
+      query: 'workspace panel',
+      truncated: false,
+      nodes: [{ name: 'WorkspacePanel.ts', path: 'src/renderer/WorkspacePanel.ts' }],
+    });
+    if (response.kind !== 'search') throw new Error('search unavailable');
+    expect(response.nodes[0]?.id).not.toContain(root);
+    expect(await inspector.preview(response.nodes[0]!.id)).toMatchObject({
+      kind: 'preview', path: 'src/renderer/WorkspacePanel.ts',
+    });
+  });
+
   it('resolves Markdown links relative to an opaque source node without escaping the workspace', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workspace-inspector-relative-'));
     const outside = await mkdtemp(join(tmpdir(), 'workspace-inspector-relative-outside-'));

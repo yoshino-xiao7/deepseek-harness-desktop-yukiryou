@@ -10,6 +10,10 @@ import type {
 } from '../shared/workspace-review.js';
 import { structuredDiffRows } from './diff-model.js';
 import {
+  filterWorkspaceChanges,
+  type WorkspaceChangeScope,
+} from './workspace-review-query.js';
+import {
   companionPanelDragDecision,
   companionPanelWidthFromKey,
   companionPanelWidthFromPointer,
@@ -34,6 +38,8 @@ const changesView = document.querySelector<HTMLElement>('[data-review-view="chan
 const filesView = document.querySelector<HTMLElement>('[data-review-view="files"]');
 const changeCount = document.querySelector<HTMLElement>('[data-testid="change-count"]');
 const reviewNote = document.querySelector<HTMLElement>('[data-testid="review-note"]');
+const reviewSearch = document.querySelector<HTMLInputElement>('[data-testid="review-search"]');
+const changeFilter = document.querySelector<HTMLSelectElement>('[data-testid="change-filter"]');
 const previewPanel = document.querySelector<HTMLElement>('[data-testid="preview-panel"]');
 const previewName = document.querySelector<HTMLElement>('[data-testid="preview-name"]');
 const previewPath = document.querySelector<HTMLElement>('[data-testid="preview-path"]');
@@ -43,6 +49,11 @@ let loadedWorkspaceId: string | undefined;
 let reviewLoadRevision = 0;
 let currentPreview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined;
 let showingMarkdownSource = false;
+let currentOverview: Extract<WorkspaceReviewResponse, { kind: 'overview' }> | undefined;
+let activeReviewTab: 'changes' | 'files' = 'changes';
+let searchRevision = 0;
+let searchTimer: number | undefined;
+let overviewNote = '';
 const companionPanelWidthStorageKey = 'dsh.desktop.companion.panel-width';
 const companionBridge = (
   window as unknown as {
@@ -208,18 +219,17 @@ async function loadOverview(workspaceId: string): Promise<void> {
     if (reviewNote !== null) reviewNote.textContent = '暂时无法读取工作区，请稍后刷新。';
     return;
   }
+  currentOverview = response;
+  overviewNote = response.truncated
+    ? '内容较多，仅显示前一部分。'
+    : response.gitAvailable
+      ? '只读视图 · 相对 HEAD 的当前工作区变更'
+      : '此目录不是 Git 工作区，仍可浏览文件。';
   if (companionEmpty !== null) companionEmpty.hidden = true;
   if (reviewBrowser !== null) reviewBrowser.hidden = false;
-  renderChanges(response);
-  renderFileTree(response.nodes);
+  applyReviewQuery();
   setReviewSelection(currentPreview?.nodeId);
-  if (reviewNote !== null) {
-    reviewNote.textContent = response.truncated
-      ? '内容较多，仅显示前一部分。'
-      : response.gitAvailable
-        ? '只读视图 · 相对 HEAD 的当前工作区变更'
-        : '此目录不是 Git 工作区，仍可浏览文件。';
-  }
+  if (reviewNote !== null) reviewNote.textContent = overviewNote;
 }
 
 function setReviewLoading(loading: boolean): void {
@@ -230,12 +240,25 @@ function setReviewLoading(loading: boolean): void {
 function renderChanges(response: Extract<WorkspaceReviewResponse, {kind:'overview'}>): void {
   if (changesView === null) return;
   changesView.replaceChildren();
-  if (changeCount !== null) changeCount.textContent = String(response.changes.length);
-  if (response.changes.length === 0) {
+  const scope = validatedChangeScope(changeFilter?.value);
+  const changes = filterWorkspaceChanges(response.changes, {
+    query: reviewSearch?.value ?? '',
+    scope,
+  });
+  const filtering = (reviewSearch?.value.trim() ?? '') !== '' || scope !== 'all';
+  if (changeCount !== null) {
+    changeCount.textContent = filtering
+      ? `${String(changes.length)}/${String(response.changes.length)}`
+      : String(response.changes.length);
+  }
+  if (changes.length === 0) {
     changesView.append(createEmptyRow(response.gitAvailable ? '当前没有未提交变更' : 'Git 变更不可用'));
+    if (filtering && response.changes.length > 0) {
+      changesView.replaceChildren(createEmptyRow('没有匹配的变更'));
+    }
     return;
   }
-  const tree = createChangeTree(response.changes);
+  const tree = createChangeTree(changes);
   appendChangeTree(changesView, tree, 0);
 }
 
@@ -319,6 +342,96 @@ function renderFileTree(nodes: readonly WorkspaceNode[]): void {
     return;
   }
   for (const node of nodes) filesView.append(createNodeRow(node, 0));
+}
+
+function renderSearchResults(
+  response: Extract<WorkspaceReviewResponse, { kind: 'search' }>,
+): void {
+  if (filesView === null) return;
+  filesView.replaceChildren();
+  if (response.nodes.length === 0) {
+    filesView.append(createEmptyRow('没有匹配的文件'));
+    return;
+  }
+  for (const node of response.nodes) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'file-row search-result';
+    button.dataset.nodeId = node.id;
+    const icon = document.createElement('span');
+    icon.className = 'file-icon';
+    icon.textContent = fileIcon(node.extension);
+    icon.setAttribute('aria-hidden', 'true');
+    const copy = document.createElement('span');
+    copy.className = 'search-result-copy';
+    const name = document.createElement('strong');
+    name.textContent = node.name;
+    const path = document.createElement('small');
+    path.textContent = node.path;
+    copy.append(name, path);
+    button.append(icon, copy);
+    button.addEventListener('click', () => void openPreview(node.id));
+    filesView.append(button);
+  }
+}
+
+function validatedChangeScope(value: string | undefined): WorkspaceChangeScope {
+  return value === 'staged' || value === 'unstaged' || value === 'added'
+    || value === 'modified' || value === 'deleted' || value === 'conflicted'
+    ? value
+    : 'all';
+}
+
+function applyReviewQuery(): void {
+  const overview = currentOverview;
+  if (overview === undefined) return;
+  if (activeReviewTab === 'changes') {
+    if (reviewNote !== null) reviewNote.textContent = overviewNote;
+    renderChanges(overview);
+    return;
+  }
+  const query = reviewSearch?.value.trim() ?? '';
+  if (query === '') {
+    searchRevision += 1;
+    renderFileTree(overview.nodes);
+    if (reviewNote !== null) reviewNote.textContent = overviewNote;
+    return;
+  }
+  void searchFiles(query);
+}
+
+async function searchFiles(query: string): Promise<void> {
+  if (companionBridge === undefined || filesView === null) return;
+  const revision = ++searchRevision;
+  filesView.replaceChildren(createEmptyRow('正在搜索文件…'));
+  const response = await companionBridge.request({ kind: 'file.search', query });
+  if (
+    revision !== searchRevision || activeReviewTab !== 'files'
+    || query !== (reviewSearch?.value.trim() ?? '')
+  ) return;
+  if (response.kind !== 'search') {
+    filesView.replaceChildren(createEmptyRow('文件搜索暂时不可用'));
+    if (reviewNote !== null) reviewNote.textContent = '搜索失败，请稍后重试。';
+    return;
+  }
+  renderSearchResults(response);
+  if (reviewNote !== null) {
+    reviewNote.textContent = response.truncated
+      ? '搜索结果较多，仅显示前 100 条。'
+      : `找到 ${String(response.nodes.length)} 个文件`;
+  }
+}
+
+function scheduleReviewQuery(): void {
+  if (searchTimer !== undefined) window.clearTimeout(searchTimer);
+  if (activeReviewTab === 'changes') {
+    applyReviewQuery();
+    return;
+  }
+  searchTimer = window.setTimeout(() => {
+    searchTimer = undefined;
+    applyReviewQuery();
+  }, 180);
 }
 
 function createNodeRow(node: WorkspaceNode, depth: number): HTMLElement {
@@ -556,11 +669,26 @@ function fileIcon(extension?: string): string {
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
   tab.addEventListener('click', () => {
     const target = tab.dataset.reviewTab;
+    activeReviewTab = target === 'files' ? 'files' : 'changes';
     for (const candidate of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) candidate.setAttribute('aria-selected', String(candidate === tab));
     if (changesView !== null) changesView.hidden = target !== 'changes';
     if (filesView !== null) filesView.hidden = target !== 'files';
+    if (reviewSearch !== null) {
+      reviewSearch.placeholder = activeReviewTab === 'files' ? '搜索文件…' : '筛选变更…';
+      reviewSearch.setAttribute('aria-label', activeReviewTab === 'files' ? '搜索工作区文件' : '筛选工作区变更');
+    }
+    if (changeFilter !== null) changeFilter.hidden = activeReviewTab !== 'changes';
+    applyReviewQuery();
   });
 }
+reviewSearch?.addEventListener('input', scheduleReviewQuery);
+reviewSearch?.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || reviewSearch.value === '') return;
+  event.preventDefault();
+  reviewSearch.value = '';
+  scheduleReviewQuery();
+});
+changeFilter?.addEventListener('change', applyReviewQuery);
 document.querySelector('[data-testid="review-refresh"]')?.addEventListener('click', () => {
   if (loadedWorkspaceId !== undefined) void loadOverview(loadedWorkspaceId);
 });

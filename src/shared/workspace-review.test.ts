@@ -14,6 +14,10 @@ describe('workspace review request boundary', () => {
     expect(validatedWorkspaceReviewRequest({ kind: 'change.diff', nodeId: 'Abcdefghijklmnop_1' })).toEqual({ kind: 'change.diff', nodeId: 'Abcdefghijklmnop_1' });
     expect(validatedWorkspaceReviewRequest({ kind: 'file.preview', nodeId: '/Users/example/secret' })).toBeUndefined();
     expect(validatedWorkspaceReviewRequest({ kind: 'directory.list', nodeId: '../escape' })).toBeUndefined();
+    expect(validatedWorkspaceReviewRequest({ kind: 'file.search', query: '  renderer TS  ' }))
+      .toEqual({ kind: 'file.search', query: 'renderer TS' });
+    expect(validatedWorkspaceReviewRequest({ kind: 'file.search', query: '   ' })).toBeUndefined();
+    expect(validatedWorkspaceReviewRequest({ kind: 'file.search', query: 'x'.repeat(121) })).toBeUndefined();
     expect(validatedWorkspaceReviewRequest({
       kind: 'file.preview-relative', nodeId: 'Abcdefghijklmnop_1', target: '../guide/setup.md#install',
     })).toEqual({ kind: 'file.preview-relative', nodeId: 'Abcdefghijklmnop_1', target: '../guide/setup.md' });

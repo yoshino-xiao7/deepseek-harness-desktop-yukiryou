@@ -9,6 +9,7 @@ import type {
   HistoricalDiff,
   WorkspaceNode,
   WorkspaceReviewResponse,
+  WorkspaceSearchNode,
 } from '../../shared/workspace-review.js';
 import { createBoundedLruCache } from './bounded-lru-cache.js';
 import { readStableRegularFile, stableRegularFileRevision, type StableFileRead } from './stable-file-reader.js';
@@ -19,6 +20,8 @@ const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_GIT_OUTPUT = 2 * 1024 * 1024;
 const MAX_TREE_DEPTH = 20;
+const MAX_SEARCH_ENTRIES = 5_000;
+const MAX_SEARCH_RESULTS = 100;
 const MAX_PREVIEW_CACHE_BYTES = 64 * 1024 * 1024;
 const EXCLUDED_DIRECTORIES = new Set([
   '.git', '.astro', '.next', '.turbo', '.pnpm-store', '.codex-pet-runs',
@@ -37,6 +40,7 @@ interface NodeRecord {
 
 export interface WorkspaceInspector {
   overview(): Promise<WorkspaceReviewResponse>;
+  search(query: string): Promise<WorkspaceReviewResponse>;
   listDirectory(nodeId: string): Promise<WorkspaceReviewResponse>;
   preview(nodeId: string): Promise<WorkspaceReviewResponse>;
   previewRelative(nodeId: string, target: string): Promise<WorkspaceReviewResponse>;
@@ -72,6 +76,67 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
         changes: git.changes, gitAvailable: git.available,
         truncated: directory.truncated || git.truncated,
       };
+    } catch {
+      return { kind: 'unavailable', reason: 'io-error' };
+    }
+  }
+
+  async search(query: string): Promise<WorkspaceReviewResponse> {
+    const terms = query.toLocaleLowerCase().split(' ').filter(Boolean);
+    const directories: Array<{ absolutePath: string; relativePath: string; depth: number }> = [
+      { absolutePath: this.#root, relativePath: '', depth: 0 },
+    ];
+    const nodes: WorkspaceSearchNode[] = [];
+    let visited = 0;
+    let truncated = false;
+    try {
+      for (let index = 0; index < directories.length; index += 1) {
+        const directory = directories[index];
+        if (directory === undefined) continue;
+        const directoryStatus = await lstat(directory.absolutePath);
+        if (!directoryStatus.isDirectory() || directoryStatus.isSymbolicLink()) continue;
+        const entries = await readdir(directory.absolutePath, { withFileTypes: true });
+        const visible = entries
+          .filter((entry) => (
+            (!entry.isDirectory() || !EXCLUDED_DIRECTORIES.has(entry.name))
+            && (!entry.isFile() || !EXCLUDED_FILES.has(entry.name))
+            && (entry.isDirectory() || entry.isFile())
+          ))
+          .sort((left, right) => Number(right.isDirectory()) - Number(left.isDirectory()) || left.name.localeCompare(right.name));
+        for (const entry of visible) {
+          visited += 1;
+          if (visited > MAX_SEARCH_ENTRIES) {
+            truncated = true;
+            break;
+          }
+          const relativePath = directory.relativePath === ''
+            ? entry.name
+            : `${directory.relativePath}/${entry.name}`;
+          const absolutePath = join(directory.absolutePath, entry.name);
+          const depth = directory.depth + 1;
+          if (entry.isDirectory()) {
+            if (depth < MAX_TREE_DEPTH) directories.push({ absolutePath, relativePath, depth });
+            else truncated = true;
+            continue;
+          }
+          const searchable = relativePath.toLocaleLowerCase();
+          if (!terms.every((term) => searchable.includes(term))) continue;
+          const node = this.#register(absolutePath, relativePath, entry.name, 'file', depth);
+          nodes.push({
+            id: node.id,
+            name: displayName(node.name),
+            kind: 'file',
+            path: displayName(relativePath),
+            ...(extname(node.name) === '' ? {} : { extension: extname(node.name).slice(1).toLowerCase() }),
+          });
+          if (nodes.length >= MAX_SEARCH_RESULTS) {
+            truncated = true;
+            break;
+          }
+        }
+        if (truncated) break;
+      }
+      return { kind: 'search', query, nodes, truncated };
     } catch {
       return { kind: 'unavailable', reason: 'io-error' };
     }

@@ -30,4 +30,13 @@ describe('workspace review UI contract', () => {
     expect(styles).toMatch(/\.companion-panel\s*\{[^}]*var\(--companion-panel-width\)/s);
     expect(styles).toMatch(/\.preview-panel\s*\{[^}]*var\(--companion-panel-width\)/s);
   });
+
+  it('provides one query surface for file search and change filtering', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="review-search"/);
+    expect(html).toMatch(/data-testid="change-filter"/);
+    expect(html).toMatch(/<option value="staged">已暂存<\/option>/);
+    expect(html).toMatch(/<option value="conflicted">冲突<\/option>/);
+  });
 });

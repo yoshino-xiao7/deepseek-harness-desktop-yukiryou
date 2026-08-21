@@ -276,6 +276,7 @@ export class AppCoordinator {
     const inspector = this.#workspaceInspector;
     if (inspector === undefined) return { kind: 'unavailable', reason: 'no-workspace' };
     if (request.kind === 'overview') return inspector.overview();
+    if (request.kind === 'file.search') return inspector.search(request.query);
     if (request.kind === 'directory.list') return inspector.listDirectory(request.nodeId);
     if (request.kind === 'change.diff') return inspector.diff(request.nodeId);
     if (request.kind === 'file.preview-relative') return inspector.previewRelative(request.nodeId, request.target);

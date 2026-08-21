@@ -20,6 +20,10 @@ export interface WorkspaceChange {
   readonly deletions?: number;
 }
 
+export interface WorkspaceSearchNode extends WorkspaceNode {
+  readonly path: string;
+}
+
 export interface HistoricalDiff {
   readonly text: string;
   readonly additions: number;
@@ -33,6 +37,7 @@ export interface ChangedFileReviewIntent {
 
 export type WorkspaceReviewRequest =
   | { readonly kind: 'overview' }
+  | { readonly kind: 'file.search'; readonly query: string }
   | { readonly kind: 'directory.list'; readonly nodeId: string }
   | { readonly kind: 'file.preview'; readonly nodeId: string }
   | { readonly kind: 'file.preview-relative'; readonly nodeId: string; readonly target: string }
@@ -47,6 +52,7 @@ export type WorkspaceReviewResponse =
       readonly gitAvailable: boolean;
       readonly truncated: boolean;
     }
+  | { readonly kind: 'search'; readonly query: string; readonly nodes: readonly WorkspaceSearchNode[]; readonly truncated: boolean }
   | { readonly kind: 'directory'; readonly parentId: string; readonly nodes: readonly WorkspaceNode[]; readonly truncated: boolean }
   | {
       readonly kind: 'preview';
@@ -92,6 +98,10 @@ const NODE_ID = /^[A-Za-z0-9_-]{16,128}$/;
 export function validatedWorkspaceReviewRequest(value: unknown): WorkspaceReviewRequest | undefined {
   if (!isRecord(value)) return undefined;
   if (value.kind === 'overview') return { kind: 'overview' };
+  if (value.kind === 'file.search') {
+    const query = validatedWorkspaceSearchQuery(value.query);
+    return query === undefined ? undefined : { kind: 'file.search', query };
+  }
   if (value.kind === 'file.preview-relative' && typeof value.nodeId === 'string' && NODE_ID.test(value.nodeId)) {
     const target = validatedWorkspaceLinkTarget(value.target);
     return target === undefined ? undefined : { kind: value.kind, nodeId: value.nodeId, target };
@@ -100,6 +110,16 @@ export function validatedWorkspaceReviewRequest(value: unknown): WorkspaceReview
     return { kind: value.kind, nodeId: value.nodeId };
   }
   return undefined;
+}
+
+export function validatedWorkspaceSearchQuery(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const query = value.trim().replace(/\s+/g, ' ');
+  if (
+    query.length === 0 || query.length > 120
+    || Array.from(query).some(isControlCharacter)
+  ) return undefined;
+  return query;
 }
 
 export function validatedWorkspaceLinkTarget(value: unknown): string | undefined {

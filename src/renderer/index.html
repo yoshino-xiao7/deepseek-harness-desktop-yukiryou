@@ -95,6 +95,32 @@
               </svg>
             </button>
           </nav>
+          <div class="review-query" data-testid="review-query">
+            <label class="review-search">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m16 16 4 4" />
+              </svg>
+              <input
+                type="search"
+                data-testid="review-search"
+                placeholder="筛选变更…"
+                aria-label="筛选工作区变更"
+                autocomplete="off"
+                maxlength="120"
+                spellcheck="false"
+              />
+            </label>
+            <select data-testid="change-filter" aria-label="变更类型">
+              <option value="all">全部</option>
+              <option value="staged">已暂存</option>
+              <option value="unstaged">未暂存</option>
+              <option value="added">新增</option>
+              <option value="modified">修改</option>
+              <option value="deleted">删除</option>
+              <option value="conflicted">冲突</option>
+            </select>
+          </div>
           <section class="review-list" data-review-view="changes" aria-label="工作区变更"></section>
           <section class="review-list file-tree" data-review-view="files" aria-label="文件树" hidden></section>
           <p class="review-note" data-testid="review-note"></p>
