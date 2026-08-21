@@ -39,4 +39,11 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/<option value="staged">已暂存<\/option>/);
     expect(html).toMatch(/<option value="conflicted">冲突<\/option>/);
   });
+
+  it('provides accessible back and forward preview navigation', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="preview-back"[^>]+aria-label="后退"/);
+    expect(html).toMatch(/data-testid="preview-forward"[^>]+aria-label="前进"/);
+  });
 });

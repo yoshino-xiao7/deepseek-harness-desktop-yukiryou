@@ -67,6 +67,15 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await expect.poll(() => shell.locator('.change-row').count()).toBe(1);
     await expect.poll(() => shell.locator('.change-path').getAttribute('title')).toBe('src/main.ts');
     await expect.poll(() => shell.locator('[data-testid="change-count"]').textContent()).toBe('1/2');
+    await shell.locator('.change-row').click();
+    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+      .toContain('src/main.ts');
+    await shell.locator('[data-testid="preview-back"]').click();
+    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+      .toContain('src/NeedlePanel.ts');
+    await shell.locator('[data-testid="preview-forward"]').click();
+    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+      .toContain('src/main.ts');
   }, 60_000);
 });
 

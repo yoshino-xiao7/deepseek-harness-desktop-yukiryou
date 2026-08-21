@@ -23,6 +23,10 @@ import {
   type SafeMarkdownInline,
 } from './safe-markdown.js';
 import { startupFailureCopy } from './startup-failure-copy.js';
+import {
+  createWorkspacePreviewHistory,
+  type WorkspacePreviewHistorySnapshot,
+} from './workspace-preview-history.js';
 
 const parameters = new URLSearchParams(window.location.search);
 const failed = parameters.get('state') === 'failure';
@@ -45,6 +49,8 @@ const previewName = document.querySelector<HTMLElement>('[data-testid="preview-n
 const previewPath = document.querySelector<HTMLElement>('[data-testid="preview-path"]');
 const previewContent = document.querySelector<HTMLElement>('[data-testid="preview-content"]');
 const previewMode = document.querySelector<HTMLButtonElement>('[data-testid="preview-mode"]');
+const previewBack = document.querySelector<HTMLButtonElement>('[data-testid="preview-back"]');
+const previewForward = document.querySelector<HTMLButtonElement>('[data-testid="preview-forward"]');
 let loadedWorkspaceId: string | undefined;
 let reviewLoadRevision = 0;
 let currentPreview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined;
@@ -54,6 +60,7 @@ let activeReviewTab: 'changes' | 'files' = 'changes';
 let searchRevision = 0;
 let searchTimer: number | undefined;
 let overviewNote = '';
+const previewHistory = createWorkspacePreviewHistory();
 const companionPanelWidthStorageKey = 'dsh.desktop.companion.panel-width';
 const companionBridge = (
   window as unknown as {
@@ -147,16 +154,10 @@ if (companionBridge !== undefined) {
   companionBridge.subscribe(renderCompanion);
   companionBridge.subscribeReviewTarget((preview) => {
     if (preview === undefined) {
-      currentPreview = undefined;
-      showingMarkdownSource = false;
-      previewContent?.replaceChildren();
-      setReviewSelection();
+      applyPreviewHistory(previewHistory.clear());
       return;
     }
-    currentPreview = preview;
-    showingMarkdownSource = false;
-    setReviewSelection(preview.nodeId);
-    renderPreview();
+    applyPreviewHistory(previewHistory.visit(preview));
   });
   companionToggle?.addEventListener('click', () => companionBridge.toggle());
 
@@ -487,32 +488,37 @@ async function openPreview(nodeId: string): Promise<void> {
   if (companionBridge === undefined) return;
   const response = await companionBridge.request({ kind: 'file.preview', nodeId });
   if (response.kind !== 'preview') return;
-  currentPreview = response;
-  showingMarkdownSource = false;
-  setReviewSelection(response.nodeId);
   companionBridge.setPreviewOpen(true);
-  renderPreview();
+  applyPreviewHistory(previewHistory.visit(response));
 }
 
 async function openRelativePreview(nodeId: string, target: string): Promise<void> {
   if (companionBridge === undefined) return;
   const response = await companionBridge.request({ kind: 'file.preview-relative', nodeId, target });
   if (response.kind !== 'preview') return;
-  currentPreview = response;
-  showingMarkdownSource = false;
-  setReviewSelection(response.nodeId);
   companionBridge.setPreviewOpen(true);
-  renderPreview();
+  applyPreviewHistory(previewHistory.visit(response));
 }
 
 async function openDiff(nodeId: string): Promise<void> {
   if (companionBridge === undefined) return;
   const response = await companionBridge.request({ kind: 'change.diff', nodeId });
   if (response.kind !== 'preview') return;
-  currentPreview = response;
-  showingMarkdownSource = false;
-  setReviewSelection(response.nodeId);
   companionBridge.setPreviewOpen(true);
+  applyPreviewHistory(previewHistory.visit(response));
+}
+
+function applyPreviewHistory(snapshot: WorkspacePreviewHistorySnapshot): void {
+  currentPreview = snapshot.current;
+  showingMarkdownSource = false;
+  if (previewBack !== null) previewBack.disabled = !snapshot.canBack;
+  if (previewForward !== null) previewForward.disabled = !snapshot.canForward;
+  setReviewSelection(snapshot.current?.nodeId);
+  if (snapshot.current === undefined) {
+    previewContent?.replaceChildren();
+    return;
+  }
+  companionBridge?.setPreviewOpen(true);
   renderPreview();
 }
 
@@ -693,6 +699,8 @@ document.querySelector('[data-testid="review-refresh"]')?.addEventListener('clic
   if (loadedWorkspaceId !== undefined) void loadOverview(loadedWorkspaceId);
 });
 document.querySelector('[data-testid="preview-close"]')?.addEventListener('click', closePreview);
+previewBack?.addEventListener('click', () => applyPreviewHistory(previewHistory.back()));
+previewForward?.addEventListener('click', () => applyPreviewHistory(previewHistory.forward()));
 previewMode?.addEventListener('click', () => { showingMarkdownSource = !showingMarkdownSource; renderPreview(); });
 
 if (failed) {

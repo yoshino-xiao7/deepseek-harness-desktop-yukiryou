@@ -232,9 +232,16 @@ body[data-companion-resizing="true"] .companion-panel { transition: none; }
 .preview-toolbar strong { font-size: 12px; }
 .preview-toolbar small { margin-top: 3px; color: #7c8496; font-size: 9px; }
 .preview-actions { display: flex; gap: 4px; }
+.preview-navigation { display: flex; overflow: hidden; border: 1px solid rgb(127 127 127 / 14%); border-radius: 7px; }
+.preview-actions .preview-navigation button { width: 27px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.preview-navigation button + button { border-left: 1px solid rgb(127 127 127 / 14%); }
 .preview-actions button { height: 27px; padding: 0 8px; border: 1px solid rgb(127 127 127 / 14%); border-radius: 7px; color: inherit; background: rgb(127 127 127 / 5%); cursor: pointer; font: inherit; font-size: 10px; }
-.preview-actions button:last-child { display: grid; width: 27px; padding: 0; place-items: center; }
+.preview-actions button:disabled { color: var(--companion-muted); cursor: default; opacity: .42; }
+.preview-actions > button:last-child { display: grid; width: 27px; padding: 0; place-items: center; }
 .preview-actions button[hidden] { display: none; }
+.preview-chevron { display: inline-block; width: 7px; height: 7px; border-bottom: 1.4px solid currentColor; border-left: 1.4px solid currentColor; }
+.preview-chevron-back { transform: rotate(45deg); }
+.preview-chevron-forward { transform: rotate(225deg); }
 .preview-close-glyph { position: relative; display: block; width: 11px; height: 11px; }
 .preview-close-glyph::before,
 .preview-close-glyph::after { position: absolute; top: 5px; left: 0; width: 11px; height: 1.2px; border-radius: 1px; background: currentColor; content: ""; }
