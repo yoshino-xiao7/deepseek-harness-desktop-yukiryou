@@ -623,6 +623,7 @@ version tag
 - 已把 Harness 的 preload、`nodeIntegration: false`、`contextIsolation: true`、`sandbox: true` 与 `webSecurity: true` 收敛到所有 Product carrier 共用的安全 Module；现有 Legacy `WebContentsView` 已改为消费该 Interface。
 - 已把产品 webContents 的可信导航、HTTPS 外开、权限/下载拒绝、更新命令与状态重放、余额请求竞态、Harness Context 限流去重、Review intent 和 Frame health 收敛到 `HarnessProductBridge` 深 Module；Legacy 与 Integrated 共用该 Module。
 - 固定 Runtime 已同时携带但隔离两份装配 patch：Legacy 只加载 Settings/Companion，Integrated 才额外加载 Frame prototype；`runtime:verify` 强制检查 Legacy 不含 Frame、Integrated 必须含 Frame，保证回退只需切换载体而不是改写安装内容。
+- 插件管理 Phase 0 已开始复用 rc.8 官方 `pluginInventory.list()` 只读快照，并通过加法型 `settings.plugins.tab` 提供来源、状态和不可操作原因说明。该阶段所有动作集合保持为空：不联网、不安装、不修改 Loader；系统/依赖标签只表示部署来源，不宣称安全隔离。
 
 Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独立 `RecoveryWindow`、共用 Product bridge 与 Frame 健康门。真实 macOS 评审确认它缺少产品所需的占位侧栏、自然拖动区和主题 contract，`shell.overlay` Workspace Review 已撤回。该路径只允许双开关内部 E2E，默认和单开关请求都使用 Legacy；上游 seam 未补齐前不得继续迁移产品 UI或作为生产默认路径。
 

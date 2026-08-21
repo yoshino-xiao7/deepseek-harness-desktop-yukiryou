@@ -121,6 +121,20 @@ export const RC8_DESKTOP_SLOT_CONTRACT = [
     childSlots: ['settings.general.item', 'settings.plugins.tab'],
   },
   {
+    key: 'settings.plugins.tab',
+    purpose: 'One additive page inside the built-in Plugins settings section.',
+    kind: 'list',
+    scope: 'root',
+    ownerProps: ['children?: never'],
+    occupant: [
+      "client-ui-settings-plugin-inventory PluginInventorySettingsTab id 'all'",
+      "client-ui-settings-plugins ConfigurablePluginsTab id 'configurable'",
+    ],
+    declaredBy: 'settings.section plugins entry',
+    replaceRisk: 'none',
+    childSlots: [],
+  },
+  {
     key: 'sidebar.footer.action',
     purpose: 'Optional additive actions beside Settings at the sidebar foot.',
     kind: 'list',

@@ -37,6 +37,7 @@ describe('rc.8 desktop slot contract', () => {
   it.each([
     'shell.overlay',
     'settings.section',
+    'settings.plugins.tab',
     'sidebar.footer.action',
     'conversation.chat.turnTail',
     'conversation.input.dock',
@@ -57,6 +58,7 @@ describe('rc.8 desktop slot contract', () => {
         'shell.overlay',
         'conversation.details.tool',
         'settings.section',
+        'settings.plugins.tab',
         'sidebar.footer.action',
         'conversation.chat.turnTail',
         'conversation.input.dock',
