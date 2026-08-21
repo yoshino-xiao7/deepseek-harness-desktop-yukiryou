@@ -99,6 +99,27 @@ describe('WorkspaceReviewController', () => {
     expect(controller.execute({ kind: 'find.close' }).snapshot.find)
       .toEqual({ open: false, query: '', total: 0, position: undefined, canPrevious: false, canNext: false });
   });
+
+  it('selects a preview line and produces bounded copy effects', () => {
+    const controller = createWorkspaceReviewController();
+    controller.execute({ kind: 'workspace.select', workspaceId: 'workspace-a' });
+    controller.execute({ kind: 'preview.visit', preview: preview('a') });
+
+    expect(controller.execute({ kind: 'copy.request', target: 'path' }).effect)
+      .toEqual({ kind: 'copy-text', text: 'a.txt', label: '路径' });
+    expect(controller.execute({ kind: 'copy.request', target: 'line' }).effect)
+      .toBeUndefined();
+    expect(controller.execute({ kind: 'line.select', line: 12 }).snapshot.selectedLine)
+      .toBe(12);
+    expect(controller.execute({ kind: 'copy.request', target: 'line' }).effect)
+      .toEqual({ kind: 'copy-text', text: '12', label: '行号' });
+    expect(controller.execute({ kind: 'copy.request', target: 'path-line' }).effect)
+      .toEqual({ kind: 'copy-text', text: 'a.txt:12', label: '路径和行号' });
+    expect(controller.execute({ kind: 'line.select', line: 0 }).snapshot.selectedLine)
+      .toBeUndefined();
+    expect(controller.execute({ kind: 'preview.visit', preview: preview('b') }).snapshot.selectedLine)
+      .toBeUndefined();
+  });
 });
 
 function overview(): Overview {

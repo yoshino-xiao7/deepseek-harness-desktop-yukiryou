@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell, WebContentsView } from 'electron';
+import { BrowserWindow, clipboard, ipcMain, shell, WebContentsView } from 'electron';
 
 import type { RuntimeFailure } from '../runtime/runtime-supervisor.js';
 import {
@@ -62,6 +62,10 @@ import {
   WORKSPACE_REVIEW_SHORTCUT_CHANNEL,
   workspaceReviewShortcut,
 } from '../../shared/workspace-review-shortcuts.js';
+import {
+  SHELL_CLIPBOARD_WRITE_CHANNEL,
+  validatedShellClipboardText,
+} from '../../shared/shell-clipboard.js';
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
@@ -369,6 +373,11 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   #installCompanionBridge(): void {
     this.#window.webContents.on('ipc-message', (_event, channel, value: unknown) => {
+      if (channel === SHELL_CLIPBOARD_WRITE_CHANNEL) {
+        const text = validatedShellClipboardText(value);
+        if (text !== undefined) clipboard.writeText(text);
+        return;
+      }
       if (channel !== COMPANION_COMMAND_CHANNEL) return;
       const command = validatedCompanionCommand(value);
       if (command === undefined) return;

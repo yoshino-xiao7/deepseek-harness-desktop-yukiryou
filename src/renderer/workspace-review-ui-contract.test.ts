@@ -67,4 +67,14 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/data-testid="preview-find-next"[^>]+aria-label="下一个匹配项"/);
     expect(html).toMatch(/data-testid="preview-find-progress"[^>]+aria-live="polite"/);
   });
+
+  it('provides a line-aware preview copy menu', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="preview-copy-menu"/);
+    expect(html).toMatch(/data-copy-target="path">复制相对路径/);
+    expect(html).toMatch(/data-copy-target="line" disabled>复制行号/);
+    expect(html).toMatch(/data-copy-target="path-line" disabled>复制 路径:行号/);
+    expect(html).toMatch(/data-testid="preview-copy-feedback"[^>]+aria-live="polite"/);
+  });
 });

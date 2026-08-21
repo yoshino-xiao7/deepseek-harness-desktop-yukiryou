@@ -138,6 +138,18 @@
               <button type="button" data-testid="preview-back" aria-label="后退" aria-keyshortcuts="Meta+[ Control+[" title="后退（⌘[）" disabled><span class="preview-chevron preview-chevron-back" aria-hidden="true"></span></button>
               <button type="button" data-testid="preview-forward" aria-label="前进" aria-keyshortcuts="Meta+] Control+]" title="前进（⌘]）" disabled><span class="preview-chevron preview-chevron-forward" aria-hidden="true"></span></button>
             </div>
+            <span class="preview-copy-feedback" data-testid="preview-copy-feedback" aria-live="polite" hidden></span>
+            <details class="preview-copy-menu" data-testid="preview-copy-menu">
+              <summary aria-label="复制预览位置" aria-haspopup="menu" title="复制预览位置">
+                <svg class="preview-copy-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.4" y="5.4" width="7.4" height="7.4" rx="1.2"></rect><path d="M10.6 5.4V3.9c0-.7-.6-1.2-1.2-1.2H3.9c-.7 0-1.2.6-1.2 1.2v5.5c0 .7.6 1.2 1.2 1.2h1.5"></path></svg>
+                <span class="preview-menu-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="preview-copy-popover" role="menu">
+                <button type="button" role="menuitem" data-copy-target="path">复制相对路径</button>
+                <button type="button" role="menuitem" data-copy-target="line" disabled>复制行号</button>
+                <button type="button" role="menuitem" data-copy-target="path-line" disabled>复制 路径:行号</button>
+              </div>
+            </details>
             <button type="button" data-testid="preview-find-toggle" aria-label="在预览中查找" aria-keyshortcuts="Meta+F Control+F" title="在预览中查找（⌘F）">
               <svg class="preview-find-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.1"></circle><path d="m10 10 3.2 3.2"></path></svg>
             </button>

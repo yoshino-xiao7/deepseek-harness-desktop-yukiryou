@@ -230,12 +230,12 @@ body[data-companion-resizing="true"] .companion-panel { transition: none; }
   background: var(--toolbar-content-background);
 }
 .preview-panel[hidden] { display: none; }
-.preview-toolbar { display: flex; height: 54px; padding: 8px 11px 8px 15px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgb(127 127 127 / 13%); }
+.preview-toolbar { position: relative; display: flex; height: 54px; padding: 8px 11px 8px 15px; align-items: center; justify-content: space-between; gap: 12px; overflow: visible; border-bottom: 1px solid rgb(127 127 127 / 13%); }
 .preview-toolbar > div:first-child { min-width: 0; }
 .preview-toolbar strong,.preview-toolbar small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-toolbar strong { font-size: 12px; }
 .preview-toolbar small { margin-top: 3px; color: #7c8496; font-size: 9px; }
-.preview-actions { display: flex; gap: 4px; }
+.preview-actions { display: flex; align-items: center; gap: 4px; }
 .preview-navigation { display: flex; overflow: hidden; border: 1px solid rgb(127 127 127 / 14%); border-radius: 7px; }
 .preview-actions .preview-navigation button { width: 27px; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .preview-navigation button + button { border-left: 1px solid rgb(127 127 127 / 14%); }
@@ -249,6 +249,18 @@ body[data-companion-resizing="true"] .companion-panel { transition: none; }
 .preview-chevron-up { transform: rotate(135deg); }
 .preview-chevron-down { transform: rotate(-45deg); }
 .preview-find-glyph { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.preview-copy-feedback { color: var(--companion-muted); font-size: 9px; white-space: nowrap; }
+.preview-copy-feedback[hidden] { display: none; }
+.preview-copy-menu { position: relative; }
+.preview-copy-menu summary { display: flex; width: 40px; height: 27px; padding: 0 6px; align-items: center; justify-content: center; gap: 5px; border: 1px solid rgb(127 127 127 / 14%); border-radius: 7px; color: inherit; background: rgb(127 127 127 / 5%); cursor: pointer; list-style: none; }
+.preview-copy-menu summary::-webkit-details-marker { display: none; }
+.preview-copy-menu[open] summary { border-color: rgb(53 106 230 / 32%); background: rgb(53 106 230 / 8%); }
+.preview-copy-glyph { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.35; }
+.preview-menu-chevron { width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-1px) rotate(45deg); }
+.preview-copy-popover { position: absolute; z-index: 6; top: 33px; right: 0; width: 154px; padding: 5px; border: 1px solid rgb(127 127 127 / 18%); border-radius: 9px; color: inherit; background: var(--companion-surface); box-shadow: 0 12px 30px rgb(0 0 0 / 18%); }
+.preview-copy-popover button { display: block; width: 100%; height: 29px; padding: 0 9px; border: 0; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; text-align: left; font: inherit; font-size: 10px; }
+.preview-copy-popover button:hover:not(:disabled),.preview-copy-popover button:focus-visible { background: rgb(53 106 230 / 10%); outline: 0; }
+.preview-copy-popover button:disabled { color: var(--companion-muted); cursor: default; opacity: .45; }
 .preview-close-glyph { position: relative; display: block; width: 11px; height: 11px; }
 .preview-close-glyph::before,
 .preview-close-glyph::after { position: absolute; top: 5px; left: 0; width: 11px; height: 1.2px; border-radius: 1px; background: currentColor; content: ""; }
@@ -284,10 +296,19 @@ body[data-companion-resizing="true"] .companion-panel { transition: none; }
 .markdown-workspace-link { display: inline; margin: 0; padding: 0; border: 0; color: #315fd4; background: transparent; cursor: pointer; font: inherit; text-decoration: underline; text-decoration-color: rgb(49 95 212 / 35%); text-underline-offset: 2px; }
 .markdown-workspace-link:hover { text-decoration-color: currentColor; }
 .markdown-workspace-link:focus-visible { border-radius: 3px; outline: 2px solid rgb(49 95 212 / 35%); outline-offset: 2px; }
+.text-view { width: 100%; min-width: 0; overflow: hidden; border: 1px solid rgb(127 127 127 / 13%); border-radius: 10px; background: rgb(127 127 127 / 5%); font: 11px/1.55 ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.text-row { display: grid; min-width: 0; grid-template-columns: 46px minmax(0, 1fr); }
+.text-row[data-selected="true"] { box-shadow: inset 3px 0 #5275df; background: rgb(73 101 223 / 8%); }
+.text-line-number { min-height: 20px; padding: 1px 8px 1px 3px; border: 0; border-right: 1px solid rgb(127 127 127 / 10%); color: #8a91a0; background: transparent; cursor: pointer; text-align: right; font: inherit; user-select: none; }
+.text-line-number:hover,.text-line-number:focus-visible { color: #5275df; background: rgb(73 101 223 / 8%); outline: 0; }
+.text-line-code { min-width: 0; min-height: 20px; padding: 1px 14px 1px 8px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .diff-view { width: 100%; min-width: 0; margin: -8px -20px; overflow: hidden; border: 1px solid rgb(127 127 127 / 13%); border-radius: 10px; font: 10.5px/1.65 ui-monospace, "SFMono-Regular", Menlo, monospace; }
 .diff-row { display: grid; width: 100%; min-width: 0; grid-template-columns: 42px 42px 22px minmax(0, 1fr); }
-.diff-row > span { min-height: 20px; }
-.diff-old-number,.diff-new-number { padding: 1px 7px 1px 3px; border-right: 1px solid rgb(127 127 127 / 10%); color: #8a91a0; text-align: right; user-select: none; }
+.diff-row > span,.diff-row > button { min-height: 20px; }
+.diff-row[data-selected="true"] { box-shadow: inset 3px 0 #5275df; }
+.diff-old-number,.diff-new-number { padding: 1px 7px 1px 3px; border: 0; border-right: 1px solid rgb(127 127 127 / 10%); color: #8a91a0; background: transparent; cursor: pointer; text-align: right; font: inherit; user-select: none; }
+.diff-old-number:disabled,.diff-new-number:disabled { cursor: default; }
+.diff-old-number:hover:not(:disabled),.diff-new-number:hover:not(:disabled),.diff-old-number:focus-visible,.diff-new-number:focus-visible { color: #5275df; background: rgb(73 101 223 / 9%); outline: 0; }
 .diff-marker { padding-top: 1px; color: #818897; text-align: center; user-select: none; }
 .diff-code { min-width: 0; padding: 1px 14px 1px 2px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .diff-added { color: #176f3a; background: rgb(25 145 72 / 12%); }

@@ -38,6 +38,7 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
       args: [`--user-data-dir=${userData}`],
       env: { ...process.env, DSH_DESKTOP_E2E: '1', DSH_DESKTOP_CARRIER_MODE: 'legacy' },
     });
+    const launchedApplication = application;
     await application.firstWindow();
     const origin = await waitForHarnessOrigin(application);
     const workspaceResult = asRecord(await callHarnessApi(origin, 'workspace.create', { path: workspace }));
@@ -64,6 +65,18 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await expect.poll(
       () => shell.locator('[data-testid="preview-path"]').textContent(),
     ).toContain('src/NeedlePanel.ts');
+    const copyMenu = shell.locator('[data-testid="preview-copy-menu"]');
+    await copyMenu.locator('summary').click();
+    await copyMenu.locator('[data-copy-target="path"]').click();
+    await expect.poll(() => readClipboard(launchedApplication)).toBe('src/NeedlePanel.ts');
+    await shell.locator('.text-line-number').first().click();
+    await copyMenu.locator('summary').click();
+    await expect.poll(() => copyMenu.locator('[data-copy-target="line"]').isEnabled()).toBe(true);
+    await copyMenu.locator('[data-copy-target="line"]').click();
+    await expect.poll(() => readClipboard(launchedApplication)).toBe('1');
+    await copyMenu.locator('summary').click();
+    await copyMenu.locator('[data-copy-target="path-line"]').click();
+    await expect.poll(() => readClipboard(launchedApplication)).toBe('src/NeedlePanel.ts:1');
     await sendHarnessPreviewFindShortcut(application);
     const previewFind = shell.locator('[data-testid="preview-find-input"]');
     await expect.poll(() => previewFind.isVisible()).toBe(true);
@@ -93,6 +106,10 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
       .toBe('1 / 2');
     await previewFind.press('Escape');
     await expect.poll(() => shell.locator('[data-testid="preview-find-bar"]').isVisible()).toBe(false);
+    await shell.locator('.diff-new-number:not(:disabled)').first().click();
+    await copyMenu.locator('summary').click();
+    await copyMenu.locator('[data-copy-target="path-line"]').click();
+    await expect.poll(() => readClipboard(launchedApplication)).toBe('src/main.ts:1');
     await shell.locator('[data-testid="preview-back"]').click();
     await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/NeedlePanel.ts');
@@ -176,6 +193,10 @@ async function sendHarnessPreviewFindShortcut(application: ElectronApplication):
     if (harness === undefined) throw new Error('Harness webContents is missing');
     harness.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers: ['meta'] });
   });
+}
+
+async function readClipboard(application: ElectronApplication): Promise<string> {
+  return application.evaluate(({ clipboard }) => clipboard.readText());
 }
 
 function readString(value: Record<string, unknown>, key: string): string {

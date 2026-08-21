@@ -58,6 +58,8 @@ const previewFindInput = document.querySelector<HTMLInputElement>('[data-testid=
 const previewFindProgress = document.querySelector<HTMLElement>('[data-testid="preview-find-progress"]');
 const previewFindPrevious = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-previous"]');
 const previewFindNext = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-next"]');
+const previewCopyMenu = document.querySelector<HTMLDetailsElement>('[data-testid="preview-copy-menu"]');
+const previewCopyFeedback = document.querySelector<HTMLElement>('[data-testid="preview-copy-feedback"]');
 const reviewBar = document.querySelector<HTMLElement>('[data-testid="preview-review-bar"]');
 const reviewProgress = document.querySelector<HTMLElement>('[data-testid="review-progress"]');
 const reviewPrevious = document.querySelector<HTMLButtonElement>('[data-testid="review-previous"]');
@@ -72,6 +74,7 @@ let searchTimer: number | undefined;
 let overviewNote = '';
 let latestCompanionSnapshot: DesktopCompanionSnapshot | undefined;
 let workspaceLossTimer: number | undefined;
+let copyFeedbackTimer: number | undefined;
 const reviewController = createWorkspaceReviewController();
 const companionPanelWidthStorageKey = 'dsh.desktop.companion.panel-width';
 const companionBridge = (
@@ -83,6 +86,7 @@ const companionBridge = (
       toggle(): void;
       setPreviewOpen(open: boolean): void;
       resize(width: number): void;
+      writeClipboard(text: string): boolean;
       request(request: WorkspaceReviewRequest): Promise<WorkspaceReviewResponse>;
       subscribeReviewTarget(listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): () => void;
     };
@@ -571,6 +575,7 @@ function applyReviewSnapshot(snapshot: WorkspaceReviewSnapshot): void {
   if (previewForward !== null) previewForward.disabled = !snapshot.canForward;
   syncReviewProgress(snapshot);
   syncPreviewFindControls(snapshot);
+  syncPreviewCopyControls(snapshot);
   setReviewSelection(snapshot.preview?.nodeId);
   if (snapshot.preview === undefined) {
     previewContent?.replaceChildren();
@@ -578,6 +583,40 @@ function applyReviewSnapshot(snapshot: WorkspaceReviewSnapshot): void {
   }
   companionBridge?.setPreviewOpen(true);
   renderPreview(snapshot.find.open && snapshot.find.query !== '');
+}
+
+function syncPreviewCopyControls(snapshot: WorkspaceReviewSnapshot): void {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-target="line"], [data-copy-target="path-line"]')) {
+    button.disabled = snapshot.selectedLine === undefined;
+  }
+  for (const row of previewContent?.querySelectorAll<HTMLElement>('.text-row, .diff-row') ?? []) {
+    row.removeAttribute('data-selected');
+  }
+  if (snapshot.selectedLineKey === undefined) return;
+  const lineButton = [...(previewContent?.querySelectorAll<HTMLButtonElement>('[data-line-key]') ?? [])]
+    .find((button) => button.dataset.lineKey === snapshot.selectedLineKey);
+  lineButton?.closest<HTMLElement>('.text-row, .diff-row')?.setAttribute('data-selected', 'true');
+}
+
+function selectPreviewLine(line: number, key: string): void {
+  const snapshot = reviewController.execute({ kind: 'line.select', line, key }).snapshot;
+  syncPreviewCopyControls(snapshot);
+}
+
+function copyPreviewTarget(target: 'path' | 'line' | 'path-line'): void {
+  const transition = reviewController.execute({ kind: 'copy.request', target });
+  if (transition.effect?.kind !== 'copy-text') return;
+  if (companionBridge?.writeClipboard(transition.effect.text) !== true) return;
+  if (previewCopyMenu !== null) previewCopyMenu.open = false;
+  if (previewCopyFeedback !== null) {
+    previewCopyFeedback.textContent = `已复制${transition.effect.label}`;
+    previewCopyFeedback.hidden = false;
+    if (copyFeedbackTimer !== undefined) window.clearTimeout(copyFeedbackTimer);
+    copyFeedbackTimer = window.setTimeout(() => {
+      copyFeedbackTimer = undefined;
+      previewCopyFeedback.hidden = true;
+    }, 1_200);
+  }
 }
 
 function syncPreviewFindControls(snapshot: WorkspaceReviewSnapshot): void {
@@ -609,6 +648,10 @@ function refreshPreviewFindMatches(scrollCurrent: boolean): WorkspaceReviewSnaps
   let node = walker.nextNode();
   while (node !== null) {
     const textNode = node as Text;
+    if (textNode.parentElement?.closest('.text-line-number, .diff-old-number, .diff-new-number') !== null) {
+      node = walker.nextNode();
+      continue;
+    }
     const content = textNode.data.toLocaleLowerCase();
     let start = content.indexOf(query);
     while (start >= 0) {
@@ -712,11 +755,7 @@ function renderPreview(scrollFind = false): void {
   } else if (content.kind === 'diff') {
     previewContent.append(renderDiff(content.text));
   } else if ('text' in content) {
-    const pre = document.createElement('pre');
-    const code = document.createElement('code');
-    code.textContent = content.text;
-    pre.append(code);
-    previewContent.append(pre);
+    previewContent.append(renderText(content.text));
   } else {
     previewContent.append(createEmptyRow(
       content.reason === 'too-large' ? '文件过大，无法在应用内预览' : content.reason === 'binary' ? '二进制文件不支持预览' : '此文件类型暂不支持预览',
@@ -725,10 +764,37 @@ function renderPreview(scrollFind = false): void {
   refreshPreviewFindMatches(scrollFind);
 }
 
+function renderText(source: string): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'text-view';
+  const selectedKey = reviewController.getSnapshot().selectedLineKey;
+  for (const [index, text] of source.replaceAll('\r\n', '\n').split('\n').entries()) {
+    const line = index + 1;
+    const key = `text-${String(line)}`;
+    const row = document.createElement('div');
+    row.className = 'text-row';
+    if (key === selectedKey) row.dataset.selected = 'true';
+    const number = document.createElement('button');
+    number.type = 'button';
+    number.className = 'text-line-number';
+    number.dataset.lineKey = key;
+    number.textContent = String(line);
+    number.setAttribute('aria-label', `选择第 ${String(line)} 行`);
+    number.addEventListener('click', () => selectPreviewLine(line, key));
+    const code = document.createElement('span');
+    code.className = 'text-line-code';
+    code.textContent = text === '' ? ' ' : text;
+    row.append(number, code);
+    container.append(row);
+  }
+  return container;
+}
+
 function renderDiff(source: string): HTMLElement {
   const container = document.createElement('div');
   container.className = 'diff-view';
-  for (const row of structuredDiffRows(source)) {
+  const selectedKey = reviewController.getSnapshot().selectedLineKey;
+  for (const [index, row] of structuredDiffRows(source).entries()) {
     const element = document.createElement('div');
     element.className = `diff-row diff-${row.kind}`;
     if (row.kind === 'fold' || row.kind === 'hunk') {
@@ -737,12 +803,29 @@ function renderDiff(source: string): HTMLElement {
       label.textContent = row.label;
       element.append(label);
     } else {
-      const oldNumber = document.createElement('span');
+      const oldNumber = document.createElement('button');
+      oldNumber.type = 'button';
       oldNumber.className = 'diff-old-number';
       oldNumber.textContent = row.oldLine === undefined ? '' : String(row.oldLine);
-      const newNumber = document.createElement('span');
+      oldNumber.disabled = row.oldLine === undefined;
+      const oldKey = `diff-${String(index)}-old-${String(row.oldLine ?? 0)}`;
+      oldNumber.dataset.lineKey = oldKey;
+      if (row.oldLine !== undefined) {
+        oldNumber.setAttribute('aria-label', `选择旧文件第 ${String(row.oldLine)} 行`);
+        oldNumber.addEventListener('click', () => selectPreviewLine(row.oldLine!, oldKey));
+      }
+      const newNumber = document.createElement('button');
+      newNumber.type = 'button';
       newNumber.className = 'diff-new-number';
       newNumber.textContent = row.newLine === undefined ? '' : String(row.newLine);
+      newNumber.disabled = row.newLine === undefined;
+      const newKey = `diff-${String(index)}-new-${String(row.newLine ?? 0)}`;
+      newNumber.dataset.lineKey = newKey;
+      if (row.newLine !== undefined) {
+        newNumber.setAttribute('aria-label', `选择新文件第 ${String(row.newLine)} 行`);
+        newNumber.addEventListener('click', () => selectPreviewLine(row.newLine!, newKey));
+      }
+      if (oldKey === selectedKey || newKey === selectedKey) element.dataset.selected = 'true';
       const marker = document.createElement('span');
       marker.className = 'diff-marker';
       marker.textContent = row.kind === 'added' ? '+' : row.kind === 'deleted' ? '−' : ' ';
@@ -948,7 +1031,23 @@ previewFindInput?.addEventListener('keydown', (event) => {
 document.querySelector('[data-testid="preview-find-close"]')?.addEventListener('click', closePreviewFind);
 previewFindPrevious?.addEventListener('click', () => movePreviewFind('previous'));
 previewFindNext?.addEventListener('click', () => movePreviewFind('next'));
-previewMode?.addEventListener('click', () => { showingMarkdownSource = !showingMarkdownSource; renderPreview(true); });
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-target]')) {
+  button.addEventListener('click', () => {
+    const target = button.dataset.copyTarget;
+    if (target === 'path' || target === 'line' || target === 'path-line') copyPreviewTarget(target);
+  });
+}
+document.addEventListener('pointerdown', (event) => {
+  if (previewCopyMenu?.open === true && !previewCopyMenu.contains(event.target as Node)) {
+    previewCopyMenu.open = false;
+  }
+});
+previewMode?.addEventListener('click', () => {
+  showingMarkdownSource = !showingMarkdownSource;
+  const snapshot = reviewController.execute({ kind: 'line.select', line: undefined }).snapshot;
+  syncPreviewCopyControls(snapshot);
+  renderPreview(true);
+});
 reviewPrevious?.addEventListener('click', () => moveReview('previous'));
 reviewNext?.addEventListener('click', () => moveReview('next'));
 reviewToggleViewed?.addEventListener('click', () => {

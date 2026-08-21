@@ -31,6 +31,8 @@ export type WorkspaceReviewCommand =
   | { readonly kind: 'find.matches'; readonly total: number }
   | { readonly kind: 'find.move'; readonly direction: 'previous' | 'next' }
   | { readonly kind: 'find.close' }
+  | { readonly kind: 'line.select'; readonly line: number | undefined; readonly key?: string }
+  | { readonly kind: 'copy.request'; readonly target: 'path' | 'line' | 'path-line' }
   | { readonly kind: 'review.toggle' }
   | { readonly kind: 'review.move'; readonly direction: 'previous' | 'next' };
 
@@ -63,14 +65,15 @@ export interface WorkspaceReviewSnapshot {
   readonly preview: WorkspacePreview | undefined;
   readonly canBack: boolean;
   readonly canForward: boolean;
+  readonly selectedLine: number | undefined;
+  readonly selectedLineKey: string | undefined;
   readonly find: WorkspacePreviewFind;
   readonly review: WorkspaceReviewProgress;
 }
 
-export type WorkspaceReviewEffect = {
-  readonly kind: 'open-diff';
-  readonly nodeId: string;
-};
+export type WorkspaceReviewEffect =
+  | { readonly kind: 'open-diff'; readonly nodeId: string }
+  | { readonly kind: 'copy-text'; readonly text: string; readonly label: '路径' | '行号' | '路径和行号' };
 
 export interface WorkspaceReviewTransition {
   readonly snapshot: WorkspaceReviewSnapshot;
@@ -100,6 +103,13 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
   let findQuery = '';
   let findTotal = 0;
   let findPosition: number | undefined;
+  let selectedLine: number | undefined;
+  let selectedLineKey: string | undefined;
+
+  const clearSelectedLine = (): void => {
+    selectedLine = undefined;
+    selectedLineKey = undefined;
+  };
 
   const clearFind = (): void => {
     findOpen = false;
@@ -134,6 +144,8 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
       preview,
       canBack: historyIndex > 0,
       canForward: historyIndex >= 0 && historyIndex < history.length - 1,
+      selectedLine,
+      selectedLineKey,
       find: {
         open: findOpen,
         query: findQuery,
@@ -171,6 +183,7 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
           historyIndex = -1;
           viewed.clear();
           clearFind();
+          clearSelectedLine();
         } else if (lastWorkspaceId !== command.workspaceId) {
           workspaceId = command.workspaceId;
           lastWorkspaceId = command.workspaceId;
@@ -183,6 +196,7 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
           historyIndex = -1;
           viewed.clear();
           clearFind();
+          clearSelectedLine();
         } else {
           workspaceId = command.workspaceId;
         }
@@ -208,22 +222,27 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
         }
         previewOpen = true;
         resetFindMatches();
+        clearSelectedLine();
       } else if (command.kind === 'preview.back') {
         if (historyIndex > 0) historyIndex -= 1;
         previewOpen = historyIndex >= 0;
         resetFindMatches();
+        clearSelectedLine();
       } else if (command.kind === 'preview.forward') {
         if (historyIndex < history.length - 1) historyIndex += 1;
         previewOpen = historyIndex >= 0;
         resetFindMatches();
+        clearSelectedLine();
       } else if (command.kind === 'preview.close') {
         previewOpen = false;
         clearFind();
+        clearSelectedLine();
       } else if (command.kind === 'preview.clear') {
         previewOpen = false;
         history.splice(0);
         historyIndex = -1;
         clearFind();
+        clearSelectedLine();
       } else if (command.kind === 'find.open') {
         findOpen = currentPreview() !== undefined;
       } else if (command.kind === 'find.change') {
@@ -245,6 +264,23 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
         }
       } else if (command.kind === 'find.close') {
         clearFind();
+      } else if (command.kind === 'line.select') {
+        selectedLine = command.line !== undefined
+          && Number.isSafeInteger(command.line)
+          && command.line > 0
+          ? command.line
+          : undefined;
+        selectedLineKey = selectedLine === undefined ? undefined : command.key;
+      } else if (command.kind === 'copy.request') {
+        const preview = currentPreview();
+        if (preview === undefined) return transition();
+        if (command.target === 'path') {
+          return transition({ kind: 'copy-text', text: preview.path, label: '路径' });
+        }
+        if (selectedLine === undefined) return transition();
+        return transition(command.target === 'line'
+          ? { kind: 'copy-text', text: String(selectedLine), label: '行号' }
+          : { kind: 'copy-text', text: `${preview.path}:${String(selectedLine)}`, label: '路径和行号' });
       } else if (command.kind === 'review.toggle') {
         const preview = currentPreview();
         if (preview?.content.kind === 'diff' && overview?.changes.some((change) => change.nodeId === preview.nodeId) === true) {
