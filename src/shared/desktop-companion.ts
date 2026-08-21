@@ -21,6 +21,7 @@ export type CompanionWorkspaceSnapshot =
   | { readonly status: 'authorizing'; readonly running: boolean }
   | {
       readonly status: 'ready';
+      readonly sessionId: string;
       readonly workspaceId: string;
       readonly title: string;
       readonly running: boolean;
@@ -61,6 +62,7 @@ export function transitionCompanionWorkspace(
 ): DesktopCompanionSnapshot {
   const sameWorkspace = state.workspace.status === 'ready'
     && workspace.status === 'ready'
+    && state.workspace.sessionId === workspace.sessionId
     && state.workspace.workspaceId === workspace.workspaceId;
   return {
     ...state,
@@ -105,8 +107,9 @@ export function validatedDesktopCompanionSnapshot(value: unknown): DesktopCompan
     return { active: value.active, open: value.open, previewOpen: value.previewOpen, panelWidth, workspace: { status: workspace.status, running: workspace.running } };
   }
   const workspaceId = validatedId(workspace.workspaceId);
-  if (workspace.status !== 'ready' || workspaceId === undefined || typeof workspace.title !== 'string' || workspace.title.length === 0 || workspace.title.length > 200 || typeof workspace.running !== 'boolean') return undefined;
-  return { active: value.active, open: value.open, previewOpen: value.previewOpen, panelWidth, workspace: { status: 'ready', workspaceId, title: workspace.title, running: workspace.running } };
+  const sessionId = validatedId(workspace.sessionId);
+  if (workspace.status !== 'ready' || sessionId === undefined || workspaceId === undefined || typeof workspace.title !== 'string' || workspace.title.length === 0 || workspace.title.length > 200 || typeof workspace.running !== 'boolean') return undefined;
+  return { active: value.active, open: value.open, previewOpen: value.previewOpen, panelWidth, workspace: { status: 'ready', sessionId, workspaceId, title: workspace.title, running: workspace.running } };
 }
 
 export function normalizedCompanionPanelWidth(value: number): number {

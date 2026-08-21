@@ -66,6 +66,12 @@ import {
   SHELL_CLIPBOARD_WRITE_CHANNEL,
   validatedShellClipboardText,
 } from '../../shared/shell-clipboard.js';
+import {
+  WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL,
+  WORKSPACE_REFERENCE_TO_HARNESS_CHANNEL,
+  validatedWorkspaceConversationReference,
+  workspaceConversationInsertion,
+} from '../../shared/workspace-conversation-reference.js';
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
@@ -376,6 +382,28 @@ class ElectronDesktopWindow implements DesktopWindow {
       if (channel === SHELL_CLIPBOARD_WRITE_CHANNEL) {
         const text = validatedShellClipboardText(value);
         if (text !== undefined) clipboard.writeText(text);
+        return;
+      }
+      if (channel === WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL) {
+        const reference = validatedWorkspaceConversationReference(value);
+        const workspace = this.#companionState.workspace;
+        if (
+          reference === undefined ||
+          workspace.status !== 'ready' ||
+          reference.sessionId !== workspace.sessionId ||
+          reference.workspaceId !== workspace.workspaceId ||
+          this.#harnessView.webContents.isDestroyed()
+        ) return;
+        this.#harnessView.webContents.send(
+          WORKSPACE_REFERENCE_TO_HARNESS_CHANNEL,
+          workspaceConversationInsertion(reference),
+        );
+        if (this.#companionState.previewOpen) {
+          this.#companionState = { ...this.#companionState, previewOpen: false };
+          this.#sendCompanionState();
+          this.#layoutHarnessView(true);
+        }
+        this.#harnessView.webContents.focus();
         return;
       }
       if (channel !== COMPANION_COMMAND_CHANNEL) return;

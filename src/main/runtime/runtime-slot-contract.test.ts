@@ -39,6 +39,7 @@ describe('rc.8 desktop slot contract', () => {
     'settings.section',
     'sidebar.footer.action',
     'conversation.chat.turnTail',
+    'conversation.input.dock',
   ])('%s remains additive for business plugins', (key) => {
     expect(runtimeSlotContract(key)).toMatchObject({
       replaceRisk: 'none',
@@ -58,6 +59,7 @@ describe('rc.8 desktop slot contract', () => {
         'settings.section',
         'sidebar.footer.action',
         'conversation.chat.turnTail',
+        'conversation.input.dock',
       ]),
     );
     expect(() => runtimeSlotContract('conversation.input.left')).toThrow(

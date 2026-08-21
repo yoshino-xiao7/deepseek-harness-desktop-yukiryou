@@ -32,6 +32,10 @@ import {
   SHELL_CLIPBOARD_WRITE_CHANNEL,
   validatedShellClipboardText,
 } from '../shared/shell-clipboard.js';
+import {
+  WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL,
+  validatedWorkspaceConversationReference,
+} from '../shared/workspace-conversation-reference.js';
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
@@ -89,6 +93,12 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
     const text = validatedShellClipboardText(value);
     if (text === undefined) return false;
     ipcRenderer.send(SHELL_CLIPBOARD_WRITE_CHANNEL, text);
+    return true;
+  },
+  addToConversation: (value: unknown): boolean => {
+    const reference = validatedWorkspaceConversationReference(value);
+    if (reference === undefined) return false;
+    ipcRenderer.send(WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL, reference);
     return true;
   },
   request: async (value: unknown): Promise<WorkspaceReviewResponse> => {

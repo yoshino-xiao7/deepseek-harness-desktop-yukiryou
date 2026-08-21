@@ -32,6 +32,7 @@ describe('desktop companion turn card', () => {
       'utf8',
     );
     const registrations = new Map<string, (props: Record<string, unknown>) => unknown>();
+    const effects: Array<() => unknown> = [];
     let plugin: { apply(context: unknown): void } | undefined;
     const React = {
       Fragment: Symbol('fragment'),
@@ -39,7 +40,7 @@ describe('desktop companion turn card', () => {
         if (typeof type === 'function') return type({ ...(props ?? {}), children }) as ElementNode;
         return { type, props: props ?? {}, children: children.flat() };
       },
-      useEffect: vi.fn(),
+      useEffect: (effect: () => unknown) => effects.push(effect),
       useState: <T>(initial: T | (() => T)): [T, ReturnType<typeof vi.fn>] => [
         typeof initial === 'function' ? (initial as () => T)() : initial,
         vi.fn(),
@@ -56,6 +57,7 @@ describe('desktop companion turn card', () => {
       querySelector: () => ({}),
     };
     const openChangedFile = vi.fn();
+    let receiveWorkspaceReference: ((value: { sessionId: string; text: string }) => void) | undefined;
     const window = {
       __ModuleLoader__: {
         load: ({ factory }: { factory(require: (id: string) => unknown): unknown }) => {
@@ -67,6 +69,12 @@ describe('desktop companion turn card', () => {
         },
       },
       deepSeekYukiRyouReview: { openChangedFile },
+      deepSeekYukiRyouComposer: {
+        subscribe: (_sessionId: string, listener: (value: { sessionId: string; text: string }) => void) => {
+          receiveWorkspaceReference = listener;
+          return vi.fn();
+        },
+      },
     };
     vm.runInNewContext(source, { document, Map, Set, window });
     plugin?.apply({
@@ -110,5 +118,18 @@ describe('desktop companion turn card', () => {
       }),
     });
     expect(openChangedFile.mock.calls[0]?.[0].historicalDiff.text).toContain('+const value = 2;');
+
+    const Receiver = registrations.get('conversation.input.dock');
+    const setDraft = vi.fn();
+    Receiver?.({
+      sessionId: 'session-1',
+      input: { draft: '请检查' },
+      inputActions: { setDraft },
+    });
+    effects.at(-1)?.();
+    receiveWorkspaceReference?.({ sessionId: 'other-session', text: '@ignored.ts' });
+    expect(setDraft).not.toHaveBeenCalled();
+    receiveWorkspaceReference?.({ sessionId: 'session-1', text: '@src/example.ts' });
+    expect(setDraft).toHaveBeenCalledWith('请检查\n\n@src/example.ts');
   });
 });

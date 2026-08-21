@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { _electron as electron, type ElectronApplication } from 'playwright';
+import { _electron as electron, type ElectronApplication, type Locator } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveE2eExecutablePath } from './executable-path.js';
@@ -15,6 +15,7 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
   let userData: string | undefined;
 
   afterEach(async () => {
+    await application?.evaluate(({ app }) => app.exit(0)).catch(() => undefined);
     await application?.close();
     if (userData !== undefined) await rm(userData, { recursive: true, force: true });
   }, 30_000);
@@ -54,6 +55,20 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await sendHarnessFileSearchShortcut(application);
     await expect.poll(() => shell.locator('[data-review-tab="files"]').getAttribute('aria-selected'))
       .toBe('true');
+    const harness = application.windows().find((page) => page.url().startsWith('http://127.0.0.1:'));
+    if (harness === undefined) throw new Error('Harness page is missing');
+    const composer = harness.locator('textarea').last();
+    await shell.evaluate(() => {
+      document.documentElement.dataset.appearanceScheme = 'dark';
+    });
+    const sourceDirectory = shell.getByRole('button', { name: 'src', exact: true });
+    await sourceDirectory.click({ button: 'right' });
+    await shell.getByRole('menuitem', { name: '添加文件夹到对话' }).click();
+    await expect.poll(() => composer.inputValue()).toBe('@src/');
+    await sourceDirectory.click({ button: 'right' });
+    await shell.getByRole('menuitem', { name: '复制相对路径' }).click();
+    await expect.poll(() => readClipboard(launchedApplication)).toBe('src');
+    await search.focus();
     await shell.keyboard.type('n');
     await expect.poll(() => search.inputValue()).toBe('n');
     await search.fill('needle panel');
@@ -61,6 +76,32 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
       () => shell.locator('.search-result-copy small').allTextContents(),
       { timeout: 10_000 },
     ).toEqual(['src/NeedlePanel.ts']);
+    await shell.evaluate(() => {
+      document.documentElement.dataset.appearanceScheme = 'dark';
+    });
+    await shell.locator('.search-result').click({ button: 'right' });
+    await expect.poll(
+      () => shell.getByRole('menuitem', { name: '添加到对话' }).evaluate(
+        (element) => window.getComputedStyle(element).color,
+      ),
+    ).toBe('rgb(244, 246, 251)');
+    await shell.getByRole('menuitem', { name: '添加到对话' }).click();
+    await expect.poll(() => composer.inputValue()).toBe('@src/\n\n@src/NeedlePanel.ts');
+
+    await shell.locator('.search-result').click();
+    await expect.poll(
+      () => shell.locator('[data-testid="preview-path"]').textContent(),
+    ).toContain('src/NeedlePanel.ts');
+    const previewCode = shell.locator('.text-line-code').first();
+    await selectText(previewCode);
+    await previewCode.click({ button: 'right' });
+    await shell.getByRole('menuitem', { name: '复制选中文本' }).click();
+    await expect.poll(() => readClipboard(launchedApplication)).toBe('export const needle = true;');
+    await selectText(previewCode);
+    await previewCode.click({ button: 'right' });
+    await shell.getByRole('menuitem', { name: '添加选中内容到对话' }).click();
+    await expect.poll(() => composer.inputValue())
+      .toBe('@src/\n\n@src/NeedlePanel.ts\n\n@src/NeedlePanel.ts 第 1 行\n\nexport const needle = true;');
     await shell.locator('.search-result').click();
     await expect.poll(
       () => shell.locator('[data-testid="preview-path"]').textContent(),
@@ -197,6 +238,16 @@ async function sendHarnessPreviewFindShortcut(application: ElectronApplication):
 
 async function readClipboard(application: ElectronApplication): Promise<string> {
   return application.evaluate(({ clipboard }) => clipboard.readText());
+}
+
+async function selectText(locator: Locator): Promise<void> {
+  await locator.evaluate((element) => {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
 }
 
 function readString(value: Record<string, unknown>, key: string): string {

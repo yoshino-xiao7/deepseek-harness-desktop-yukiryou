@@ -37,6 +37,12 @@ import {
   DESKTOP_FRAME_HEALTH_CHANNEL,
   validatedDesktopFrameHealth,
 } from '../shared/desktop-frame-health.js';
+import {
+  WORKSPACE_REFERENCE_TO_HARNESS_CHANNEL,
+  type WorkspaceConversationInsertion,
+  validatedWorkspaceConversationId,
+  validatedWorkspaceConversationInsertion,
+} from '../shared/workspace-conversation-reference.js';
 
 let updateState: DesktopUpdateState = {
   status: 'disabled',
@@ -45,6 +51,11 @@ let updateState: DesktopUpdateState = {
 const updateListeners = new Set<(state: DesktopUpdateState) => void>();
 let balanceState: AccountBalanceSnapshot = { status: 'loading' };
 const balanceListeners = new Set<(state: AccountBalanceSnapshot) => void>();
+const workspaceReferenceListeners = new Map<
+  string,
+  Set<(reference: WorkspaceConversationInsertion) => void>
+>();
+const pendingWorkspaceReferences = new Map<string, WorkspaceConversationInsertion[]>();
 
 ipcRenderer.on(ACCOUNT_BALANCE_STATE_CHANNEL, (_event, value: unknown) => {
   const snapshot = validatedAccountBalanceSnapshot(value);
@@ -75,6 +86,44 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouReview', {
   openChangedFile: (value: unknown): void => {
     const intent = validatedChangedFileReviewIntent(value);
     if (intent !== undefined) ipcRenderer.send(HARNESS_REVIEW_INTENT_CHANNEL, intent);
+  },
+});
+
+ipcRenderer.on(WORKSPACE_REFERENCE_TO_HARNESS_CHANNEL, (_event, value: unknown) => {
+  const reference = validatedWorkspaceConversationInsertion(value);
+  if (reference === undefined) return;
+  const listeners = workspaceReferenceListeners.get(reference.sessionId);
+  if (listeners === undefined || listeners.size === 0) {
+    const pending = pendingWorkspaceReferences.get(reference.sessionId) ?? [];
+    pending.push(reference);
+    pendingWorkspaceReferences.set(reference.sessionId, pending.slice(-16));
+    return;
+  }
+  for (const listener of listeners) listener(reference);
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouComposer', {
+  subscribe: (
+    sessionIdValue: unknown,
+    listener: (reference: WorkspaceConversationInsertion) => void,
+  ): (() => void) => {
+    const sessionId = validatedWorkspaceConversationId(sessionIdValue);
+    if (sessionId === undefined) return () => {};
+    let listeners = workspaceReferenceListeners.get(sessionId);
+    if (listeners === undefined) {
+      listeners = new Set();
+      workspaceReferenceListeners.set(sessionId, listeners);
+    }
+    listeners.add(listener);
+    const pending = pendingWorkspaceReferences.get(sessionId) ?? [];
+    if (pending.length > 0) {
+      pendingWorkspaceReferences.delete(sessionId);
+      for (const reference of pending) listener(reference);
+    }
+    return () => {
+      listeners?.delete(listener);
+      if (listeners?.size === 0) workspaceReferenceListeners.delete(sessionId);
+    };
   },
 });
 

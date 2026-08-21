@@ -30,7 +30,7 @@ describe('integrated desktop window layout', () => {
       open: true,
       previewOpen: true,
       panelWidth: 340,
-      workspace: { status: 'ready' as const, workspaceId: 'workspace-1', title: 'Project', running: false },
+      workspace: { status: 'ready' as const, sessionId: 'session-1', workspaceId: 'workspace-1', title: 'Project', running: false },
     };
     const after = { ...before, previewOpen: false, workspace: { status: 'none' as const } };
 

@@ -313,6 +313,57 @@ window.__ModuleLoader__.load({
       return () => { disposeSessions(); disposeWorkspaces(); };
     }
 
+    function WorkspaceReferenceReceiver(props) {
+      const bridge = window.deepSeekYukiRyouComposer;
+      React.useEffect(() => {
+        const insert = (insertion) => {
+          if (insertion.sessionId !== props.sessionId) return;
+          const current = props.input.draft.replace(/\s+$/u, '');
+          props.inputActions.setDraft(
+            current === '' ? insertion.text : `${current}\n\n${insertion.text}`,
+          );
+        };
+        const unsubscribe = bridge?.subscribe(props.sessionId, insert) ?? (() => {});
+        const acceptsWorkspaceDrop = (event) => {
+          const target = event.target;
+          return event.dataTransfer?.types.includes('application/x-deepseek-workspace-reference') === true
+            && typeof target?.closest === 'function'
+            && target.closest('textarea,[contenteditable="true"]') !== null;
+        };
+        const onDragOver = (event) => {
+          if (!acceptsWorkspaceDrop(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+        };
+        const onDrop = (event) => {
+          if (!acceptsWorkspaceDrop(event)) return;
+          let insertion;
+          try {
+            insertion = JSON.parse(event.dataTransfer.getData('application/x-deepseek-workspace-reference'));
+          } catch {
+            return;
+          }
+          if (
+            insertion === null || typeof insertion !== 'object'
+            || typeof insertion.sessionId !== 'string'
+            || typeof insertion.text !== 'string' || insertion.text.length === 0
+            || insertion.text.length > 18_432
+          ) return;
+          event.preventDefault();
+          event.stopPropagation();
+          insert(insertion);
+        };
+        window.addEventListener?.('dragover', onDragOver, true);
+        window.addEventListener?.('drop', onDrop, true);
+        return () => {
+          unsubscribe();
+          window.removeEventListener?.('dragover', onDragOver, true);
+          window.removeEventListener?.('drop', onDrop, true);
+        };
+      }, [bridge, props.input.draft, props.inputActions, props.sessionId]);
+      return null;
+    }
+
     const inject = ['slots', 'sessions', 'workspaces', 'conversationEvents'];
     function apply(ctx) {
       installStyle();
@@ -333,6 +384,15 @@ window.__ModuleLoader__.load({
           select: selectTurnChanges,
         },
         ProducedFilesWithChanges,
+      ));
+      ctx.slots.inject('conversation.input.dock', () => ctx.slots.register(
+        {
+          name: 'conversation.input.dock',
+          id: 'desktop-workspace-reference-receiver',
+          order: 1_000,
+          label: 'Desktop workspace references',
+        },
+        WorkspaceReferenceReceiver,
       ));
     }
     exports.inject = inject;

@@ -26,13 +26,13 @@ describe('Harness context boundary', () => {
       open: true,
       previewOpen: false,
       panelWidth: 340,
-      workspace: { status: 'ready', workspaceId: 'workspace-1', title: 'Project', running: false },
+      workspace: { status: 'ready', sessionId: 'session-1', workspaceId: 'workspace-1', title: 'Project', running: false },
     };
     for (let cycle = 0; cycle < 100; cycle += 1) {
       state = transitionCompanion(state, { kind: 'preview', open: true });
       state = transitionCompanionWorkspace(state, { status: 'authorizing', running: false });
       const workspaceId = `workspace-${String((cycle % 2) + 1)}`;
-      state = transitionCompanionWorkspace(state, { status: 'ready', workspaceId, title: `Project ${workspaceId}`, running: false });
+      state = transitionCompanionWorkspace(state, { status: 'ready', sessionId: `session-${workspaceId}`, workspaceId, title: `Project ${workspaceId}`, running: false });
       state = transitionCompanion(state, { kind: 'toggle' });
       state = transitionCompanion(state, { kind: 'toggle' });
     }
@@ -42,7 +42,7 @@ describe('Harness context boundary', () => {
       open: true,
       previewOpen: false,
       panelWidth: 340,
-      workspace: { status: 'ready', workspaceId: 'workspace-2', title: 'Project workspace-2', running: false },
+      workspace: { status: 'ready', sessionId: 'session-workspace-2', workspaceId: 'workspace-2', title: 'Project workspace-2', running: false },
     });
   });
 
@@ -52,7 +52,7 @@ describe('Harness context boundary', () => {
       open: true,
       previewOpen: true,
       panelWidth: 340,
-      workspace: { status: 'ready', workspaceId: 'workspace-1', title: 'Old project', running: false },
+      workspace: { status: 'ready', sessionId: 'session-1', workspaceId: 'workspace-1', title: 'Old project', running: false },
     };
 
     expect(transitionCompanionWorkspace(state, { status: 'authorizing', running: false })).toEqual({

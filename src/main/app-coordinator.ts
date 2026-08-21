@@ -264,6 +264,7 @@ export class AppCoordinator {
     this.#workspaceInspector = createWorkspaceInspector(authority.root);
     this.#window?.setCompanionWorkspace({
       status: 'ready',
+      sessionId: snapshot.sessionId,
       workspaceId: authority.workspaceId,
       title: authority.title,
       running: snapshot.running,

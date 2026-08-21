@@ -142,6 +142,17 @@ export const RC8_DESKTOP_SLOT_CONTRACT = [
     replaceRisk: 'none',
     childSlots: [],
   },
+  {
+    key: 'conversation.input.dock',
+    purpose: 'Additive full-width rows above the official conversation composer.',
+    kind: 'list',
+    scope: 'session',
+    ownerProps: ['session', 'input', 'sessionId', 'inputActions'],
+    occupant: [],
+    declaredBy: 'conversation',
+    replaceRisk: 'none',
+    childSlots: [],
+  },
 ] as const satisfies readonly RuntimeSlotContract[];
 
 export function runtimeSlotContract(key: string): RuntimeSlotContract {

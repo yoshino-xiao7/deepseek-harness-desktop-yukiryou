@@ -77,4 +77,15 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/data-copy-target="path-line" disabled>复制 路径:行号/);
     expect(html).toMatch(/data-testid="preview-copy-feedback"[^>]+aria-live="polite"/);
   });
+
+  it('gives body-level workspace overlays an explicit dark foreground', async () => {
+    const styles = await readFile(new URL('./styles.css', import.meta.url), 'utf8');
+
+    expect(styles).toMatch(
+      /:root\[data-appearance-scheme="dark"\]\s*\{[^}]*--companion-overlay-foreground:\s*#f4f6fb/s,
+    );
+    expect(styles).toMatch(
+      /\.workspace-context-menu button\s*\{[^}]*color:\s*var\(--companion-overlay-foreground\)/s,
+    );
+  });
 });
