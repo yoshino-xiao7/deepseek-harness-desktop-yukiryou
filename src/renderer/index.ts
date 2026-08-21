@@ -10,10 +10,6 @@ import type {
 } from '../shared/workspace-review.js';
 import { structuredDiffRows } from './diff-model.js';
 import {
-  filterWorkspaceChanges,
-  type WorkspaceChangeScope,
-} from './workspace-review-query.js';
-import {
   companionPanelDragDecision,
   companionPanelWidthFromKey,
   companionPanelWidthFromPointer,
@@ -24,9 +20,10 @@ import {
 } from './safe-markdown.js';
 import { startupFailureCopy } from './startup-failure-copy.js';
 import {
-  createWorkspacePreviewHistory,
-  type WorkspacePreviewHistorySnapshot,
-} from './workspace-preview-history.js';
+  createWorkspaceReviewController,
+  type WorkspaceChangeScope,
+  type WorkspaceReviewSnapshot,
+} from './workspace-review-controller.js';
 import {
   type WorkspaceReviewShortcut,
   workspaceReviewShortcut,
@@ -55,17 +52,21 @@ const previewContent = document.querySelector<HTMLElement>('[data-testid="previe
 const previewMode = document.querySelector<HTMLButtonElement>('[data-testid="preview-mode"]');
 const previewBack = document.querySelector<HTMLButtonElement>('[data-testid="preview-back"]');
 const previewForward = document.querySelector<HTMLButtonElement>('[data-testid="preview-forward"]');
+const reviewBar = document.querySelector<HTMLElement>('[data-testid="preview-review-bar"]');
+const reviewProgress = document.querySelector<HTMLElement>('[data-testid="review-progress"]');
+const reviewPrevious = document.querySelector<HTMLButtonElement>('[data-testid="review-previous"]');
+const reviewNext = document.querySelector<HTMLButtonElement>('[data-testid="review-next"]');
+const reviewToggleViewed = document.querySelector<HTMLButtonElement>('[data-testid="review-toggle-viewed"]');
 let loadedWorkspaceId: string | undefined;
 let reviewLoadRevision = 0;
 let currentPreview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined;
 let showingMarkdownSource = false;
-let currentOverview: Extract<WorkspaceReviewResponse, { kind: 'overview' }> | undefined;
-let activeReviewTab: 'changes' | 'files' = 'changes';
 let searchRevision = 0;
 let searchTimer: number | undefined;
 let overviewNote = '';
 let latestCompanionSnapshot: DesktopCompanionSnapshot | undefined;
-const previewHistory = createWorkspacePreviewHistory();
+let workspaceLossTimer: number | undefined;
+const reviewController = createWorkspaceReviewController();
 const companionPanelWidthStorageKey = 'dsh.desktop.companion.panel-width';
 const companionBridge = (
   window as unknown as {
@@ -136,14 +137,43 @@ function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
     }
   }
   if (workspace.status === 'ready') {
+    if (workspaceLossTimer !== undefined) {
+      window.clearTimeout(workspaceLossTimer);
+      workspaceLossTimer = undefined;
+    }
     if (workspace.workspaceId !== loadedWorkspaceId) {
       loadedWorkspaceId = workspace.workspaceId;
+      applyReviewSnapshot(reviewController.execute({
+        kind: 'workspace.select', workspaceId: workspace.workspaceId,
+      }).snapshot);
       void loadOverview(workspace.workspaceId);
     }
   } else {
+    const preserveReviewSurface = loadedWorkspaceId !== undefined || workspaceLossTimer !== undefined;
     loadedWorkspaceId = undefined;
-    if (reviewBrowser !== null) reviewBrowser.hidden = true;
-    if (companionEmpty !== null) companionEmpty.hidden = false;
+    const suspended = reviewController.execute({
+      kind: 'workspace.select', workspaceId: undefined,
+    }).snapshot;
+    applyReviewSnapshot(suspended);
+    if (preserveReviewSurface && snapshot.active) {
+      syncReviewControls(suspended);
+      changesView?.replaceChildren(createEmptyRow('正在重新确认工作区…'));
+      filesView?.replaceChildren(createEmptyRow('正在重新确认工作区…'));
+      if (reviewNote !== null) reviewNote.textContent = '文件能力已暂时释放，正在重新连接。';
+      if (reviewBrowser !== null) reviewBrowser.hidden = false;
+      if (companionEmpty !== null) companionEmpty.hidden = true;
+      if (workspaceLossTimer === undefined) {
+        workspaceLossTimer = window.setTimeout(() => {
+          workspaceLossTimer = undefined;
+          if (latestCompanionSnapshot?.workspace.status === 'ready') return;
+          if (reviewBrowser !== null) reviewBrowser.hidden = true;
+          if (companionEmpty !== null) companionEmpty.hidden = false;
+        }, 1_500);
+      }
+    } else {
+      if (reviewBrowser !== null) reviewBrowser.hidden = true;
+      if (companionEmpty !== null) companionEmpty.hidden = false;
+    }
     closePreview();
   }
 }
@@ -162,10 +192,10 @@ if (companionBridge !== undefined) {
   companionBridge.subscribeShortcut(handleWorkspaceReviewShortcut);
   companionBridge.subscribeReviewTarget((preview) => {
     if (preview === undefined) {
-      applyPreviewHistory(previewHistory.clear());
+      applyReviewSnapshot(reviewController.execute({ kind: 'preview.clear' }).snapshot);
       return;
     }
-    applyPreviewHistory(previewHistory.visit(preview));
+    applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview }).snapshot);
   });
   companionToggle?.addEventListener('click', () => companionBridge.toggle());
 
@@ -228,7 +258,7 @@ async function loadOverview(workspaceId: string): Promise<void> {
     if (reviewNote !== null) reviewNote.textContent = '暂时无法读取工作区，请稍后刷新。';
     return;
   }
-  currentOverview = response;
+  const reviewSnapshot = reviewController.execute({ kind: 'overview.replace', overview: response }).snapshot;
   overviewNote = response.truncated
     ? '内容较多，仅显示前一部分。'
     : response.gitAvailable
@@ -236,7 +266,7 @@ async function loadOverview(workspaceId: string): Promise<void> {
       : '此目录不是 Git 工作区，仍可浏览文件。';
   if (companionEmpty !== null) companionEmpty.hidden = true;
   if (reviewBrowser !== null) reviewBrowser.hidden = false;
-  applyReviewQuery();
+  renderReviewSnapshot(reviewSnapshot);
   setReviewSelection(currentPreview?.nodeId);
   if (reviewNote !== null) reviewNote.textContent = overviewNote;
 }
@@ -246,14 +276,13 @@ function setReviewLoading(loading: boolean): void {
   if (refresh !== null) refresh.disabled = loading;
 }
 
-function renderChanges(response: Extract<WorkspaceReviewResponse, {kind:'overview'}>): void {
+function renderChanges(snapshot: WorkspaceReviewSnapshot): void {
   if (changesView === null) return;
   changesView.replaceChildren();
-  const scope = validatedChangeScope(changeFilter?.value);
-  const changes = filterWorkspaceChanges(response.changes, {
-    query: reviewSearch?.value ?? '',
-    scope,
-  });
+  const response = snapshot.overview;
+  if (response === undefined) return;
+  const changes = snapshot.visibleChanges;
+  const scope = snapshot.scope;
   const filtering = (reviewSearch?.value.trim() ?? '') !== '' || scope !== 'all';
   if (changeCount !== null) {
     changeCount.textContent = filtering
@@ -268,7 +297,8 @@ function renderChanges(response: Extract<WorkspaceReviewResponse, {kind:'overvie
     return;
   }
   const tree = createChangeTree(changes);
-  appendChangeTree(changesView, tree, 0);
+  appendChangeTree(changesView, tree, 0, new Set(snapshot.review.viewedNodeIds));
+  setReviewSelection(snapshot.preview?.nodeId);
 }
 
 interface ChangeTree {
@@ -294,7 +324,7 @@ function createChangeTree(changes: Extract<WorkspaceReviewResponse, {kind:'overv
   return root;
 }
 
-function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number): void {
+function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number, viewed: ReadonlySet<string>): void {
   for (const [name, child] of tree.directories) {
     const group = document.createElement('div');
     group.className = 'change-directory-group';
@@ -311,7 +341,7 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     row.append(chevron, label);
     const children = document.createElement('div');
     children.className = 'change-directory-children';
-    appendChangeTree(children, child, depth + 1);
+    appendChangeTree(children, child, depth + 1, viewed);
     row.addEventListener('click', () => {
       const expanded = row.getAttribute('aria-expanded') === 'true';
       row.setAttribute('aria-expanded', String(!expanded));
@@ -326,6 +356,7 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     button.className = 'change-row';
     button.style.setProperty('--tree-depth', String(depth));
     if (change.nodeId !== undefined) button.dataset.nodeId = change.nodeId;
+    if (change.nodeId !== undefined && viewed.has(change.nodeId)) button.dataset.reviewed = 'true';
     button.disabled = change.nodeId === undefined;
     const badge = document.createElement('span');
     badge.className = `change-badge status-${change.status}`;
@@ -337,7 +368,12 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     const stats = document.createElement('small');
     stats.className = 'change-stats';
     stats.textContent = change.additions === undefined ? '' : `+${String(change.additions)} −${String(change.deletions ?? 0)}`;
-    button.append(badge, path, stats);
+    const reviewed = document.createElement('span');
+    reviewed.className = 'change-reviewed';
+    reviewed.textContent = '✓';
+    reviewed.setAttribute('aria-label', '已查看');
+    reviewed.hidden = button.dataset.reviewed !== 'true';
+    button.append(badge, path, reviewed, stats);
     if (change.nodeId !== undefined) button.addEventListener('click', () => void openDiff(change.nodeId!));
     parent.append(button);
   }
@@ -392,14 +428,16 @@ function validatedChangeScope(value: string | undefined): WorkspaceChangeScope {
 }
 
 function applyReviewQuery(): void {
-  const overview = currentOverview;
+  const snapshot = reviewController.getSnapshot();
+  syncReviewProgress(snapshot);
+  const overview = snapshot.overview;
   if (overview === undefined) return;
-  if (activeReviewTab === 'changes') {
+  if (snapshot.tab === 'changes') {
     if (reviewNote !== null) reviewNote.textContent = overviewNote;
-    renderChanges(overview);
+    renderChanges(snapshot);
     return;
   }
-  const query = reviewSearch?.value.trim() ?? '';
+  const query = snapshot.query.trim();
   if (query === '') {
     searchRevision += 1;
     renderFileTree(overview.nodes);
@@ -415,8 +453,8 @@ async function searchFiles(query: string): Promise<void> {
   filesView.replaceChildren(createEmptyRow('正在搜索文件…'));
   const response = await companionBridge.request({ kind: 'file.search', query });
   if (
-    revision !== searchRevision || activeReviewTab !== 'files'
-    || query !== (reviewSearch?.value.trim() ?? '')
+    revision !== searchRevision || reviewController.getSnapshot().tab !== 'files'
+    || query !== reviewController.getSnapshot().query.trim()
   ) return;
   if (response.kind !== 'search') {
     filesView.replaceChildren(createEmptyRow('文件搜索暂时不可用'));
@@ -432,8 +470,11 @@ async function searchFiles(query: string): Promise<void> {
 }
 
 function scheduleReviewQuery(): void {
+  const snapshot = reviewController.execute({
+    kind: 'query.change', query: reviewSearch?.value ?? '',
+  }).snapshot;
   if (searchTimer !== undefined) window.clearTimeout(searchTimer);
-  if (activeReviewTab === 'changes') {
+  if (snapshot.tab === 'changes') {
     applyReviewQuery();
     return;
   }
@@ -497,7 +538,7 @@ async function openPreview(nodeId: string): Promise<void> {
   const response = await companionBridge.request({ kind: 'file.preview', nodeId });
   if (response.kind !== 'preview') return;
   companionBridge.setPreviewOpen(true);
-  applyPreviewHistory(previewHistory.visit(response));
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview: response }).snapshot);
 }
 
 async function openRelativePreview(nodeId: string, target: string): Promise<void> {
@@ -505,7 +546,7 @@ async function openRelativePreview(nodeId: string, target: string): Promise<void
   const response = await companionBridge.request({ kind: 'file.preview-relative', nodeId, target });
   if (response.kind !== 'preview') return;
   companionBridge.setPreviewOpen(true);
-  applyPreviewHistory(previewHistory.visit(response));
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview: response }).snapshot);
 }
 
 async function openDiff(nodeId: string): Promise<void> {
@@ -513,16 +554,18 @@ async function openDiff(nodeId: string): Promise<void> {
   const response = await companionBridge.request({ kind: 'change.diff', nodeId });
   if (response.kind !== 'preview') return;
   companionBridge.setPreviewOpen(true);
-  applyPreviewHistory(previewHistory.visit(response));
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview: response }).snapshot);
 }
 
-function applyPreviewHistory(snapshot: WorkspacePreviewHistorySnapshot): void {
-  currentPreview = snapshot.current;
+function applyReviewSnapshot(snapshot: WorkspaceReviewSnapshot): void {
+  syncReviewControls(snapshot);
+  currentPreview = snapshot.preview;
   showingMarkdownSource = false;
   if (previewBack !== null) previewBack.disabled = !snapshot.canBack;
   if (previewForward !== null) previewForward.disabled = !snapshot.canForward;
-  setReviewSelection(snapshot.current?.nodeId);
-  if (snapshot.current === undefined) {
+  syncReviewProgress(snapshot);
+  setReviewSelection(snapshot.preview?.nodeId);
+  if (snapshot.preview === undefined) {
     previewContent?.replaceChildren();
     return;
   }
@@ -530,10 +573,23 @@ function applyPreviewHistory(snapshot: WorkspacePreviewHistorySnapshot): void {
   renderPreview();
 }
 
+function syncReviewProgress(snapshot: WorkspaceReviewSnapshot): void {
+  const showingReview = snapshot.preview?.content.kind === 'diff' && snapshot.review.position !== undefined;
+  if (reviewBar !== null) reviewBar.hidden = !showingReview;
+  if (reviewProgress !== null) {
+    reviewProgress.textContent = `${String(snapshot.review.position ?? 0)} / ${String(snapshot.review.total)} · 已查看 ${String(snapshot.review.viewed)}`;
+  }
+  if (reviewPrevious !== null) reviewPrevious.disabled = !snapshot.review.canPrevious;
+  if (reviewNext !== null) reviewNext.disabled = !snapshot.review.canNext;
+  if (reviewToggleViewed !== null) {
+    reviewToggleViewed.dataset.viewed = String(snapshot.review.currentViewed);
+    reviewToggleViewed.textContent = snapshot.review.currentViewed ? '已查看' : '标为已查看';
+  }
+}
+
 function closePreview(): void {
   if (currentPreview === undefined && previewPanel?.hidden !== false) return;
-  currentPreview = undefined;
-  setReviewSelection();
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.close' }).snapshot);
   companionBridge?.setPreviewOpen(false);
   if (previewPanel !== null) previewPanel.hidden = true;
 }
@@ -681,18 +737,42 @@ function fileIcon(extension?: string): string {
 }
 
 function activateReviewTab(target: 'changes' | 'files'): void {
-  activeReviewTab = target;
+  const snapshot = reviewController.execute({ kind: 'tab.select', tab: target }).snapshot;
+  syncReviewControls(snapshot);
+  renderReviewSnapshot(snapshot);
+}
+
+function syncReviewControls(snapshot: WorkspaceReviewSnapshot): void {
   for (const candidate of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
-    candidate.setAttribute('aria-selected', String(candidate.dataset.reviewTab === target));
+    candidate.setAttribute('aria-selected', String(candidate.dataset.reviewTab === snapshot.tab));
   }
-  if (changesView !== null) changesView.hidden = target !== 'changes';
-  if (filesView !== null) filesView.hidden = target !== 'files';
+  if (changesView !== null) changesView.hidden = snapshot.tab !== 'changes';
+  if (filesView !== null) filesView.hidden = snapshot.tab !== 'files';
   if (reviewSearch !== null) {
-    reviewSearch.placeholder = target === 'files' ? '搜索文件…' : '筛选变更…';
-    reviewSearch.setAttribute('aria-label', target === 'files' ? '搜索工作区文件' : '筛选工作区变更');
+    if (reviewSearch.value !== snapshot.query) reviewSearch.value = snapshot.query;
+    reviewSearch.placeholder = snapshot.tab === 'files' ? '搜索文件…' : '筛选变更…';
+    reviewSearch.setAttribute('aria-label', snapshot.tab === 'files' ? '搜索工作区文件' : '筛选工作区变更');
   }
-  if (changeFilter !== null) changeFilter.hidden = target !== 'changes';
-  applyReviewQuery();
+  if (changeFilter !== null) {
+    changeFilter.hidden = snapshot.tab !== 'changes';
+    changeFilter.value = snapshot.scope;
+  }
+}
+
+function renderReviewSnapshot(snapshot: WorkspaceReviewSnapshot): void {
+  syncReviewControls(snapshot);
+  syncReviewProgress(snapshot);
+  if (snapshot.tab === 'changes') {
+    if (reviewNote !== null) reviewNote.textContent = overviewNote;
+    renderChanges(snapshot);
+  } else {
+    applyReviewQuery();
+  }
+}
+
+function moveReview(direction: 'previous' | 'next'): void {
+  const transition = reviewController.execute({ kind: 'review.move', direction });
+  if (transition.effect?.kind === 'open-diff') void openDiff(transition.effect.nodeId);
 }
 
 function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boolean {
@@ -706,11 +786,11 @@ function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boole
     return true;
   }
   if (shortcut === 'preview-back' && previewBack?.disabled === false) {
-    applyPreviewHistory(previewHistory.back());
+    applyReviewSnapshot(reviewController.execute({ kind: 'preview.back' }).snapshot);
     return true;
   }
   if (shortcut === 'preview-forward' && previewForward?.disabled === false) {
-    applyPreviewHistory(previewHistory.forward());
+    applyReviewSnapshot(reviewController.execute({ kind: 'preview.forward' }).snapshot);
     return true;
   }
   if (shortcut === 'close-preview' && currentPreview !== undefined) {
@@ -722,7 +802,8 @@ function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boole
 
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
   tab.addEventListener('click', () => {
-    activateReviewTab(tab.dataset.reviewTab === 'files' ? 'files' : 'changes');
+    const target = tab.dataset.reviewTab === 'files' ? 'files' : 'changes';
+    activateReviewTab(target);
   });
 }
 reviewSearch?.addEventListener('input', scheduleReviewQuery);
@@ -732,14 +813,24 @@ reviewSearch?.addEventListener('keydown', (event) => {
   reviewSearch.value = '';
   scheduleReviewQuery();
 });
-changeFilter?.addEventListener('change', applyReviewQuery);
+changeFilter?.addEventListener('change', () => {
+  reviewController.execute({ kind: 'scope.change', scope: validatedChangeScope(changeFilter.value) });
+  applyReviewQuery();
+});
 document.querySelector('[data-testid="review-refresh"]')?.addEventListener('click', () => {
   if (loadedWorkspaceId !== undefined) void loadOverview(loadedWorkspaceId);
 });
 document.querySelector('[data-testid="preview-close"]')?.addEventListener('click', closePreview);
-previewBack?.addEventListener('click', () => applyPreviewHistory(previewHistory.back()));
-previewForward?.addEventListener('click', () => applyPreviewHistory(previewHistory.forward()));
+previewBack?.addEventListener('click', () => applyReviewSnapshot(reviewController.execute({ kind: 'preview.back' }).snapshot));
+previewForward?.addEventListener('click', () => applyReviewSnapshot(reviewController.execute({ kind: 'preview.forward' }).snapshot));
 previewMode?.addEventListener('click', () => { showingMarkdownSource = !showingMarkdownSource; renderPreview(); });
+reviewPrevious?.addEventListener('click', () => moveReview('previous'));
+reviewNext?.addEventListener('click', () => moveReview('next'));
+reviewToggleViewed?.addEventListener('click', () => {
+  const snapshot = reviewController.execute({ kind: 'review.toggle' }).snapshot;
+  applyReviewSnapshot(snapshot);
+  renderChanges(snapshot);
+});
 document.addEventListener('keydown', (event) => {
   const shortcut = workspaceReviewShortcut(event);
   if (shortcut !== undefined && handleWorkspaceReviewShortcut(shortcut)) event.preventDefault();

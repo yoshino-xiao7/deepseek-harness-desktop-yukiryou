@@ -20,7 +20,7 @@
 - Harness “设置”上方已通过官方 `sidebar.footer.action` 插槽显示当前凭据所属账户余额；只显示官方 CNY/USD 账户余额，不显示今日消费。余额 Key 只在 Runtime credential service 内解析，主进程使用每次 Runtime 启动轮换的 token 拉取脱敏快照。
 - 本地 shell 与 Harness 已改为两个独立 preload 构建产物；余额桥只存在于 Harness，shell 页面 E2E 已验证检测不到该 bridge。
 - 本地顶栏已提供 Desktop Companion 开关；右栏使用官方 Session/Workspace store 识别当前上下文，再由 authenticated Runtime registry 复核归属。主进程只在复核成功后建立 Workspace Capability，renderer 仅能使用随机节点 ID，不能提交 root、绝对路径或 shell 命令。
-- Workspace Review 已支持懒加载文件树、受限递归文件搜索、按路径/暂存态/状态组合筛选变更、当前 worktree 相对 HEAD 的目录化变更树与增删行数、带双侧行号/hunk/未修改行折叠的单文件 diff，以及 Markdown 排版/源码、纯文本和 PNG/JPEG/GIF/WebP 预览。文件搜索跳过依赖与构建目录，最多扫描 5000 项、返回 100 条，只交付 opaque node ID；Markdown 中受限的相对文件链接同样通过当前文件 capability 重入 WorkspaceInspector，绝对路径、协议 URL、越界与 symlink 仍被拒绝。文件预览使用按 revision 校验的 64 MiB LRU，并在当前 Workspace 内保留最多 50 条前进/后退历史；切换 Workspace 时清空且不落盘。`⌘/Ctrl+P` 可从 Harness 或本地侧栏直接打开文件搜索，`⌘/Ctrl+[` 与 `⌘/Ctrl+]` 切换预览历史，`Esc` 关闭预览。窗口在 820–979px 使用不挤压 Harness 的覆盖侧栏，打开文件进入不 reload Harness 的 Review Focus；980px 起使用 docked 模式，1320px 起并排显示 Harness、预览和右栏。右栏可在 280–480px 间拖动或用键盘调整，宽度在完整退出后恢复，并同步驱动 Harness bounds 与预览 inset。官方“产物”行保持不变，其下新增的逐轮变更卡消费成功 mutation 工具事件；升级前旧轮次只回填官方 deliverables 路径且不伪造增删统计。已归档的宠物实验不属于当前产品线，右栏只承载 Workspace Review。
+- Workspace Review 已支持懒加载文件树、受限递归文件搜索、按路径/暂存态/状态组合筛选变更、当前 worktree 相对 HEAD 的目录化变更树与增删行数、带双侧行号/hunk/未修改行折叠的单文件 diff，以及 Markdown 排版/源码、纯文本和 PNG/JPEG/GIF/WebP 预览。文件搜索跳过依赖与构建目录，最多扫描 5000 项、返回 100 条，只交付 opaque node ID；Markdown 中受限的相对文件链接同样通过当前文件 capability 重入 WorkspaceInspector，绝对路径、协议 URL、越界与 symlink 仍被拒绝。文件预览使用按 revision 校验的 64 MiB LRU，并在当前 Workspace 内保留最多 50 条前进/后退历史；切换 Workspace 时清空且不落盘。变更预览提供当前筛选结果内的上一项/下一项、显式“已查看”和审阅进度；刷新 overview 或切换 Workspace 会清空标记，绝不写入项目文件。查询、筛选、预览历史与审阅队列统一由纯内存 `WorkspaceReviewController` Module 管理。Runtime Authority 短暂重连会立即释放文件和预览 capability，但为搜索输入保留 1.5 秒无项目内容的 UI grace；超过时限仍未恢复才进入空状态。`⌘/Ctrl+P` 可从 Harness 或本地侧栏直接打开文件搜索，`⌘/Ctrl+[` 与 `⌘/Ctrl+]` 切换预览历史，`Esc` 关闭预览。窗口在 820–979px 使用不挤压 Harness 的覆盖侧栏，打开文件进入不 reload Harness 的 Review Focus；980px 起使用 docked 模式，1320px 起并排显示 Harness、预览和右栏。右栏可在 280–480px 间拖动或用键盘调整，宽度在完整退出后恢复，并同步驱动 Harness bounds 与预览 inset。官方“产物”行保持不变，其下新增的逐轮变更卡消费成功 mutation 工具事件；升级前旧轮次只回填官方 deliverables 路径且不伪造增删统计。已归档的宠物实验不属于当前产品线，右栏只承载 Workspace Review。
 - 产品正式更名为 DeepSeek YukiRyou，使用白底 YukiRyou 鲸鱼女仆品牌图标、独立 Bundle ID、中英文双 README 和品牌化关于页。
 - 首次以新名称启动时会合并复制旧 `DSH Desktop` 用户数据，并写入迁移标记；旧目录保留为可恢复备份。
 - 关于页展示开发者 GitHub `yoshino-xiao7`，点击后由系统浏览器打开主页。
@@ -36,9 +36,9 @@
 ## 自动验证现状
 
 ```text
-Unit:        192 passed（52 files）
+Unit:        192 passed（51 files）
 Integration: 25 passed（9 files；fake Harness、真实 rc.8 dsh、内置 pnpm、发布流程契约、压力/soak 冒烟）
-E2E arm64:   7 passed（稳定启动、完整 UI/显式退出、renderer 恢复、Session 选择恢复、Companion 宽度持久化、Workspace 搜索/筛选与预览历史、Integrated 单产品窗口/Frame 健康门）
+E2E arm64:   7 passed（稳定启动、完整 UI/显式退出、renderer 恢复、Session 选择恢复、Companion 宽度持久化、Workspace 搜索/筛选/预览历史与逐文件审阅、Integrated 单产品窗口/Frame 健康门）
 Upgrade:     3/3 consecutive runs passed（0.2.1-beta.2 → 0.2.2-beta.1；真实非空 Session、相同 origin/current selection/Session 集合、Runtime Home 回退副本）
 Prior stress baseline:    100/100 passed（启动、就绪、停止、端口回收）
 Prior companion baseline: 100/100 passed（审核、工作区切换、面板收起/展开状态循环）

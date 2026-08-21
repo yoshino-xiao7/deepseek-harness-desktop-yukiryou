@@ -48,4 +48,13 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/data-testid="review-search"[\s\S]*?aria-keyshortcuts="Meta\+P Control\+P"/);
     expect(html).toMatch(/data-testid="preview-close"[^>]+aria-keyshortcuts="Escape"/);
   });
+
+  it('provides explicit sequential review controls and progress', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="preview-review-bar"[^>]+aria-label="逐文件审阅"/);
+    expect(html).toMatch(/data-testid="review-previous"[^>]+aria-label="上一个变更"/);
+    expect(html).toMatch(/data-testid="review-toggle-viewed"/);
+    expect(html).toMatch(/data-testid="review-next"[^>]+aria-label="下一个变更"/);
+  });
 });

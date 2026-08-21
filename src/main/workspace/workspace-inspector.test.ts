@@ -173,6 +173,12 @@ describe('WorkspaceInspector', () => {
       kind: 'preview',
       content: { kind: 'diff', text: expect.stringContaining('+Changed'), additions: 3, deletions: 1 },
     });
+    const untracked = overview.changes.find((item) => item.path === 'NEW.md');
+    expect(untracked).toMatchObject({ status: 'untracked', nodeId: expect.any(String) });
+    expect(await inspector.diff(untracked!.nodeId!)).toMatchObject({
+      kind: 'preview',
+      content: { kind: 'diff', additions: 1, deletions: 0, text: expect.stringContaining('+# New document') },
+    });
     expect(await inspector.previewChangedPath('README.md')).toMatchObject({ kind: 'preview', content: { kind: 'diff' } });
     expect(await inspector.previewChangedPath('NEW.md')).toMatchObject({
       kind: 'preview', content: { kind: 'diff', additions: 1, deletions: 0, text: expect.stringContaining('+# New document') },

@@ -217,6 +217,10 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
       );
       const text = String(stdout);
       if (text !== '') return this.#preview(node, { kind: 'diff', text, truncated: false, ...countDiffLines(text) });
+      const git = await this.#gitChanges();
+      if (git.changes.some((change) => change.path === node.relativePath && change.status === 'untracked')) {
+        return this.#untrackedDiff(node.id);
+      }
       return { kind: 'unavailable', reason: 'invalid-node' };
     } catch {
       return { kind: 'unavailable', reason: 'io-error' };

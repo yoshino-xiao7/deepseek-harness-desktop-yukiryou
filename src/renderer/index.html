@@ -142,6 +142,12 @@
             <button type="button" data-testid="preview-close" aria-label="关闭预览" aria-keyshortcuts="Escape"><span class="preview-close-glyph" aria-hidden="true"></span></button>
           </div>
         </header>
+        <nav class="preview-review-bar" data-testid="preview-review-bar" aria-label="逐文件审阅" hidden>
+          <button type="button" data-testid="review-previous" aria-label="上一个变更" title="上一个变更"><span class="preview-chevron preview-chevron-back" aria-hidden="true"></span></button>
+          <span data-testid="review-progress">0 / 0</span>
+          <button type="button" class="review-toggle-viewed" data-testid="review-toggle-viewed">标为已查看</button>
+          <button type="button" data-testid="review-next" aria-label="下一个变更" title="下一个变更"><span class="preview-chevron preview-chevron-forward" aria-hidden="true"></span></button>
+        </nav>
         <article class="preview-content" data-testid="preview-content"></article>
       </section>
     </section>

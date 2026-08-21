@@ -80,6 +80,23 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await shell.locator('[data-testid="preview-forward"]').click();
     await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/main.ts');
+    await shell.locator('[data-testid="change-filter"]').selectOption('all');
+    await expect.poll(() => shell.locator('.change-row').count()).toBe(2);
+    await expect.poll(() => shell.locator('[data-testid="review-progress"]').textContent())
+      .toBe('1 / 2 · 已查看 0');
+    await shell.locator('[data-testid="review-toggle-viewed"]').click();
+    await expect.poll(() => shell.locator('[data-testid="review-progress"]').textContent())
+      .toBe('1 / 2 · 已查看 1');
+    await shell.locator('[data-testid="review-next"]').click();
+    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+      .toContain('src/NeedlePanel.ts');
+    await expect.poll(() => shell.locator('[data-testid="review-progress"]').textContent())
+      .toBe('2 / 2 · 已查看 1');
+    await shell.locator('[data-testid="review-previous"]').click();
+    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+      .toContain('src/main.ts');
+    await expect.poll(() => shell.locator('[data-testid="review-toggle-viewed"]').textContent())
+      .toBe('已查看');
   }, 60_000);
 });
 
