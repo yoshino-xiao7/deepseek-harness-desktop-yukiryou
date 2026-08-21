@@ -50,7 +50,11 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     const search = shell.locator('[data-testid="review-search"]');
     await expect.poll(() => search.isVisible(), { timeout: 20_000 }).toBe(true);
 
-    await shell.locator('[data-review-tab="files"]').click();
+    await sendHarnessFileSearchShortcut(application);
+    await expect.poll(() => shell.locator('[data-review-tab="files"]').getAttribute('aria-selected'))
+      .toBe('true');
+    await shell.keyboard.type('n');
+    await expect.poll(() => search.inputValue()).toBe('n');
     await search.fill('needle panel');
     await expect.poll(
       () => shell.locator('.search-result-copy small').allTextContents(),
@@ -118,6 +122,15 @@ async function selectSession(application: ElectronApplication, sessionId: string
     );
     harness.reload();
   }, sessionId);
+}
+
+async function sendHarnessFileSearchShortcut(application: ElectronApplication): Promise<void> {
+  await application.evaluate(({ webContents }) => {
+    const harness = webContents.getAllWebContents()
+      .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
+    if (harness === undefined) throw new Error('Harness webContents is missing');
+    harness.sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['meta'] });
+  });
 }
 
 function readString(value: Record<string, unknown>, key: string): string {

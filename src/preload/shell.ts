@@ -23,6 +23,11 @@ import {
   TOOLBAR_SIDEBAR_WIDTH_CHANNEL,
   validatedSidebarWidth,
 } from '../shared/sidebar-width-sync.js';
+import {
+  WORKSPACE_REVIEW_SHORTCUT_CHANNEL,
+  type WorkspaceReviewShortcut,
+  validatedWorkspaceReviewShortcut,
+} from '../shared/workspace-review-shortcuts.js';
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
@@ -35,6 +40,7 @@ let companionState: DesktopCompanionSnapshot = {
   workspace: { status: 'none' },
 };
 const companionListeners = new Set<(snapshot: DesktopCompanionSnapshot) => void>();
+const shortcutListeners = new Set<(shortcut: WorkspaceReviewShortcut) => void>();
 const reviewTargets = createReviewTargetStore();
 
 ipcRenderer.on(SHELL_REVIEW_TARGET_CHANNEL, (_event, value: WorkspaceReviewResponse) => {
@@ -52,11 +58,21 @@ ipcRenderer.on(COMPANION_STATE_CHANNEL, (_event, value: unknown) => {
   for (const listener of companionListeners) listener(snapshot);
 });
 
+ipcRenderer.on(WORKSPACE_REVIEW_SHORTCUT_CHANNEL, (_event, value: unknown) => {
+  const shortcut = validatedWorkspaceReviewShortcut(value);
+  if (shortcut === undefined) return;
+  for (const listener of shortcutListeners) listener(shortcut);
+});
+
 contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
   getSnapshot: (): DesktopCompanionSnapshot => companionState,
   subscribe: (listener: (snapshot: DesktopCompanionSnapshot) => void): (() => void) => {
     companionListeners.add(listener);
     return () => companionListeners.delete(listener);
+  },
+  subscribeShortcut: (listener: (shortcut: WorkspaceReviewShortcut) => void): (() => void) => {
+    shortcutListeners.add(listener);
+    return () => shortcutListeners.delete(listener);
   },
   subscribeReviewTarget: (listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): (() => void) => reviewTargets.subscribe(listener),
   toggle: (): void => ipcRenderer.send(COMPANION_COMMAND_CHANNEL, { kind: 'toggle' }),

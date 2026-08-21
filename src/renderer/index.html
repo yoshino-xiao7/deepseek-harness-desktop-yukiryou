@@ -106,6 +106,7 @@
                 data-testid="review-search"
                 placeholder="筛选变更…"
                 aria-label="筛选工作区变更"
+                aria-keyshortcuts="Meta+P Control+P"
                 autocomplete="off"
                 maxlength="120"
                 spellcheck="false"
@@ -134,11 +135,11 @@
           </div>
           <div class="preview-actions">
             <div class="preview-navigation" aria-label="预览历史导航">
-              <button type="button" data-testid="preview-back" aria-label="后退" title="后退" disabled><span class="preview-chevron preview-chevron-back" aria-hidden="true"></span></button>
-              <button type="button" data-testid="preview-forward" aria-label="前进" title="前进" disabled><span class="preview-chevron preview-chevron-forward" aria-hidden="true"></span></button>
+              <button type="button" data-testid="preview-back" aria-label="后退" aria-keyshortcuts="Meta+[ Control+[" title="后退（⌘[）" disabled><span class="preview-chevron preview-chevron-back" aria-hidden="true"></span></button>
+              <button type="button" data-testid="preview-forward" aria-label="前进" aria-keyshortcuts="Meta+] Control+]" title="前进（⌘]）" disabled><span class="preview-chevron preview-chevron-forward" aria-hidden="true"></span></button>
             </div>
             <button type="button" data-testid="preview-mode" hidden>源码</button>
-            <button type="button" data-testid="preview-close" aria-label="关闭预览"><span class="preview-close-glyph" aria-hidden="true"></span></button>
+            <button type="button" data-testid="preview-close" aria-label="关闭预览" aria-keyshortcuts="Escape"><span class="preview-close-glyph" aria-hidden="true"></span></button>
           </div>
         </header>
         <article class="preview-content" data-testid="preview-content"></article>

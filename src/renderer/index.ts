@@ -27,6 +27,10 @@ import {
   createWorkspacePreviewHistory,
   type WorkspacePreviewHistorySnapshot,
 } from './workspace-preview-history.js';
+import {
+  type WorkspaceReviewShortcut,
+  workspaceReviewShortcut,
+} from '../shared/workspace-review-shortcuts.js';
 
 const parameters = new URLSearchParams(window.location.search);
 const failed = parameters.get('state') === 'failure';
@@ -60,6 +64,7 @@ let activeReviewTab: 'changes' | 'files' = 'changes';
 let searchRevision = 0;
 let searchTimer: number | undefined;
 let overviewNote = '';
+let latestCompanionSnapshot: DesktopCompanionSnapshot | undefined;
 const previewHistory = createWorkspacePreviewHistory();
 const companionPanelWidthStorageKey = 'dsh.desktop.companion.panel-width';
 const companionBridge = (
@@ -67,6 +72,7 @@ const companionBridge = (
     deepSeekYukiRyouCompanion?: {
       getSnapshot(): DesktopCompanionSnapshot;
       subscribe(listener: (snapshot: DesktopCompanionSnapshot) => void): () => void;
+      subscribeShortcut(listener: (shortcut: WorkspaceReviewShortcut) => void): () => void;
       toggle(): void;
       setPreviewOpen(open: boolean): void;
       resize(width: number): void;
@@ -92,6 +98,7 @@ function restoredCompanionPanelWidth(): number | undefined {
 }
 
 function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
+  latestCompanionSnapshot = snapshot;
   applyCompanionPanelWidth(snapshot.panelWidth);
   document.body.dataset.companionActive = String(snapshot.active);
   document.body.dataset.companionOpen = String(snapshot.active && snapshot.open);
@@ -152,6 +159,7 @@ if (companionBridge !== undefined) {
     panelWidth: restoredWidth ?? initialSnapshot.panelWidth,
   });
   companionBridge.subscribe(renderCompanion);
+  companionBridge.subscribeShortcut(handleWorkspaceReviewShortcut);
   companionBridge.subscribeReviewTarget((preview) => {
     if (preview === undefined) {
       applyPreviewHistory(previewHistory.clear());
@@ -672,19 +680,49 @@ function fileIcon(extension?: string): string {
   return '·';
 }
 
+function activateReviewTab(target: 'changes' | 'files'): void {
+  activeReviewTab = target;
+  for (const candidate of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
+    candidate.setAttribute('aria-selected', String(candidate.dataset.reviewTab === target));
+  }
+  if (changesView !== null) changesView.hidden = target !== 'changes';
+  if (filesView !== null) filesView.hidden = target !== 'files';
+  if (reviewSearch !== null) {
+    reviewSearch.placeholder = target === 'files' ? '搜索文件…' : '筛选变更…';
+    reviewSearch.setAttribute('aria-label', target === 'files' ? '搜索工作区文件' : '筛选工作区变更');
+  }
+  if (changeFilter !== null) changeFilter.hidden = target !== 'changes';
+  applyReviewQuery();
+}
+
+function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boolean {
+  if (shortcut === 'file-search') {
+    const snapshot = latestCompanionSnapshot;
+    if (companionBridge === undefined || snapshot?.active !== true || snapshot.workspace.status !== 'ready') return false;
+    if (!snapshot.open) companionBridge.toggle();
+    activateReviewTab('files');
+    reviewSearch?.focus();
+    reviewSearch?.select();
+    return true;
+  }
+  if (shortcut === 'preview-back' && previewBack?.disabled === false) {
+    applyPreviewHistory(previewHistory.back());
+    return true;
+  }
+  if (shortcut === 'preview-forward' && previewForward?.disabled === false) {
+    applyPreviewHistory(previewHistory.forward());
+    return true;
+  }
+  if (shortcut === 'close-preview' && currentPreview !== undefined) {
+    closePreview();
+    return true;
+  }
+  return false;
+}
+
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
   tab.addEventListener('click', () => {
-    const target = tab.dataset.reviewTab;
-    activeReviewTab = target === 'files' ? 'files' : 'changes';
-    for (const candidate of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) candidate.setAttribute('aria-selected', String(candidate === tab));
-    if (changesView !== null) changesView.hidden = target !== 'changes';
-    if (filesView !== null) filesView.hidden = target !== 'files';
-    if (reviewSearch !== null) {
-      reviewSearch.placeholder = activeReviewTab === 'files' ? '搜索文件…' : '筛选变更…';
-      reviewSearch.setAttribute('aria-label', activeReviewTab === 'files' ? '搜索工作区文件' : '筛选工作区变更');
-    }
-    if (changeFilter !== null) changeFilter.hidden = activeReviewTab !== 'changes';
-    applyReviewQuery();
+    activateReviewTab(tab.dataset.reviewTab === 'files' ? 'files' : 'changes');
   });
 }
 reviewSearch?.addEventListener('input', scheduleReviewQuery);
@@ -702,6 +740,10 @@ document.querySelector('[data-testid="preview-close"]')?.addEventListener('click
 previewBack?.addEventListener('click', () => applyPreviewHistory(previewHistory.back()));
 previewForward?.addEventListener('click', () => applyPreviewHistory(previewHistory.forward()));
 previewMode?.addEventListener('click', () => { showingMarkdownSource = !showingMarkdownSource; renderPreview(); });
+document.addEventListener('keydown', (event) => {
+  const shortcut = workspaceReviewShortcut(event);
+  if (shortcut !== undefined && handleWorkspaceReviewShortcut(shortcut)) event.preventDefault();
+});
 
 if (failed) {
   document.body.dataset.state = 'failure';

@@ -45,5 +45,7 @@ describe('workspace review UI contract', () => {
 
     expect(html).toMatch(/data-testid="preview-back"[^>]+aria-label="后退"/);
     expect(html).toMatch(/data-testid="preview-forward"[^>]+aria-label="前进"/);
+    expect(html).toMatch(/data-testid="review-search"[\s\S]*?aria-keyshortcuts="Meta\+P Control\+P"/);
+    expect(html).toMatch(/data-testid="preview-close"[^>]+aria-keyshortcuts="Escape"/);
   });
 });

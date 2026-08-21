@@ -58,6 +58,10 @@ import {
 } from './harness-product-bridge.js';
 import type { DesktopCarrierMode } from './desktop-carrier-mode.js';
 import { createIntegratedDesktopWindow } from './integrated-desktop-window.js';
+import {
+  WORKSPACE_REVIEW_SHORTCUT_CHANNEL,
+  workspaceReviewShortcut,
+} from '../../shared/workspace-review-shortcuts.js';
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
@@ -188,6 +192,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#installLocalNavigationPolicy();
     this.#installCompanionBridge();
     this.#installWorkspaceReviewBridge();
+    this.#installWorkspaceReviewShortcuts();
   }
 
   async showLoading(): Promise<void> {
@@ -383,6 +388,25 @@ class ElectronDesktopWindow implements DesktopWindow {
       const request = validatedWorkspaceReviewRequest(value);
       if (request === undefined) return { kind: 'unavailable', reason: 'invalid-node' };
       return this.#options.onWorkspaceReviewRequest(request);
+    });
+  }
+
+  #installWorkspaceReviewShortcuts(): void {
+    this.#harnessView.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+      const shortcut = workspaceReviewShortcut(input);
+      if (shortcut === undefined || shortcut === 'close-preview') return;
+      event.preventDefault();
+      const deliver = (): void => {
+        if (this.#window.webContents.isDestroyed()) return;
+        this.#window.webContents.send(WORKSPACE_REVIEW_SHORTCUT_CHANNEL, shortcut);
+      };
+      if (shortcut === 'file-search' && !this.#window.webContents.isFocused()) {
+        this.#window.webContents.once('focus', deliver);
+        this.#window.webContents.focus();
+      } else {
+        deliver();
+      }
     });
   }
 
