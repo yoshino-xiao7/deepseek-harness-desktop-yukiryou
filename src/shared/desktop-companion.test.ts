@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  COMPANION_PANEL_MAX_WIDTH,
+  COMPANION_PANEL_MIN_WIDTH,
   transitionCompanion,
   transitionCompanionWorkspace,
   validatedHarnessContext,
@@ -23,6 +25,7 @@ describe('Harness context boundary', () => {
       active: true,
       open: true,
       previewOpen: false,
+      panelWidth: 340,
       workspace: { status: 'ready', workspaceId: 'workspace-1', title: 'Project', running: false },
     };
     for (let cycle = 0; cycle < 100; cycle += 1) {
@@ -38,6 +41,7 @@ describe('Harness context boundary', () => {
       active: true,
       open: true,
       previewOpen: false,
+      panelWidth: 340,
       workspace: { status: 'ready', workspaceId: 'workspace-2', title: 'Project workspace-2', running: false },
     });
   });
@@ -47,6 +51,7 @@ describe('Harness context boundary', () => {
       active: true,
       open: true,
       previewOpen: true,
+      panelWidth: 340,
       workspace: { status: 'ready', workspaceId: 'workspace-1', title: 'Old project', running: false },
     };
 
@@ -54,7 +59,25 @@ describe('Harness context boundary', () => {
       active: true,
       open: true,
       previewOpen: false,
+      panelWidth: 340,
       workspace: { status: 'authorizing', running: false },
     });
+  });
+
+  it('keeps panel resizing inside the supported range', () => {
+    const state: DesktopCompanionSnapshot = {
+      active: true,
+      open: true,
+      previewOpen: false,
+      panelWidth: 340,
+      workspace: { status: 'none' },
+    };
+
+    expect(transitionCompanion(state, { kind: 'resize', width: 120 }).panelWidth)
+      .toBe(COMPANION_PANEL_MIN_WIDTH);
+    expect(transitionCompanion(state, { kind: 'resize', width: 900 }).panelWidth)
+      .toBe(COMPANION_PANEL_MAX_WIDTH);
+    expect(transitionCompanion(state, { kind: 'resize', width: 376.7 }).panelWidth)
+      .toBe(377);
   });
 });

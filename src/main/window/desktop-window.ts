@@ -114,6 +114,7 @@ class ElectronDesktopWindow implements DesktopWindow {
     active: false,
     open: true,
     previewOpen: false,
+    panelWidth: 340,
     workspace: { status: 'none' },
   };
   #reservedRightWidth = 0;
@@ -409,6 +410,7 @@ class ElectronDesktopWindow implements DesktopWindow {
       width,
       this.#showingHarness && this.#companionState.open,
       this.#showingHarness && this.#companionState.previewOpen,
+      this.#companionState.panelWidth,
     );
     const { reviewFocus, reservedWidth: target } = layout;
     if (!animate || reviewFocus || !this.#showingHarness) {

@@ -1,10 +1,19 @@
-import type { DesktopCompanionSnapshot } from '../shared/desktop-companion.js';
+import {
+  COMPANION_PANEL_WIDTH,
+  normalizedCompanionPanelWidth,
+  type DesktopCompanionSnapshot,
+} from '../shared/desktop-companion.js';
 import type {
   WorkspaceNode,
   WorkspaceReviewRequest,
   WorkspaceReviewResponse,
 } from '../shared/workspace-review.js';
 import { structuredDiffRows } from './diff-model.js';
+import {
+  companionPanelDragDecision,
+  companionPanelWidthFromKey,
+  companionPanelWidthFromPointer,
+} from './companion-panel-resize.js';
 import {
   parseSafeMarkdown,
   type SafeMarkdownInline,
@@ -16,6 +25,7 @@ const failed = parameters.get('state') === 'failure';
 const status = document.querySelector<HTMLElement>('[data-testid="startup-status"]');
 const companionToggle = document.querySelector<HTMLButtonElement>('[data-testid="companion-toggle"]');
 const companionPanel = document.querySelector<HTMLElement>('[data-testid="companion-panel"]');
+const companionResizer = document.querySelector<HTMLElement>('[data-testid="companion-resizer"]');
 const companionTitle = document.querySelector<HTMLElement>('[data-testid="companion-workspace-title"]');
 const companionRunning = document.querySelector<HTMLElement>('[data-testid="companion-running"]');
 const companionEmpty = document.querySelector<HTMLElement>('[data-testid="companion-empty"]');
@@ -33,6 +43,7 @@ let loadedWorkspaceId: string | undefined;
 let reviewLoadRevision = 0;
 let currentPreview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined;
 let showingMarkdownSource = false;
+const companionPanelWidthStorageKey = 'dsh.desktop.companion.panel-width';
 const companionBridge = (
   window as unknown as {
     deepSeekYukiRyouCompanion?: {
@@ -40,13 +51,30 @@ const companionBridge = (
       subscribe(listener: (snapshot: DesktopCompanionSnapshot) => void): () => void;
       toggle(): void;
       setPreviewOpen(open: boolean): void;
+      resize(width: number): void;
       request(request: WorkspaceReviewRequest): Promise<WorkspaceReviewResponse>;
       subscribeReviewTarget(listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): () => void;
     };
   }
 ).deepSeekYukiRyouCompanion;
 
+function applyCompanionPanelWidth(width: number, persist = true): number {
+  const normalized = normalizedCompanionPanelWidth(width);
+  document.documentElement.style.setProperty('--companion-panel-width', `${String(normalized)}px`);
+  companionResizer?.setAttribute('aria-valuenow', String(normalized));
+  if (persist) localStorage.setItem(companionPanelWidthStorageKey, String(normalized));
+  return normalized;
+}
+
+function restoredCompanionPanelWidth(): number | undefined {
+  const stored = Number(localStorage.getItem(companionPanelWidthStorageKey));
+  return Number.isFinite(stored) && stored > 0
+    ? normalizedCompanionPanelWidth(stored)
+    : undefined;
+}
+
 function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
+  applyCompanionPanelWidth(snapshot.panelWidth);
   document.body.dataset.companionActive = String(snapshot.active);
   document.body.dataset.companionOpen = String(snapshot.active && snapshot.open);
   if (companionToggle !== null) {
@@ -96,7 +124,15 @@ function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
 }
 
 if (companionBridge !== undefined) {
-  renderCompanion(companionBridge.getSnapshot());
+  const initialSnapshot = companionBridge.getSnapshot();
+  const restoredWidth = restoredCompanionPanelWidth();
+  if (restoredWidth !== undefined && restoredWidth !== initialSnapshot.panelWidth) {
+    companionBridge.resize(restoredWidth);
+  }
+  renderCompanion({
+    ...initialSnapshot,
+    panelWidth: restoredWidth ?? initialSnapshot.panelWidth,
+  });
   companionBridge.subscribe(renderCompanion);
   companionBridge.subscribeReviewTarget((preview) => {
     if (preview === undefined) {
@@ -112,6 +148,53 @@ if (companionBridge !== undefined) {
     renderPreview();
   });
   companionToggle?.addEventListener('click', () => companionBridge.toggle());
+
+  let activePanelPointerId: number | undefined;
+  const resizePanel = (width: number): void => {
+    const normalized = applyCompanionPanelWidth(width);
+    companionBridge.resize(normalized);
+  };
+  companionResizer?.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || activePanelPointerId !== undefined) return;
+    activePanelPointerId = event.pointerId;
+    document.body.dataset.companionResizing = 'true';
+    companionResizer.setPointerCapture(event.pointerId);
+    resizePanel(companionPanelWidthFromPointer(window.innerWidth, event.clientX));
+  });
+  companionResizer?.addEventListener('pointermove', (event) => {
+    const decision = companionPanelDragDecision(
+      activePanelPointerId,
+      event.pointerId,
+      event.buttons,
+    );
+    if (decision === 'ignore') return;
+    if (decision === 'finish') {
+      finishPanelResize(event.pointerId);
+      return;
+    }
+    resizePanel(companionPanelWidthFromPointer(window.innerWidth, event.clientX));
+  });
+  const finishPanelResize = (pointerId = activePanelPointerId): void => {
+    if (pointerId === undefined || pointerId !== activePanelPointerId) return;
+    activePanelPointerId = undefined;
+    delete document.body.dataset.companionResizing;
+    if (companionResizer?.hasPointerCapture(pointerId) === true) {
+      companionResizer.releasePointerCapture(pointerId);
+    }
+  };
+  companionResizer?.addEventListener('pointerup', (event) => finishPanelResize(event.pointerId));
+  companionResizer?.addEventListener('pointercancel', (event) => finishPanelResize(event.pointerId));
+  companionResizer?.addEventListener('lostpointercapture', (event) => finishPanelResize(event.pointerId));
+  window.addEventListener('blur', () => finishPanelResize());
+  companionResizer?.addEventListener('keydown', (event) => {
+    const currentWidth = Number.parseFloat(
+      document.documentElement.style.getPropertyValue('--companion-panel-width'),
+    ) || COMPANION_PANEL_WIDTH;
+    const width = companionPanelWidthFromKey(currentWidth, event.key, event.shiftKey);
+    if (width === undefined) return;
+    event.preventDefault();
+    resizePanel(width);
+  });
 }
 
 async function loadOverview(workspaceId: string): Promise<void> {

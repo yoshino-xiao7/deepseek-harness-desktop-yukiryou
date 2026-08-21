@@ -18,4 +18,16 @@ describe('workspace review UI contract', () => {
     expect(styles).toMatch(/\.diff-code\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     expect(styles).not.toMatch(/\.diff-row\s*\{[^}]*min-width:\s*max-content/s);
   });
+
+  it('exposes an accessible resizer and one panel-width layout token', async () => {
+    const [html, styles] = await Promise.all([
+      readFile(new URL('./index.html', import.meta.url), 'utf8'),
+      readFile(new URL('./styles.css', import.meta.url), 'utf8'),
+    ]);
+
+    expect(html).toMatch(/data-testid="companion-resizer"[\s\S]*?role="separator"/);
+    expect(styles).toMatch(/--companion-panel-width:\s*340px/);
+    expect(styles).toMatch(/\.companion-panel\s*\{[^}]*var\(--companion-panel-width\)/s);
+    expect(styles).toMatch(/\.preview-panel\s*\{[^}]*var\(--companion-panel-width\)/s);
+  });
 });

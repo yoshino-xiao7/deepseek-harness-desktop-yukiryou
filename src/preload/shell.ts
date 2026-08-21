@@ -11,6 +11,7 @@ import {
   COMPANION_COMMAND_CHANNEL,
   COMPANION_STATE_CHANNEL,
   type DesktopCompanionSnapshot,
+  validatedCompanionCommand,
   validatedDesktopCompanionSnapshot,
 } from '../shared/desktop-companion.js';
 import {
@@ -30,6 +31,7 @@ let companionState: DesktopCompanionSnapshot = {
   active: false,
   open: true,
   previewOpen: false,
+  panelWidth: 340,
   workspace: { status: 'none' },
 };
 const companionListeners = new Set<(snapshot: DesktopCompanionSnapshot) => void>();
@@ -59,6 +61,10 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
   subscribeReviewTarget: (listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): (() => void) => reviewTargets.subscribe(listener),
   toggle: (): void => ipcRenderer.send(COMPANION_COMMAND_CHANNEL, { kind: 'toggle' }),
   setPreviewOpen: (open: boolean): void => ipcRenderer.send(COMPANION_COMMAND_CHANNEL, { kind: 'preview', open: open === true }),
+  resize: (width: number): void => {
+    const command = validatedCompanionCommand({ kind: 'resize', width });
+    if (command !== undefined) ipcRenderer.send(COMPANION_COMMAND_CHANNEL, command);
+  },
   request: async (value: unknown): Promise<WorkspaceReviewResponse> => {
     const request = validatedWorkspaceReviewRequest(value);
     if (request === undefined) return { kind: 'unavailable', reason: 'invalid-node' };

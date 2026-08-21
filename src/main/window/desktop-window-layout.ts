@@ -3,7 +3,6 @@ import type { DesktopCompanionSnapshot } from '../../shared/desktop-companion.js
 
 import {
   COMPANION_DOCKED_MIN_WIDTH,
-  COMPANION_PANEL_WIDTH,
   COMPANION_PREVIEW_WIDTH,
   COMPANION_WIDE_REVIEW_MIN_WIDTH,
 } from '../../shared/desktop-companion.js';
@@ -23,14 +22,20 @@ export function companionLayoutStateChanged(
 ): boolean {
   return previous.active !== next.active
     || previous.open !== next.open
-    || previous.previewOpen !== next.previewOpen;
+    || previous.previewOpen !== next.previewOpen
+    || previous.panelWidth !== next.panelWidth;
 }
 
-export function companionLayout(width: number, open: boolean, previewOpen: boolean): CompanionLayout {
+export function companionLayout(
+  width: number,
+  open: boolean,
+  previewOpen: boolean,
+  panelWidth: number,
+): CompanionLayout {
   const overlay = open && width < COMPANION_DOCKED_MIN_WIDTH;
   const reviewFocus = open && previewOpen && width < COMPANION_WIDE_REVIEW_MIN_WIDTH;
   const panel = open && !overlay
-    ? Math.min(COMPANION_PANEL_WIDTH, Math.max(0, width - 480))
+    ? Math.min(panelWidth, Math.max(0, width - 480))
     : 0;
   const preview = open && previewOpen && !reviewFocus ? COMPANION_PREVIEW_WIDTH : 0;
   return { overlay, reviewFocus, reservedWidth: panel + preview };

@@ -10,6 +10,7 @@
   --companion-hover: rgb(31 41 55 / 5%);
   --companion-selected: rgb(53 106 230 / 9%);
   --companion-motion: 220ms cubic-bezier(.2, .8, .2, 1);
+  --companion-panel-width: 340px;
   color-scheme: light dark;
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -86,7 +87,7 @@ body {
   position: absolute;
   z-index: 3;
   inset: 0 0 0 auto;
-  width: min(340px, calc(100vw - 480px));
+  width: min(var(--companion-panel-width), calc(100vw - 480px));
   min-width: 0;
   border-left: 1px solid var(--companion-border);
   color: #202124;
@@ -100,6 +101,25 @@ body {
 
 .companion-panel[hidden] { display: none; }
 body[data-companion-open="true"] .companion-panel { box-shadow: -8px 0 24px rgb(24 32 48 / 3%); transform: translateX(0); visibility: visible; transition-delay: 0s; }
+
+.companion-resizer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: col-resize;
+  outline: none;
+  -webkit-app-region: no-drag;
+  touch-action: none;
+}
+.companion-resizer::after { position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--companion-accent); content: ""; opacity: 0; transition: opacity 120ms ease; }
+.companion-resizer:hover::after,
+.companion-resizer:focus-visible::after,
+body[data-companion-resizing="true"] .companion-resizer::after { opacity: .58; }
+body[data-companion-resizing="true"] { cursor: col-resize; user-select: none; }
+body[data-companion-resizing="true"] .companion-panel { transition: none; }
 
 .companion-header {
   display: flex;
@@ -185,7 +205,7 @@ body[data-companion-open="true"] .companion-panel { box-shadow: -8px 0 24px rgb(
 .preview-panel {
   position: absolute;
   z-index: 2;
-  inset: 0 340px 0 auto;
+  inset: 0 var(--companion-panel-width) 0 auto;
   width: 520px;
   min-width: 0;
   border-left: 1px solid rgb(127 127 127 / 14%);
@@ -251,7 +271,11 @@ body[data-companion-active="true"] .loading-shell { display: none; }
 :root[data-appearance-scheme="dark"] .companion-empty strong { color: #e8eaf0; }
 
 @media (max-width: 1319px) {
-  .preview-panel { inset: 0 340px 0 0; width: auto; }
+  .preview-panel { inset: 0 var(--companion-panel-width) 0 0; width: auto; }
+}
+
+@media (max-width: 979px) {
+  .companion-panel { width: min(var(--companion-panel-width), calc(100vw - 72px)); }
 }
 
 .ambient {

@@ -29,11 +29,29 @@ describe('integrated desktop window layout', () => {
       active: true,
       open: true,
       previewOpen: true,
+      panelWidth: 340,
       workspace: { status: 'ready' as const, workspaceId: 'workspace-1', title: 'Project', running: false },
     };
     const after = { ...before, previewOpen: false, workspace: { status: 'none' as const } };
 
     expect(companionLayoutStateChanged(before, after)).toBe(true);
+  });
+
+  it('requires a relayout when the user resizes the Companion panel', () => {
+    const before = {
+      active: true,
+      open: true,
+      previewOpen: false,
+      panelWidth: 340,
+      workspace: { status: 'none' as const },
+    };
+
+    expect(companionLayoutStateChanged(before, { ...before, panelWidth: 420 })).toBe(true);
+    expect(companionLayout(1_180, true, false, 420)).toEqual({
+      overlay: false,
+      reviewFocus: false,
+      reservedWidth: 420,
+    });
   });
 
   it.each([
@@ -44,6 +62,6 @@ describe('integrated desktop window layout', () => {
     { width: 1320, open: true, preview: true, expected: { overlay: false, reviewFocus: false, reservedWidth: 860 } },
     { width: 1480, open: true, preview: true, expected: { overlay: false, reviewFocus: false, reservedWidth: 860 } },
   ])('uses the intended responsive mode at $width px', ({ width, open, preview, expected }) => {
-    expect(companionLayout(width, open, preview)).toEqual(expected);
+    expect(companionLayout(width, open, preview, 340)).toEqual(expected);
   });
 });
