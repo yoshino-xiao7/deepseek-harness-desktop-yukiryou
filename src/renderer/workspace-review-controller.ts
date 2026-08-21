@@ -26,6 +26,11 @@ export type WorkspaceReviewCommand =
   | { readonly kind: 'preview.forward' }
   | { readonly kind: 'preview.close' }
   | { readonly kind: 'preview.clear' }
+  | { readonly kind: 'find.open' }
+  | { readonly kind: 'find.change'; readonly query: string }
+  | { readonly kind: 'find.matches'; readonly total: number }
+  | { readonly kind: 'find.move'; readonly direction: 'previous' | 'next' }
+  | { readonly kind: 'find.close' }
   | { readonly kind: 'review.toggle' }
   | { readonly kind: 'review.move'; readonly direction: 'previous' | 'next' };
 
@@ -39,6 +44,15 @@ export interface WorkspaceReviewProgress {
   readonly viewedNodeIds: readonly string[];
 }
 
+export interface WorkspacePreviewFind {
+  readonly open: boolean;
+  readonly query: string;
+  readonly total: number;
+  readonly position: number | undefined;
+  readonly canPrevious: boolean;
+  readonly canNext: boolean;
+}
+
 export interface WorkspaceReviewSnapshot {
   readonly workspaceId: string | undefined;
   readonly overview: WorkspaceOverview | undefined;
@@ -49,6 +63,7 @@ export interface WorkspaceReviewSnapshot {
   readonly preview: WorkspacePreview | undefined;
   readonly canBack: boolean;
   readonly canForward: boolean;
+  readonly find: WorkspacePreviewFind;
   readonly review: WorkspaceReviewProgress;
 }
 
@@ -81,6 +96,22 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
   const history: WorkspacePreview[] = [];
   let historyIndex = -1;
   const viewed = new Set<string>();
+  let findOpen = false;
+  let findQuery = '';
+  let findTotal = 0;
+  let findPosition: number | undefined;
+
+  const clearFind = (): void => {
+    findOpen = false;
+    findQuery = '';
+    findTotal = 0;
+    findPosition = undefined;
+  };
+
+  const resetFindMatches = (): void => {
+    findTotal = 0;
+    findPosition = undefined;
+  };
 
   const currentPreview = (): WorkspacePreview | undefined => (
     previewOpen ? history[historyIndex] : undefined
@@ -103,6 +134,14 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
       preview,
       canBack: historyIndex > 0,
       canForward: historyIndex >= 0 && historyIndex < history.length - 1,
+      find: {
+        open: findOpen,
+        query: findQuery,
+        total: findTotal,
+        position: findPosition,
+        canPrevious: findTotal > 1,
+        canNext: findTotal > 1,
+      },
       review: {
         total: queue.length,
         viewed: queue.filter((change) => viewed.has(change.nodeId)).length,
@@ -131,6 +170,7 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
           history.splice(0);
           historyIndex = -1;
           viewed.clear();
+          clearFind();
         } else if (lastWorkspaceId !== command.workspaceId) {
           workspaceId = command.workspaceId;
           lastWorkspaceId = command.workspaceId;
@@ -142,6 +182,7 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
           history.splice(0);
           historyIndex = -1;
           viewed.clear();
+          clearFind();
         } else {
           workspaceId = command.workspaceId;
         }
@@ -166,18 +207,44 @@ export function createWorkspaceReviewController(historyLimit = 50): WorkspaceRev
           historyIndex = history.length - 1;
         }
         previewOpen = true;
+        resetFindMatches();
       } else if (command.kind === 'preview.back') {
         if (historyIndex > 0) historyIndex -= 1;
         previewOpen = historyIndex >= 0;
+        resetFindMatches();
       } else if (command.kind === 'preview.forward') {
         if (historyIndex < history.length - 1) historyIndex += 1;
         previewOpen = historyIndex >= 0;
+        resetFindMatches();
       } else if (command.kind === 'preview.close') {
         previewOpen = false;
+        clearFind();
       } else if (command.kind === 'preview.clear') {
         previewOpen = false;
         history.splice(0);
         historyIndex = -1;
+        clearFind();
+      } else if (command.kind === 'find.open') {
+        findOpen = currentPreview() !== undefined;
+      } else if (command.kind === 'find.change') {
+        findOpen = currentPreview() !== undefined;
+        findQuery = command.query;
+        resetFindMatches();
+      } else if (command.kind === 'find.matches') {
+        const total = findQuery === '' || !Number.isSafeInteger(command.total)
+          ? 0
+          : Math.max(0, command.total);
+        findTotal = total;
+        findPosition = total === 0 ? undefined : Math.min(findPosition ?? 1, total);
+      } else if (command.kind === 'find.move') {
+        if (findTotal > 0) {
+          const position = findPosition ?? 1;
+          findPosition = command.direction === 'next'
+            ? position === findTotal ? 1 : position + 1
+            : position === 1 ? findTotal : position - 1;
+        }
+      } else if (command.kind === 'find.close') {
+        clearFind();
       } else if (command.kind === 'review.toggle') {
         const preview = currentPreview();
         if (preview?.content.kind === 'diff' && overview?.changes.some((change) => change.nodeId === preview.nodeId) === true) {

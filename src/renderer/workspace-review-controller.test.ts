@@ -75,6 +75,30 @@ describe('WorkspaceReviewController', () => {
     controller.execute({ kind: 'overview.replace', overview: overview() });
     expect(controller.getSnapshot().review.viewed).toBe(0);
   });
+
+  it('owns preview find state and wraps matching navigation', () => {
+    const controller = createWorkspaceReviewController();
+    controller.execute({ kind: 'workspace.select', workspaceId: 'workspace-a' });
+    controller.execute({ kind: 'preview.visit', preview: preview('a') });
+
+    expect(controller.execute({ kind: 'find.open' }).snapshot.find)
+      .toMatchObject({ open: true, query: '', total: 0, position: undefined });
+    expect(controller.execute({ kind: 'find.change', query: 'needle' }).snapshot.find)
+      .toMatchObject({ open: true, query: 'needle', total: 0, position: undefined });
+    expect(controller.execute({ kind: 'find.matches', total: 3 }).snapshot.find)
+      .toMatchObject({ total: 3, position: 1, canPrevious: true, canNext: true });
+    expect(controller.execute({ kind: 'find.move', direction: 'next' }).snapshot.find.position)
+      .toBe(2);
+    expect(controller.execute({ kind: 'find.move', direction: 'previous' }).snapshot.find.position)
+      .toBe(1);
+    expect(controller.execute({ kind: 'find.move', direction: 'previous' }).snapshot.find.position)
+      .toBe(3);
+
+    expect(controller.execute({ kind: 'preview.visit', preview: preview('b') }).snapshot.find)
+      .toMatchObject({ open: true, query: 'needle', total: 0, position: undefined });
+    expect(controller.execute({ kind: 'find.close' }).snapshot.find)
+      .toEqual({ open: false, query: '', total: 0, position: undefined, canPrevious: false, canNext: false });
+  });
 });
 
 function overview(): Overview {

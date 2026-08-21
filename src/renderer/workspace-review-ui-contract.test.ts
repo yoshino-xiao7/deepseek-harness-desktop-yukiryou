@@ -57,4 +57,14 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/data-testid="review-toggle-viewed"/);
     expect(html).toMatch(/data-testid="review-next"[^>]+aria-label="下一个变更"/);
   });
+
+  it('provides accessible in-preview find controls', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="preview-find-toggle"[^>]+aria-keyshortcuts="Meta\+F Control\+F"/);
+    expect(html).toMatch(/data-testid="preview-find-input"[^>]+aria-label="查找文本"/);
+    expect(html).toMatch(/data-testid="preview-find-previous"[^>]+aria-label="上一个匹配项"/);
+    expect(html).toMatch(/data-testid="preview-find-next"[^>]+aria-label="下一个匹配项"/);
+    expect(html).toMatch(/data-testid="preview-find-progress"[^>]+aria-live="polite"/);
+  });
 });

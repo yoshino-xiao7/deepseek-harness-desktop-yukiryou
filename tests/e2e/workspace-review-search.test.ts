@@ -64,6 +64,14 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await expect.poll(
       () => shell.locator('[data-testid="preview-path"]').textContent(),
     ).toContain('src/NeedlePanel.ts');
+    await sendHarnessPreviewFindShortcut(application);
+    const previewFind = shell.locator('[data-testid="preview-find-input"]');
+    await expect.poll(() => previewFind.isVisible()).toBe(true);
+    await previewFind.fill('needle');
+    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+      .toBe('1 / 1');
+    await expect.poll(() => shell.locator('.preview-find-match[data-current="true"]').textContent())
+      .toBe('needle');
 
     await shell.locator('[data-review-tab="changes"]').click();
     await search.fill('src');
@@ -74,6 +82,17 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await shell.locator('.change-row').click();
     await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/main.ts');
+    await previewFind.fill('export');
+    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+      .toBe('1 / 2');
+    await shell.locator('[data-testid="preview-find-next"]').click();
+    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+      .toBe('2 / 2');
+    await previewFind.press('Shift+Enter');
+    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+      .toBe('1 / 2');
+    await previewFind.press('Escape');
+    await expect.poll(() => shell.locator('[data-testid="preview-find-bar"]').isVisible()).toBe(false);
     await shell.locator('[data-testid="preview-back"]').click();
     await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/NeedlePanel.ts');
@@ -147,6 +166,15 @@ async function sendHarnessFileSearchShortcut(application: ElectronApplication): 
       .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
     if (harness === undefined) throw new Error('Harness webContents is missing');
     harness.sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['meta'] });
+  });
+}
+
+async function sendHarnessPreviewFindShortcut(application: ElectronApplication): Promise<void> {
+  await application.evaluate(({ webContents }) => {
+    const harness = webContents.getAllWebContents()
+      .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
+    if (harness === undefined) throw new Error('Harness webContents is missing');
+    harness.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers: ['meta'] });
   });
 }
 

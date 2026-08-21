@@ -396,12 +396,13 @@ class ElectronDesktopWindow implements DesktopWindow {
       if (input.type !== 'keyDown') return;
       const shortcut = workspaceReviewShortcut(input);
       if (shortcut === undefined || shortcut === 'close-preview') return;
+      if (shortcut === 'preview-find' && !this.#companionState.previewOpen) return;
       event.preventDefault();
       const deliver = (): void => {
         if (this.#window.webContents.isDestroyed()) return;
         this.#window.webContents.send(WORKSPACE_REVIEW_SHORTCUT_CHANNEL, shortcut);
       };
-      if (shortcut === 'file-search' && !this.#window.webContents.isFocused()) {
+      if ((shortcut === 'file-search' || shortcut === 'preview-find') && !this.#window.webContents.isFocused()) {
         this.#window.webContents.once('focus', deliver);
         this.#window.webContents.focus();
       } else {

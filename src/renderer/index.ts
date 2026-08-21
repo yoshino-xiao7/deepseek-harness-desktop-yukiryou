@@ -52,6 +52,12 @@ const previewContent = document.querySelector<HTMLElement>('[data-testid="previe
 const previewMode = document.querySelector<HTMLButtonElement>('[data-testid="preview-mode"]');
 const previewBack = document.querySelector<HTMLButtonElement>('[data-testid="preview-back"]');
 const previewForward = document.querySelector<HTMLButtonElement>('[data-testid="preview-forward"]');
+const previewFindToggle = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-toggle"]');
+const previewFindBar = document.querySelector<HTMLElement>('[data-testid="preview-find-bar"]');
+const previewFindInput = document.querySelector<HTMLInputElement>('[data-testid="preview-find-input"]');
+const previewFindProgress = document.querySelector<HTMLElement>('[data-testid="preview-find-progress"]');
+const previewFindPrevious = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-previous"]');
+const previewFindNext = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-next"]');
 const reviewBar = document.querySelector<HTMLElement>('[data-testid="preview-review-bar"]');
 const reviewProgress = document.querySelector<HTMLElement>('[data-testid="review-progress"]');
 const reviewPrevious = document.querySelector<HTMLButtonElement>('[data-testid="review-previous"]');
@@ -564,13 +570,102 @@ function applyReviewSnapshot(snapshot: WorkspaceReviewSnapshot): void {
   if (previewBack !== null) previewBack.disabled = !snapshot.canBack;
   if (previewForward !== null) previewForward.disabled = !snapshot.canForward;
   syncReviewProgress(snapshot);
+  syncPreviewFindControls(snapshot);
   setReviewSelection(snapshot.preview?.nodeId);
   if (snapshot.preview === undefined) {
     previewContent?.replaceChildren();
     return;
   }
   companionBridge?.setPreviewOpen(true);
+  renderPreview(snapshot.find.open && snapshot.find.query !== '');
+}
+
+function syncPreviewFindControls(snapshot: WorkspaceReviewSnapshot): void {
+  const find = snapshot.find;
+  if (previewFindBar !== null) previewFindBar.hidden = !find.open || snapshot.preview === undefined;
+  if (previewFindToggle !== null) previewFindToggle.setAttribute('aria-pressed', String(find.open));
+  if (previewFindInput !== null && previewFindInput.value !== find.query) {
+    previewFindInput.value = find.query;
+  }
+  if (previewFindProgress !== null) {
+    previewFindProgress.textContent = find.query === ''
+      ? '0 / 0'
+      : `${String(find.position ?? 0)} / ${String(find.total)}`;
+  }
+  if (previewFindPrevious !== null) previewFindPrevious.disabled = !find.canPrevious;
+  if (previewFindNext !== null) previewFindNext.disabled = !find.canNext;
+}
+
+function refreshPreviewFindMatches(scrollCurrent: boolean): WorkspaceReviewSnapshot {
+  const state = reviewController.getSnapshot();
+  if (previewContent === null || !state.find.open || state.find.query === '') {
+    const snapshot = reviewController.execute({ kind: 'find.matches', total: 0 }).snapshot;
+    syncPreviewFindControls(snapshot);
+    return snapshot;
+  }
+  const query = state.find.query.toLocaleLowerCase();
+  const walker = document.createTreeWalker(previewContent, NodeFilter.SHOW_TEXT);
+  const matches: Array<{ node: Text; start: number; index: number }> = [];
+  let node = walker.nextNode();
+  while (node !== null) {
+    const textNode = node as Text;
+    const content = textNode.data.toLocaleLowerCase();
+    let start = content.indexOf(query);
+    while (start >= 0) {
+      matches.push({ node: textNode, start, index: matches.length });
+      start = content.indexOf(query, start + Math.max(1, query.length));
+    }
+    node = walker.nextNode();
+  }
+  for (const textNode of new Set(matches.map((match) => match.node))) {
+    const nodeMatches = matches.filter((match) => match.node === textNode);
+    for (const match of [...nodeMatches].reverse()) {
+      const matched = textNode.splitText(match.start);
+      matched.splitText(state.find.query.length);
+      const mark = document.createElement('mark');
+      mark.className = 'preview-find-match';
+      mark.dataset.matchIndex = String(match.index);
+      matched.replaceWith(mark);
+      mark.append(matched);
+    }
+  }
+  const snapshot = reviewController.execute({ kind: 'find.matches', total: matches.length }).snapshot;
+  syncPreviewFindControls(snapshot);
+  applyPreviewFindPosition(snapshot, scrollCurrent);
+  return snapshot;
+}
+
+function applyPreviewFindPosition(snapshot: WorkspaceReviewSnapshot, scrollCurrent: boolean): void {
+  for (const mark of previewContent?.querySelectorAll<HTMLElement>('.preview-find-match') ?? []) {
+    mark.removeAttribute('data-current');
+  }
+  if (snapshot.find.position === undefined) return;
+  const current = previewContent?.querySelector<HTMLElement>(
+    `.preview-find-match[data-match-index="${String(snapshot.find.position - 1)}"]`,
+  );
+  if (current === null || current === undefined) return;
+  current.dataset.current = 'true';
+  if (scrollCurrent) current.scrollIntoView({ block: 'center', inline: 'nearest' });
+}
+
+function openPreviewFind(): void {
+  const snapshot = reviewController.execute({ kind: 'find.open' }).snapshot;
+  if (!snapshot.find.open) return;
+  syncPreviewFindControls(snapshot);
+  previewFindInput?.focus();
+  previewFindInput?.select();
+}
+
+function closePreviewFind(): void {
+  const snapshot = reviewController.execute({ kind: 'find.close' }).snapshot;
+  syncPreviewFindControls(snapshot);
   renderPreview();
+}
+
+function movePreviewFind(direction: 'previous' | 'next'): void {
+  const snapshot = reviewController.execute({ kind: 'find.move', direction }).snapshot;
+  syncPreviewFindControls(snapshot);
+  applyPreviewFindPosition(snapshot, true);
 }
 
 function syncReviewProgress(snapshot: WorkspaceReviewSnapshot): void {
@@ -594,7 +689,7 @@ function closePreview(): void {
   if (previewPanel !== null) previewPanel.hidden = true;
 }
 
-function renderPreview(): void {
+function renderPreview(scrollFind = false): void {
   const preview = currentPreview;
   if (preview === undefined || previewContent === null) return;
   if (previewName !== null) previewName.textContent = preview.name;
@@ -627,6 +722,7 @@ function renderPreview(): void {
       content.reason === 'too-large' ? '文件过大，无法在应用内预览' : content.reason === 'binary' ? '二进制文件不支持预览' : '此文件类型暂不支持预览',
     ));
   }
+  refreshPreviewFindMatches(scrollFind);
 }
 
 function renderDiff(source: string): HTMLElement {
@@ -785,6 +881,10 @@ function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boole
     reviewSearch?.select();
     return true;
   }
+  if (shortcut === 'preview-find' && currentPreview !== undefined) {
+    openPreviewFind();
+    return true;
+  }
   if (shortcut === 'preview-back' && previewBack?.disabled === false) {
     applyReviewSnapshot(reviewController.execute({ kind: 'preview.back' }).snapshot);
     return true;
@@ -794,6 +894,10 @@ function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boole
     return true;
   }
   if (shortcut === 'close-preview' && currentPreview !== undefined) {
+    if (reviewController.getSnapshot().find.open) {
+      closePreviewFind();
+      return true;
+    }
     closePreview();
     return true;
   }
@@ -823,7 +927,28 @@ document.querySelector('[data-testid="review-refresh"]')?.addEventListener('clic
 document.querySelector('[data-testid="preview-close"]')?.addEventListener('click', closePreview);
 previewBack?.addEventListener('click', () => applyReviewSnapshot(reviewController.execute({ kind: 'preview.back' }).snapshot));
 previewForward?.addEventListener('click', () => applyReviewSnapshot(reviewController.execute({ kind: 'preview.forward' }).snapshot));
-previewMode?.addEventListener('click', () => { showingMarkdownSource = !showingMarkdownSource; renderPreview(); });
+previewFindToggle?.addEventListener('click', () => {
+  if (reviewController.getSnapshot().find.open) closePreviewFind();
+  else openPreviewFind();
+});
+previewFindInput?.addEventListener('input', () => {
+  reviewController.execute({ kind: 'find.change', query: previewFindInput.value });
+  renderPreview(true);
+});
+previewFindInput?.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    closePreviewFind();
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    movePreviewFind(event.shiftKey ? 'previous' : 'next');
+  }
+});
+document.querySelector('[data-testid="preview-find-close"]')?.addEventListener('click', closePreviewFind);
+previewFindPrevious?.addEventListener('click', () => movePreviewFind('previous'));
+previewFindNext?.addEventListener('click', () => movePreviewFind('next'));
+previewMode?.addEventListener('click', () => { showingMarkdownSource = !showingMarkdownSource; renderPreview(true); });
 reviewPrevious?.addEventListener('click', () => moveReview('previous'));
 reviewNext?.addEventListener('click', () => moveReview('next'));
 reviewToggleViewed?.addEventListener('click', () => {

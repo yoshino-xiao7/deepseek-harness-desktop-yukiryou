@@ -2,6 +2,7 @@ export const WORKSPACE_REVIEW_SHORTCUT_CHANNEL = 'deepseek-yukiryou:workspace-re
 
 export type WorkspaceReviewShortcut =
   | 'file-search'
+  | 'preview-find'
   | 'preview-back'
   | 'preview-forward'
   | 'close-preview';
@@ -30,6 +31,7 @@ export function workspaceReviewShortcut(
   const shift = input.shiftKey === true || input.shift === true;
   if (command && !alt && !shift) {
     if (input.key.toLowerCase() === 'p') return 'file-search';
+    if (input.key.toLowerCase() === 'f') return 'preview-find';
     if (input.key === '[') return 'preview-back';
     if (input.key === ']') return 'preview-forward';
   }
@@ -39,7 +41,7 @@ export function workspaceReviewShortcut(
 }
 
 export function validatedWorkspaceReviewShortcut(value: unknown): WorkspaceReviewShortcut | undefined {
-  return value === 'file-search' || value === 'preview-back'
+  return value === 'file-search' || value === 'preview-find' || value === 'preview-back'
     || value === 'preview-forward' || value === 'close-preview'
     ? value
     : undefined;
