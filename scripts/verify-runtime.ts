@@ -3,6 +3,8 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { SESSION_SELECTION_PATCH_MARKER } from '../src/main/runtime/vendor-session-selection-patch.ts';
+
 import {
   type BundledRuntimeArchitecture,
   type BundledRuntimePlatform,
@@ -131,6 +133,16 @@ const desktopMarketDevelopmentFixture = await readFile(
   join(runtimeNodeModules, '@dsh-desktop', 'market', 'development-fixture.js'),
   'utf8',
 );
+const clientRuntime = await readFile(
+  join(
+    runtimeNodeModules,
+    '@deepseek-ai',
+    'dsh-client-runtime',
+    'lib',
+    'client.js',
+  ),
+  'utf8',
+);
 const loaderImplementation = await readFile(
   join(runtimeNodeModules, '@deepseek-ai', 'cordis-plugin-loader', 'lib', 'index.js'),
   'utf8',
@@ -190,6 +202,9 @@ expectValue(
 expectValue('pnpm version', manifest.pnpm.version, sourceManifest.pnpm.version);
 expectValue('desktop frame prototype version', desktopFrameManifest.version, '0.0.1');
 expectValue('desktop market version', desktopMarketManifest.version, '0.1.0');
+if (!clientRuntime.includes(SESSION_SELECTION_PATCH_MARKER)) {
+  throw new Error('Harness session-selection startup patch is missing');
+}
 if (!desktopMarketCache.includes('createCatalogSnapshotStore')) {
   throw new Error('Desktop market persistent cache adapter is missing');
 }

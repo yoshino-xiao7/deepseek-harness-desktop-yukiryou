@@ -58,7 +58,10 @@ describe('Harness session selection across desktop restarts', () => {
       expectedSessionId,
       readString(sessionB, 'sessionId'),
     ].sort();
-    const sessionsBeforeRestart = await readSessionIds(firstOrigin);
+    const sessionsBeforeRestart = await readStableSessionIds(
+      firstOrigin,
+      createdSessionIds,
+    );
     expect(sessionsBeforeRestart).toEqual(
       expect.arrayContaining(createdSessionIds),
     );
@@ -227,11 +230,50 @@ async function activateHarnessStorageSelection(
 }
 
 async function readSessionIds(origin: string): Promise<string[]> {
+  const items = await readSessions(origin);
+  return items.map((item) => readString(item, 'sessionId')).sort();
+}
+
+async function readSessions(
+  origin: string,
+): Promise<Record<string, unknown>[]> {
   const value = await callHarnessApi(origin, 'session.list', {});
   const record = asRecord(value);
   const items = record.items;
   if (!Array.isArray(items)) throw new Error('session.list returned no items');
-  return items.map((item) => readString(item, 'sessionId')).sort();
+  return items.map(asRecord);
+}
+
+async function readStableSessionIds(
+  origin: string,
+  requiredSessionIds: readonly string[],
+): Promise<string[]> {
+  let latestSessionIds: string[] = [];
+  let previousSignature = '';
+  let consecutiveStableSnapshots = 0;
+  await expect
+    .poll(
+      async () => {
+        latestSessionIds = await readSessionIds(origin);
+        const signature = latestSessionIds.join(',');
+        const containsRequiredSessions = requiredSessionIds.every((sessionId) =>
+          latestSessionIds.includes(sessionId),
+        );
+        consecutiveStableSnapshots =
+          containsRequiredSessions && signature === previousSignature
+            ? consecutiveStableSnapshots + 1
+            : 0;
+        previousSignature = signature;
+        return consecutiveStableSnapshots >= 3;
+      },
+      {
+        timeout: 15_000,
+        interval: 250,
+        message: 'Initial Harness session baseline did not settle',
+      },
+    )
+    .toBe(true);
+  return latestSessionIds;
 }
 
 async function expectOnlyBaselineSessions(
@@ -239,11 +281,39 @@ async function expectOnlyBaselineSessions(
   selectedSessionId: string,
   baselineSessionIds: readonly string[],
 ): Promise<void> {
-  const visibleSessionIds = await readSessionIds(origin);
-  expect(visibleSessionIds).toContain(selectedSessionId);
-  expect(
-    visibleSessionIds.every((sessionId) => baselineSessionIds.includes(sessionId)),
-  ).toBe(true);
+  let consecutiveStableSnapshots = 0;
+  await expect
+    .poll(
+      async () => {
+        const visibleSessionIds = await readSessionIds(origin);
+        const unexpectedSessionIds = visibleSessionIds.filter(
+          (sessionId) => !baselineSessionIds.includes(sessionId),
+        );
+        const hasSelectedSession = visibleSessionIds.includes(selectedSessionId);
+        const isStable =
+          hasSelectedSession && unexpectedSessionIds.length === 0;
+        consecutiveStableSnapshots = isStable
+          ? consecutiveStableSnapshots + 1
+          : 0;
+        return {
+          status:
+            consecutiveStableSnapshots >= 3 ? 'stable' : 'settling',
+          hasSelectedSession,
+          unexpectedSessionIds,
+        };
+      },
+      {
+        timeout: 15_000,
+        interval: 250,
+        message:
+          'Harness session list did not settle without a synthetic empty session',
+      },
+    )
+    .toEqual({
+      status: 'stable',
+      hasSelectedSession: true,
+      unexpectedSessionIds: [],
+    });
 }
 
 async function callHarnessApi(

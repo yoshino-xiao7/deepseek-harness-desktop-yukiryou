@@ -18,6 +18,10 @@ import {
   patchModelCapabilitiesEditor,
 } from '../src/main/runtime/vendor-model-capabilities-patch.ts';
 import {
+  patchSessionSelectionRestore,
+  SESSION_SELECTION_PATCH_DSH_VERSION,
+} from '../src/main/runtime/vendor-session-selection-patch.ts';
+import {
   type BundledRuntimeTarget,
   resolveBundledRuntimePlatform,
   type BundledRuntimePlatformLayout,
@@ -123,6 +127,23 @@ const modelsSettingsClient = join(
 await writeFile(
   modelsSettingsClient,
   patchModelCapabilitiesEditor(await readFile(modelsSettingsClient, 'utf8')),
+);
+if (manifest.dsh.version !== SESSION_SELECTION_PATCH_DSH_VERSION) {
+  throw new Error(
+    `Temporary session-selection patch targets dsh ${SESSION_SELECTION_PATCH_DSH_VERSION}; review it before vendoring ${manifest.dsh.version}`,
+  );
+}
+const clientRuntime = join(
+  dshDirectory,
+  'node_modules',
+  '@deepseek-ai',
+  'dsh-client-runtime',
+  'lib',
+  'client.js',
+);
+await writeFile(
+  clientRuntime,
+  patchSessionSelectionRestore(await readFile(clientRuntime, 'utf8')),
 );
 
 await cp(
