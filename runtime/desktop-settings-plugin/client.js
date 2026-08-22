@@ -149,6 +149,27 @@ window.__ModuleLoader__.load({
       },
     };
 
+    const desktopPlatform = window.deepSeekYukiRyouPlatform ?? {
+      platform: 'darwin',
+      architecture: 'arm64',
+    };
+    if (desktopPlatform.platform === 'win32') {
+      Object.assign(dictionaries.zh, {
+        'about.badge': 'Windows 桌面应用',
+        'about.description': '面向 Windows 11 x64 的 DeepSeek Harness 桌面工作空间。',
+        'about.updateManual': 'Windows 自动更新暂不可用，请改用发行页中的 Setup EXE 或便携版 ZIP。',
+        'about.manualDownload': '下载 EXE',
+        'about.architectureValue': `Windows ${desktopPlatform.architecture}`,
+      });
+      Object.assign(dictionaries.en, {
+        'about.badge': 'Windows desktop app',
+        'about.description': 'A focused DeepSeek Harness workspace for Windows 11 x64.',
+        'about.updateManual': 'Automatic update is unavailable on Windows. Use the Setup EXE or portable ZIP from the release page.',
+        'about.manualDownload': 'Download EXE',
+        'about.architectureValue': `Windows ${desktopPlatform.architecture}`,
+      });
+    }
+
     const css = `
       :root {
         --dsh-desktop-chrome-sidebar-background: var(--dsw-specific-sidebar-fill);

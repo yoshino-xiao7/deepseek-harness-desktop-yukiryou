@@ -10,6 +10,49 @@ type ElementNode = {
 };
 
 describe('desktop plugin management tab', () => {
+  it('registers Windows-specific About and manual update copy', async () => {
+    const source = await readFile(
+      new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),
+      'utf8',
+    );
+    let plugin: { apply(context: unknown): void } | undefined;
+    const register = vi.fn();
+    const window = {
+      deepSeekYukiRyouPlatform: { platform: 'win32', architecture: 'x64' },
+      __ModuleLoader__: {
+        load: ({ factory }: { factory(require: (id: string) => unknown): unknown }) => {
+          plugin = factory(() => ({ createElement: vi.fn() })) as typeof plugin;
+        },
+      },
+    };
+
+    vm.runInNewContext(source, {
+      document: { querySelector: vi.fn().mockReturnValue({}) },
+      window,
+    });
+    plugin?.apply({
+      effect: (effect: () => unknown) => effect(),
+      locale: { bind: vi.fn(), register },
+      on: vi.fn(),
+      slots: { inject: vi.fn(), register: vi.fn() },
+      theme: { getTheme: vi.fn(), setTheme: vi.fn() },
+    });
+
+    expect(register).toHaveBeenCalledOnce();
+    const dictionaries = register.mock.calls[0]?.[1] as {
+      zh: Record<string, string>;
+      en: Record<string, string>;
+    };
+    expect(dictionaries.zh['about.badge']).toContain('Windows');
+    expect(dictionaries.zh['about.architectureValue']).toBe('Windows x64');
+    expect(dictionaries.zh['about.updateManual']).toMatch(/EXE|ZIP/);
+    expect(dictionaries.zh['about.manualDownload']).toContain('EXE');
+    expect(dictionaries.en['about.badge']).toContain('Windows');
+    expect(dictionaries.en['about.architectureValue']).toBe('Windows x64');
+    expect(dictionaries.en['about.updateManual']).toMatch(/EXE|ZIP/);
+    expect(dictionaries.en['about.manualDownload']).toContain('EXE');
+  });
+
   it('keeps long plugin names inside a shrinkable two-column card header', async () => {
     const source = (await readFile(
       new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),

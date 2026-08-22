@@ -122,7 +122,16 @@ jobs:
           pnpm exec vitest run
           tests/e2e/packaged-startup.test.ts
           tests/e2e/session-selection-restart.test.ts
+          tests/e2e/packaged-app.test.ts
           --no-file-parallelism
+      - name: Upload Windows UI verification screenshots
+        if: ${{ always() && hashFiles('out/windows-ui-verification/*.png') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-verification
+          path: out/windows-ui-verification/
+          if-no-files-found: error
+          retention-days: 14
       - name: Start and restart the exact portable ZIP application
         shell: pwsh
         run: |
