@@ -43,6 +43,21 @@ jobs:
             throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
           }
           $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Require an unlocked interactive Windows desktop
+        run: |
+          $sessionId = (Get-Process -Id $PID).SessionId
+          if ($sessionId -eq 0) {
+            throw 'Runner is executing in non-interactive Session 0'
+          }
+          $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($explorer.Count -eq 0) {
+            throw "No logged-in Windows desktop was found in Session $sessionId"
+          }
+          $lockUi = @(Get-Process LockApp, LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($lockUi.Count -ne 0) {
+            throw "Windows desktop Session $sessionId is locked"
+          }
+          "Using unlocked interactive Windows desktop Session $sessionId"
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -69,6 +84,21 @@ jobs:
             throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
           }
           $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Require an unlocked interactive Windows desktop
+        run: |
+          $sessionId = (Get-Process -Id $PID).SessionId
+          if ($sessionId -eq 0) {
+            throw 'Runner is executing in non-interactive Session 0'
+          }
+          $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($explorer.Count -eq 0) {
+            throw "No logged-in Windows desktop was found in Session $sessionId"
+          }
+          $lockUi = @(Get-Process LockApp, LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($lockUi.Count -ne 0) {
+            throw "Windows desktop Session $sessionId is locked"
+          }
+          "Using unlocked interactive Windows desktop Session $sessionId"
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
