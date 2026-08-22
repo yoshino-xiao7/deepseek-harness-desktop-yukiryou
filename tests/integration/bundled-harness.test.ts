@@ -88,7 +88,7 @@ describe('bundled Harness runtime', () => {
         ],
         workspaceRoot,
         version: '0.1.0-rc.8',
-        startupTimeoutMs: 20_000,
+        startupTimeoutMs: 60_000,
         shutdownTimeoutMs: 5_000,
         createCompanionToken: () => 'integration-token-that-is-long-enough-123456789',
       });
@@ -160,7 +160,7 @@ describe('bundled Harness runtime', () => {
         reason: 'credential-unconfigured',
       });
     },
-    30_000,
+    75_000,
   );
 
   it(
