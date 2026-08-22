@@ -142,12 +142,28 @@ $updateExecutable = [string]$state.updateExecutable
 if (-not (Test-Path -LiteralPath $updateExecutable)) {
   throw "Squirrel Update.exe is missing: $updateExecutable"
 }
-$process = Start-Process -FilePath $updateExecutable -ArgumentList '--uninstall', '-s' -Wait -PassThru
+$process = Start-Process -FilePath $updateExecutable -ArgumentList '--uninstall', '--silent' -Wait -PassThru
 if ($process.ExitCode -ne 0) {
   throw "Squirrel uninstall failed with exit code $($process.ExitCode)"
 }
-Wait-Until -FailureMessage 'Squirrel installation root remained after uninstall' -Condition {
-  return -not (Test-Path -LiteralPath $installRoot)
+try {
+  Wait-Until -FailureMessage 'Squirrel installation root remained after uninstall' -Condition {
+    return -not (Test-Path -LiteralPath $installRoot)
+  }
+} catch {
+  if (Test-Path -LiteralPath $installRoot) {
+    Write-Warning 'Remaining Squirrel installation entries:'
+    Get-ChildItem -LiteralPath $installRoot -Recurse -Force -ErrorAction SilentlyContinue |
+      Select-Object -ExpandProperty FullName |
+      ForEach-Object { Write-Warning $_ }
+  }
+  $uninstallLogs = Get-ChildItem -LiteralPath $env:TEMP -Filter 'Squirrel*Uninstall*.log' -ErrorAction SilentlyContinue
+  foreach ($log in $uninstallLogs) {
+    Write-Warning "Squirrel uninstall log: $($log.FullName)"
+    Get-Content -LiteralPath $log.FullName -ErrorAction SilentlyContinue |
+      ForEach-Object { Write-Warning $_ }
+  }
+  throw
 }
 foreach ($shortcutPath in @($state.shortcutPaths)) {
   if (Test-Path -LiteralPath ([string]$shortcutPath)) {

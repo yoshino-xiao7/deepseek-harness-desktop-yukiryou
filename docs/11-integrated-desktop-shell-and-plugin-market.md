@@ -734,7 +734,7 @@ Runtime 门禁现已完成代码侧扩展。schema 2 manifest 用 `darwin-arm64 
 
 Windows CI 候选门禁现已落地为独立工作流。它在 `windows-latest` x64 runner 上先执行 lint、typecheck、完整单元与集成测试，再由全新的干净 job 执行 host-native Runtime vendor/verify 和 Squirrel make；随后直接启动/重启 `out/DeepSeek YukiRyou-win32-x64/DeepSeek YukiRyou.exe`，避免只验证封装命令返回码。候选冻结器要求输出目录中恰好存在品牌 `Setup.exe`、一个 `-full.nupkg` 和 `RELEASES`，并验证 `RELEASES` 对完整包文件名、SHA-1 格式与字节数的绑定，最后生成带 package version、`win32-x64` target、Git commit、逐文件字节数和 SHA-256 的 manifest 与 `SHA256SUMS`。工作流仅上传保留七天的 unsigned candidate，不创建 tag、GitHub Release 或更新 feed。下一门禁因此缩小为 Windows 代码签名，以及在干净 Windows 11 VM 中对安装、覆盖升级、卸载、快捷方式和自动更新的真实生命周期验收。
 
-冻结候选之后，CI 现在还会运行真实 Squirrel 生命周期门禁：执行 `Setup.exe --silent`，等待安装目录和快捷方式出现，从实际安装路径启动应用并复跑会话恢复测试，然后执行同版本修复安装、再次启动和 `Update.exe --uninstall -s`。卸载必须清除程序目录与快捷方式，同时保留带随机 nonce 的应用用户数据标记。这个门禁刻意把当前能力称为“修复安装”而非“覆盖升级”；只有存在上一份 Windows 候选并验证旧版 Session、Runtime Home、自动更新和新版本落盘后，才算跨版本升级闭环。Windows 11 客户端实机与代码签名仍然是公开发行前置条件。
+冻结候选之后，CI 现在还会运行真实 Squirrel 生命周期门禁：执行 `Setup.exe --silent`，等待安装目录和快捷方式出现，从实际安装路径启动应用并复跑会话恢复测试，然后执行同版本修复安装、再次启动和 `Update.exe --uninstall --silent`。卸载必须清除程序目录与快捷方式，同时保留带随机 nonce 的应用用户数据标记。这个门禁刻意把当前能力称为“修复安装”而非“覆盖升级”；只有存在上一份 Windows 候选并验证旧版 Session、Runtime Home、自动更新和新版本落盘后，才算跨版本升级闭环。Windows 11 客户端实机与代码签名仍然是公开发行前置条件。
 
 ## 测试与验收
 
