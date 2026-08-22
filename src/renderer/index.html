@@ -138,10 +138,41 @@
               <button type="button" data-testid="preview-back" aria-label="后退" aria-keyshortcuts="Meta+[ Control+[" title="后退（⌘[）" disabled><span class="preview-chevron preview-chevron-back" aria-hidden="true"></span></button>
               <button type="button" data-testid="preview-forward" aria-label="前进" aria-keyshortcuts="Meta+] Control+]" title="前进（⌘]）" disabled><span class="preview-chevron preview-chevron-forward" aria-hidden="true"></span></button>
             </div>
+            <span class="preview-copy-feedback" data-testid="preview-copy-feedback" aria-live="polite" hidden></span>
+            <details class="preview-copy-menu" data-testid="preview-copy-menu">
+              <summary aria-label="复制预览位置" aria-haspopup="menu" title="复制预览位置">
+                <svg class="preview-copy-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.4" y="5.4" width="7.4" height="7.4" rx="1.2"></rect><path d="M10.6 5.4V3.9c0-.7-.6-1.2-1.2-1.2H3.9c-.7 0-1.2.6-1.2 1.2v5.5c0 .7.6 1.2 1.2 1.2h1.5"></path></svg>
+                <span class="preview-menu-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="preview-copy-popover" role="menu">
+                <button type="button" role="menuitem" data-copy-target="path">复制相对路径</button>
+                <button type="button" role="menuitem" data-copy-target="line" disabled>复制行号</button>
+                <button type="button" role="menuitem" data-copy-target="path-line" disabled>复制 路径:行号</button>
+              </div>
+            </details>
+            <button type="button" data-testid="preview-find-toggle" aria-label="在预览中查找" aria-keyshortcuts="Meta+F Control+F" title="在预览中查找（⌘F）">
+              <svg class="preview-find-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.1"></circle><path d="m10 10 3.2 3.2"></path></svg>
+            </button>
             <button type="button" data-testid="preview-mode" hidden>源码</button>
             <button type="button" data-testid="preview-close" aria-label="关闭预览" aria-keyshortcuts="Escape"><span class="preview-close-glyph" aria-hidden="true"></span></button>
           </div>
         </header>
+        <nav class="preview-find-bar" data-testid="preview-find-bar" aria-label="在预览中查找" hidden>
+          <label>
+            <svg class="preview-find-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.1"></circle><path d="m10 10 3.2 3.2"></path></svg>
+            <input type="search" data-testid="preview-find-input" aria-label="查找文本" placeholder="查找…" autocomplete="off" spellcheck="false">
+          </label>
+          <span data-testid="preview-find-progress" aria-live="polite">0 / 0</span>
+          <button type="button" data-testid="preview-find-previous" aria-label="上一个匹配项" title="上一个匹配项（Shift+Enter）"><span class="preview-chevron preview-chevron-up" aria-hidden="true"></span></button>
+          <button type="button" data-testid="preview-find-next" aria-label="下一个匹配项" title="下一个匹配项（Enter）"><span class="preview-chevron preview-chevron-down" aria-hidden="true"></span></button>
+          <button type="button" data-testid="preview-find-close" aria-label="关闭查找"><span class="preview-close-glyph" aria-hidden="true"></span></button>
+        </nav>
+        <nav class="preview-review-bar" data-testid="preview-review-bar" aria-label="逐文件审阅" hidden>
+          <button type="button" data-testid="review-previous" aria-label="上一个变更" title="上一个变更"><span class="preview-chevron preview-chevron-back" aria-hidden="true"></span></button>
+          <span data-testid="review-progress">0 / 0</span>
+          <button type="button" class="review-toggle-viewed" data-testid="review-toggle-viewed">标为已查看</button>
+          <button type="button" data-testid="review-next" aria-label="下一个变更" title="下一个变更"><span class="preview-chevron preview-chevron-forward" aria-hidden="true"></span></button>
+        </nav>
         <article class="preview-content" data-testid="preview-content"></article>
       </section>
     </section>

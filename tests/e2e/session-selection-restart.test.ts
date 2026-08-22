@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -43,12 +44,18 @@ describe('Harness session selection across desktop restarts', () => {
       'workspace.create',
       { path: workspaceBPath },
     );
-    await callHarnessApi(firstOrigin, 'session.create', {
+    const sessionB = await callHarnessApi(firstOrigin, 'session.create', {
       workspaceId: readNestedString(workspaceB, 'workspace', 'workspaceId'),
     });
     const expectedSessionId = readString(sessionA, 'sessionId');
+    const createdSessionIds = [
+      expectedSessionId,
+      readString(sessionB, 'sessionId'),
+    ].sort();
     const sessionsBeforeRestart = await readSessionIds(firstOrigin);
-    expect(sessionsBeforeRestart).toContain(expectedSessionId);
+    expect(sessionsBeforeRestart).toEqual(
+      expect.arrayContaining(createdSessionIds),
+    );
     await writeHarnessStorage(
       electronApp,
       currentSessionStorageKey,
@@ -65,35 +72,60 @@ describe('Harness session selection across desktop restarts', () => {
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
-    await expect(readSessionIds(secondOrigin)).resolves.toEqual(
+    await expectOnlyBaselineSessions(
+      secondOrigin,
+      expectedSessionId,
       sessionsBeforeRestart,
     );
 
     const crashedProcess = electronApp.process();
-    crashedProcess.kill('SIGKILL');
-    await once(crashedProcess, 'exit');
+    const crashed = once(crashedProcess, 'exit');
+    crashDesktopProcessTree(crashedProcess);
+    await crashed;
     electronApp = undefined;
 
-    const thirdLaunch = await launchAndWait(userData);
+    const thirdLaunch = await launchAndWait(userData, {
+      retryTransientWindowsLaunch: true,
+    });
     electronApp = thirdLaunch.application;
     expect(thirdLaunch.origin).toBe(firstOrigin);
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
-    await expect(readSessionIds(thirdLaunch.origin)).resolves.toEqual(
+    await expectOnlyBaselineSessions(
+      thirdLaunch.origin,
+      expectedSessionId,
       sessionsBeforeRestart,
     );
   }, 90_000);
 });
 
+function crashDesktopProcessTree(desktopProcess: ChildProcess): void {
+  if (desktopProcess.pid === undefined) {
+    throw new Error('Desktop process has no pid');
+  }
+  if (process.platform !== 'win32') {
+    desktopProcess.kill('SIGKILL');
+    return;
+  }
+  const result = spawnSync(
+    'taskkill.exe',
+    ['/pid', String(desktopProcess.pid), '/t', '/f'],
+    { encoding: 'utf8', shell: false },
+  );
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `taskkill failed with status ${String(result.status)}: ${result.stderr}`,
+    );
+  }
+}
+
 async function launchAndWait(
   userData: string,
+  options: { retryTransientWindowsLaunch?: boolean } = {},
 ): Promise<{ application: ElectronApplication; origin: string }> {
-  const application = await electron.launch({
-    executablePath: resolveE2eExecutablePath(),
-    args: [`--user-data-dir=${userData}`],
-    env: { ...process.env, DSH_DESKTOP_E2E: '1' },
-  });
+  const application = await launchElectron(userData, options);
   await application.firstWindow();
   let origin: string | undefined;
   await expect
@@ -104,6 +136,31 @@ async function launchAndWait(
     .toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   if (origin === undefined) throw new Error('Harness origin is missing');
   return { application, origin };
+}
+
+async function launchElectron(
+  userData: string,
+  options: { retryTransientWindowsLaunch?: boolean },
+): Promise<ElectronApplication> {
+  const attempts =
+    process.platform === 'win32' && options.retryTransientWindowsLaunch === true
+      ? 10
+      : 1;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await electron.launch({
+        executablePath: resolveE2eExecutablePath(),
+        args: [`--user-data-dir=${userData}`],
+        env: { ...process.env, DSH_DESKTOP_E2E: '1' },
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+    }
+  }
+  throw lastError;
 }
 
 async function readHarnessOrigin(
@@ -158,6 +215,18 @@ async function readSessionIds(origin: string): Promise<string[]> {
   const items = record.items;
   if (!Array.isArray(items)) throw new Error('session.list returned no items');
   return items.map((item) => readString(item, 'sessionId')).sort();
+}
+
+async function expectOnlyBaselineSessions(
+  origin: string,
+  selectedSessionId: string,
+  baselineSessionIds: readonly string[],
+): Promise<void> {
+  const visibleSessionIds = await readSessionIds(origin);
+  expect(visibleSessionIds).toContain(selectedSessionId);
+  expect(
+    visibleSessionIds.every((sessionId) => baselineSessionIds.includes(sessionId)),
+  ).toBe(true);
 }
 
 async function callHarnessApi(

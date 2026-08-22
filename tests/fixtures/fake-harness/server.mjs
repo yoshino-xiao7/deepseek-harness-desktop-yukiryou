@@ -57,6 +57,9 @@ const server = createServer(async (request, response) => {
       companionTokenConfigured:
         typeof process.env.DSH_DESKTOP_COMPANION_TOKEN === 'string' &&
         process.env.DSH_DESKTOP_COMPANION_TOKEN.length >= 32,
+      developmentPluginFixture:
+        process.env.DSH_DESKTOP_DEVELOPMENT_PLUGIN_FIXTURE === '1',
+      launchMarker: args.get('--launch-marker') ?? null,
     }),
   );
 });

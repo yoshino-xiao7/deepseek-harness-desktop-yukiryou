@@ -8,6 +8,8 @@ describe('workspace review shortcuts', () => {
   it.each([
     [{ key: 'p', metaKey: true }, 'file-search'],
     [{ key: 'P', ctrlKey: true }, 'file-search'],
+    [{ key: 'f', metaKey: true }, 'preview-find'],
+    [{ key: 'F', ctrlKey: true }, 'preview-find'],
     [{ key: '[', metaKey: true }, 'preview-back'],
     [{ key: ']', ctrlKey: true }, 'preview-forward'],
     [{ key: 'p', meta: true }, 'file-search'],
@@ -20,6 +22,7 @@ describe('workspace review shortcuts', () => {
   it.each([
     { key: 'p' },
     { key: 'p', metaKey: true, altKey: true },
+    { key: 'f', metaKey: true, shiftKey: true },
     { key: '[', metaKey: true, shiftKey: true },
     { key: 'Escape', isComposing: true },
     { key: 'Escape', defaultPrevented: true },
@@ -29,6 +32,7 @@ describe('workspace review shortcuts', () => {
 
   it('rejects unknown commands at the preload boundary', () => {
     expect(validatedWorkspaceReviewShortcut('file-search')).toBe('file-search');
+    expect(validatedWorkspaceReviewShortcut('preview-find')).toBe('preview-find');
     expect(validatedWorkspaceReviewShortcut('print')).toBeUndefined();
   });
 });

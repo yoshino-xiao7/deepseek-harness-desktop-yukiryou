@@ -4,6 +4,13 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 interface RuntimeSourceManifest {
+  readonly schemaVersion: number;
+  readonly node: {
+    readonly archives: Record<string, {
+      readonly file: string;
+      readonly sha256: string;
+    }>;
+  };
   readonly dsh: { readonly version: string; readonly integrity: string };
 }
 
@@ -44,6 +51,17 @@ describe('bundled Runtime baseline', () => {
     expect(root.dependencies?.['@deepseek-ai/dsh']).toBe(manifest.dsh.version);
     expect(dsh.version).toBe(manifest.dsh.version);
     expect(dsh.integrity).toBe(manifest.dsh.integrity);
+    expect(manifest.schemaVersion).toBe(2);
+    expect(manifest.node.archives).toMatchObject({
+      'darwin-arm64': {
+        file: 'node-v24.19.0-darwin-arm64.tar.xz',
+        sha256: '3f1cf157479c1480352083105e13faf9d008ede98e7e157746b6df940d197b94',
+      },
+      'win32-x64': {
+        file: 'node-v24.19.0-win-x64.zip',
+        sha256: '57f71ab3652e797d84acddc79c81cc9ff1c6ddb2a1974cdb83f00fee9bff4c73',
+      },
+    });
 
     const deepSeekVersions = new Set(
       Object.entries(packageLock.packages)

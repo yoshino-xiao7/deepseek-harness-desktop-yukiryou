@@ -1,0 +1,129 @@
+name: Windows x64 candidate
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/windows-candidate.yml'
+      - 'forge.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'resources/icons/**'
+      - 'runtime/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-candidate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.34.5'
+
+jobs:
+  quality:
+    name: Windows quality gate
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${env:PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  build_candidate:
+    name: Vendor Runtime, make EXE + portable ZIP, and smoke
+    needs: quality
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${env:PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Assemble and verify the host-native Runtime
+        run: |
+          pnpm runtime:vendor:win
+          pnpm runtime:verify
+      - name: Run integration tests against the verified Runtime
+        run: pnpm test:integration
+      - name: Build unsigned installer and portable candidates
+        run: pnpm make:win
+      - name: Start and restart the exact packaged application
+        env:
+          DSH_E2E_EXECUTABLE_PATH: ${{ github.workspace }}\out\DeepSeek YukiRyou-win32-x64\DeepSeek YukiRyou.exe
+        run: >-
+          pnpm exec vitest run
+          tests/e2e/packaged-startup.test.ts
+          tests/e2e/session-selection-restart.test.ts
+          --no-file-parallelism
+      - name: Start and restart the exact portable ZIP application
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem 'out/make/zip/win32/x64' -Filter '*.zip'
+          if ($archive.Count -ne 1) { throw "Expected one portable ZIP, found $($archive.Count)" }
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath 'out/windows-portable-smoke'
+          $executables = @(Get-ChildItem 'out/windows-portable-smoke' -Recurse -Filter 'DeepSeek YukiRyou.exe')
+          if ($executables.Count -ne 1) { throw "Expected one portable executable, found $($executables.Count)" }
+          $env:DSH_E2E_EXECUTABLE_PATH = $executables[0].FullName
+          "DSH_E2E_EXECUTABLE_PATH=$($executables[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts --no-file-parallelism
+      - name: Validate and freeze Squirrel artifacts
+        run: pnpm release:win:candidate
+      - name: Verify candidate provenance
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: >-
+          node -e "const fs=require('node:fs');
+          const p=require('./package.json');
+          const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
+          if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==4||!m.artifacts.some(a=>a.file.endsWith('-portable.zip')))
+          throw new Error('Windows candidate provenance mismatch')"
+      - name: Install the frozen Squirrel candidate
+        shell: pwsh
+        run: |
+          ./scripts/windows-squirrel-lifecycle.ps1 -Action Install
+          $state = Get-Content 'out/windows-lifecycle/state.json' -Raw | ConvertFrom-Json
+          "DSH_E2E_EXECUTABLE_PATH=$($state.executable)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Start the installed application
+        run: >-
+          pnpm exec vitest run
+          tests/e2e/packaged-startup.test.ts
+          tests/e2e/session-selection-restart.test.ts
+          --no-file-parallelism
+      - name: Repair-install the same candidate and restart it
+        shell: pwsh
+        run: |
+          ./scripts/windows-squirrel-lifecycle.ps1 -Action Repair
+          pnpm exec vitest run tests/e2e/packaged-startup.test.ts --no-file-parallelism
+      - name: Uninstall and verify shortcuts and user-data retention
+        if: ${{ always() && hashFiles('out/windows-lifecycle/state.json') != '' }}
+        shell: pwsh
+        run: ./scripts/windows-squirrel-lifecycle.ps1 -Action Uninstall
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-unsigned-exe-and-portable
+          path: out/windows-candidate/
+          if-no-files-found: error
+          retention-days: 14

@@ -15,7 +15,7 @@ describe('application updater configuration', () => {
     );
   });
 
-  it('enables updates only for packaged Apple Silicon builds', () => {
+  it('enables updates only for packaged release targets', () => {
     expect(
       isUpdaterSupported({
         isPackaged: true,
@@ -37,5 +37,38 @@ describe('application updater configuration', () => {
         architecture: 'x64',
       }),
     ).toBe(false);
+    expect(
+      isUpdaterSupported({
+        isPackaged: true,
+        platform: 'win32',
+        architecture: 'x64',
+      }),
+    ).toBe(true);
+    expect(
+      isUpdaterSupported({
+        isPackaged: true,
+        platform: 'win32',
+        architecture: 'arm64',
+      }),
+    ).toBe(false);
+    expect(
+      isUpdaterSupported({
+        isPackaged: true,
+        platform: 'linux',
+        architecture: 'x64',
+      }),
+    ).toBe(false);
+  });
+
+  it('uses the Squirrel.Windows feed target for Windows x64', () => {
+    expect(
+      updateFeedUrl({
+        currentVersion: '0.2.3-beta.1',
+        platform: 'win32',
+        architecture: 'x64',
+      }),
+    ).toBe(
+      'https://update.electronjs.org/yoshino-xiao7/deepseek-harness-desktop-yukiryou/win32-x64/0.2.3-beta.1',
+    );
   });
 });

@@ -60,6 +60,12 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       onFrameHealth: (health) => {
         this.#settleReadiness(this.#readiness.acceptFrameHealth(health));
       },
+      onManagedPluginPreview: options.onManagedPluginPreview,
+      onManagedPluginExecute: options.onManagedPluginExecute,
+      onManagedPluginInventory: options.onManagedPluginInventory,
+      onManagedPluginRemove: options.onManagedPluginRemove,
+      onManagedPluginSetEnabled: options.onManagedPluginSetEnabled,
+      onManagedPluginRollback: options.onManagedPluginRollback,
     });
     this.#productWindow.webContents.on('did-finish-load', () => {
       this.#productBridge.restoreAfterLoad();

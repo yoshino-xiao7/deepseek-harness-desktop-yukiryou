@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 
 export type StableFileRead =
   | { readonly kind: 'data'; readonly data: Buffer; readonly revision: string }
@@ -12,9 +12,13 @@ export type StableFileRevision =
 export async function stableRegularFileRevision(path: string): Promise<StableFileRevision> {
   let handle;
   try {
+    const pathBefore = await lstat(path, { bigint: true });
+    if (!safeRegularPath(pathBefore)) return { kind: 'unsafe-type' };
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const status = await handle.stat({ bigint: true });
-    return status.isFile()
+    const pathAfter = await lstat(path, { bigint: true });
+    return status.isFile() && safeRegularPath(pathAfter) &&
+      sameFileIdentity(pathBefore, status) && sameFileIdentity(status, pathAfter)
       ? { kind: 'revision', revision: revisionKey(status) }
       : { kind: 'unsafe-type' };
   } catch (error) {
@@ -28,13 +32,20 @@ export async function stableRegularFileRevision(path: string): Promise<StableFil
 export async function readStableRegularFile(path: string, maxBytes: number): Promise<StableFileRead> {
   let handle;
   try {
+    const pathBefore = await lstat(path, { bigint: true });
+    if (!safeRegularPath(pathBefore)) return { kind: 'unsafe-type' };
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const before = await handle.stat({ bigint: true });
-    if (!before.isFile()) return { kind: 'unsafe-type' };
+    if (!before.isFile() || !sameFileIdentity(pathBefore, before)) {
+      return { kind: 'unsafe-type' };
+    }
     if (before.size > BigInt(maxBytes)) return { kind: 'too-large' };
     const data = await handle.readFile();
     const after = await handle.stat({ bigint: true });
-    if (!sameRevision(before, after) || data.byteLength > maxBytes) return { kind: 'file-changed' };
+    const pathAfter = await lstat(path, { bigint: true });
+    if (!safeRegularPath(pathAfter)) return { kind: 'unsafe-type' };
+    if (!sameRevision(before, after) || !sameFileIdentity(after, pathAfter) ||
+      data.byteLength > maxBytes) return { kind: 'file-changed' };
     return { kind: 'data', data, revision: revisionKey(after) };
   } catch (error) {
     const code = errorCode(error);
@@ -42,6 +53,17 @@ export async function readStableRegularFile(path: string, maxBytes: number): Pro
   } finally {
     await handle?.close().catch(() => undefined);
   }
+}
+
+function safeRegularPath(status: Awaited<ReturnType<typeof lstat>>): boolean {
+  return status.isFile() && !status.isSymbolicLink();
+}
+
+function sameFileIdentity(
+  left: { readonly dev: bigint; readonly ino: bigint },
+  right: { readonly dev: bigint; readonly ino: bigint },
+): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
 }
 
 function revisionKey(status: Awaited<ReturnType<Awaited<ReturnType<typeof open>>['stat']>>): string {

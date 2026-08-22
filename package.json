@@ -1,8 +1,8 @@
 {
   "name": "deepseek-harness-desktop-yukiryou",
   "productName": "DeepSeek YukiRyou",
-  "version": "0.2.2-beta.1",
-  "description": "An independent DeepSeek Harness desktop workspace for Apple Silicon macOS",
+  "version": "0.2.3-beta.1",
+  "description": "An independent DeepSeek Harness desktop workspace for macOS and Windows",
   "author": "YukiRyou <https://github.com/yoshino-xiao7>",
   "homepage": "https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou",
   "repository": {
@@ -19,6 +19,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "electron-winstaller",
       "fs-xattr",
       "macos-alias"
     ],
@@ -45,23 +46,29 @@
     "test:e2e": "vitest run tests/e2e --no-file-parallelism",
     "test:watch": "vitest",
     "runtime:vendor": "node scripts/vendor-runtime.ts",
+    "runtime:vendor:win": "node scripts/vendor-runtime.ts --platform=win32 --arch=x64",
     "runtime:verify": "node scripts/verify-runtime.ts",
     "release:mac:candidate": "node scripts/prepare-release-candidate.ts",
+    "release:win:candidate": "node scripts/prepare-windows-candidate.ts",
     "release:mac": "node scripts/release-macos.ts",
     "release:mac:finish": "node scripts/release-macos.ts --finish",
     "verify:distribution": "node scripts/verify-distribution.ts",
     "verify:release": "node scripts/verify-release.ts",
     "package:mac": "electron-forge package --platform=darwin",
     "make:mac": "electron-forge make --platform=darwin",
+    "package:win": "electron-forge package --platform=win32 --arch=x64",
+    "make:win": "electron-forge make --platform=win32 --arch=x64",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-dmg": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
     "@electron-forge/plugin-vite": "7.11.2",
     "@electron-forge/shared-types": "7.11.2",
     "@eslint/js": "10.0.1",
+    "@types/electron-squirrel-startup": "1.0.2",
     "@types/node": "26.2.0",
     "electron": "43.4.0",
     "eslint": "10.8.1",
@@ -72,6 +79,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
+    "electron-squirrel-startup": "1.0.1",
     "yaml": "2.9.0"
   }
 }

@@ -1,7 +1,12 @@
 import { lstat, mkdir, readlink, symlink, unlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-const DESKTOP_EXTENSIONS = ['settings', 'companion', 'frame-prototype'] as const;
+const DESKTOP_EXTENSIONS = [
+  'settings',
+  'companion',
+  'frame-prototype',
+  'market',
+] as const;
 
 export async function ensureBundledRuntimeExtensions(
   runtimeHome: string,

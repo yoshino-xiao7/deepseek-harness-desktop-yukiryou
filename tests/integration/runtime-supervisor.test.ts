@@ -1,7 +1,7 @@
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -39,22 +39,28 @@ describe('RuntimeSupervisor', () => {
       startupTimeoutMs: 5_000,
       shutdownTimeoutMs: 2_000,
       createCompanionToken: () => 'test-companion-token-that-never-enters-state',
+      developmentPluginFixture: true,
     });
 
     const ready = await supervisor.start();
 
     expect(ready.kind).toBe('ready');
     expect(ready.version).toBe('fake-1.0.0');
-    await expect(fetch(ready.origin).then((response) => response.json())).resolves
-      .toMatchObject({
+    const runtimeResponse = await fetch(ready.origin).then((response) =>
+      response.json() as Promise<Record<string, unknown>>
+    );
+    expect(runtimeResponse).toMatchObject({
         status: 'ready',
         home: runtimeHome,
-        path: expect.stringMatching(
-          new RegExp(`^${runtimeBinDirectory.replaceAll('/', '\\/')}:`),
-        ),
-        workspace: canonicalWorkspaceRoot,
         companionTokenConfigured: true,
+        developmentPluginFixture: true,
       });
+    expect(String(runtimeResponse.path).split(delimiter)[0]).toBe(
+      runtimeBinDirectory,
+    );
+    await expect(realpath(String(runtimeResponse.workspace))).resolves.toBe(
+      canonicalWorkspaceRoot,
+    );
     expect(JSON.stringify(supervisor.getState())).not.toContain(
       'test-companion-token',
     );
@@ -90,6 +96,37 @@ describe('RuntimeSupervisor', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it('reconfigures a stopped Runtime without replacing its supervisor', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-runtime-test-'));
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-workspace-test-'));
+    supervisor = createRuntimeSupervisor({
+      command: process.execPath,
+      args: [fakeHarness, '--launch-marker', 'before'],
+      runtimeHome,
+      workspaceRoot,
+      version: 'fake-1.0.0',
+      startupTimeoutMs: 5_000,
+      shutdownTimeoutMs: 2_000,
+    });
+
+    const before = await supervisor.start();
+    await expect(fetch(before.origin).then((response) => response.json()))
+      .resolves.toMatchObject({ launchMarker: 'before' });
+    expect(() => supervisor?.configureLaunch(
+      process.execPath,
+      [fakeHarness, '--launch-marker', 'invalid'],
+    )).toThrow('while stopped');
+
+    await supervisor.stop('restart');
+    supervisor.configureLaunch(
+      process.execPath,
+      [fakeHarness, '--launch-marker', 'after'],
+    );
+    const after = await supervisor.start();
+    await expect(fetch(after.origin).then((response) => response.json()))
+      .resolves.toMatchObject({ launchMarker: 'after' });
   });
 
   it.each([

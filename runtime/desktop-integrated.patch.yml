@@ -3,6 +3,8 @@
       name: '@dsh-desktop/settings'
     - id: desktop-companion
       name: '@dsh-desktop/companion'
+    - id: desktop-market
+      name: '@dsh-desktop/market'
     - id: desktop-frame
       name: '@dsh-desktop/frame-prototype'
 

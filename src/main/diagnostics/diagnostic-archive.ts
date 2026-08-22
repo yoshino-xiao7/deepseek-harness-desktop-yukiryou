@@ -11,7 +11,7 @@ export interface DiagnosticMetadata {
   readonly electronVersion: string;
   readonly harnessVersion: string;
   readonly architecture: string;
-  readonly macOSVersion: string;
+  readonly operatingSystem: string;
   readonly failureCode: string;
   readonly failureDetails: string;
   readonly userHome: string;
@@ -39,7 +39,8 @@ export async function createDiagnosticArchive(options: {
         { encoding: 'utf8', mode: 0o600 },
       );
     }
-    await runDitto(bundleDirectory, options.destinationPath);
+    await rm(options.destinationPath, { force: true });
+    await runArchiver(bundleDirectory, options.destinationPath);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }
@@ -52,7 +53,7 @@ export function buildDiagnosticReport(metadata: DiagnosticMetadata): string {
     `Electron: ${metadata.electronVersion}`,
     `Harness: ${metadata.harnessVersion}`,
     `Architecture: ${metadata.architecture}`,
-    `macOS: ${metadata.macOSVersion}`,
+    `Operating system: ${metadata.operatingSystem}`,
     `Failure: ${metadata.failureCode}`,
     `Details: ${sanitize(metadata.failureDetails, metadata.userHome)}`,
     '',
@@ -81,19 +82,44 @@ function sanitize(value: string, userHome: string): string {
   return userHome.length > 1 ? redacted.replaceAll(userHome, '~') : redacted;
 }
 
-async function runDitto(source: string, destination: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const process = spawn(
-      '/usr/bin/ditto',
-      ['-c', '-k', '--sequesterRsrc', '--keepParent', source, destination],
-      { stdio: 'ignore' },
+async function runArchiver(source: string, destination: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await runArchiveProcess(
+      'powershell.exe',
+      [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory($env:DSH_DIAGNOSTIC_SOURCE,$env:DSH_DIAGNOSTIC_DESTINATION,[IO.Compression.CompressionLevel]::Optimal,$true)',
+      ],
+      {
+        ...process.env,
+        DSH_DIAGNOSTIC_SOURCE: source,
+        DSH_DIAGNOSTIC_DESTINATION: destination,
+      },
     );
-    process.once('error', reject);
-    process.once('close', (code) => {
+    return;
+  }
+  await runArchiveProcess(
+    '/usr/bin/ditto',
+    ['-c', '-k', '--sequesterRsrc', '--keepParent', source, destination],
+  );
+}
+
+async function runArchiveProcess(
+  command: string,
+  args: readonly string[],
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, { stdio: 'ignore', ...(env === undefined ? {} : { env }) });
+    child.once('error', reject);
+    child.once('close', (code) => {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`ditto exited with code ${String(code)}`));
+        reject(new Error(`${command} exited with code ${String(code)}`));
       }
     });
   });

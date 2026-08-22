@@ -1,4 +1,4 @@
-name: Release macOS
+name: Release desktop (macOS + Windows)
 
 on:
   workflow_dispatch:
@@ -9,6 +9,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -26,6 +27,10 @@ env:
   MACOS_SIGN_IDENTITY: 'Developer ID Application: HanTao Cao (7G6J4S76PN)'
 
 jobs:
+  windows:
+    name: Build and verify Windows EXE + portable ZIP
+    uses: ./.github/workflows/windows-candidate.yml
+
   quality:
     name: Quality and version gate
     runs-on: macos-15
@@ -315,7 +320,9 @@ jobs:
 
   release:
     name: Create verified draft
-    needs: verify_final
+    needs:
+      - verify_final
+      - windows
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -323,6 +330,17 @@ jobs:
         with:
           name: macos-notarized-artifacts
           path: release-assets
+      - uses: actions/download-artifact@v5
+        with:
+          name: windows-x64-unsigned-exe-and-portable
+          path: windows-assets
+      - name: Verify and select public Windows assets
+        run: |
+          (cd windows-assets && shasum -a 256 -c SHA256SUMS)
+          node -e "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync('windows-assets/windows-candidate-manifest.json','utf8'));if(m.schemaVersion!==1||m.version!==process.env.RELEASE_VERSION||m.target!=='win32-x64'||m.gitCommit!==process.env.GITHUB_SHA)throw new Error('Windows candidate does not match this release');const names=m.artifacts.map(a=>a.file);if(!names.includes('DeepSeek-YukiRyou-Setup.exe')||!names.includes('DeepSeek.YukiRyou-win32-x64-'+process.env.RELEASE_VERSION+'-portable.zip'))throw new Error('Windows public assets are missing')"
+          cp windows-assets/DeepSeek-YukiRyou-Setup.exe "release-assets/${ARTIFACT_NAME}-${RELEASE_VERSION}-win32-x64-Setup.exe"
+          cp "windows-assets/${ARTIFACT_NAME}-win32-x64-${RELEASE_VERSION}-portable.zip" release-assets/
+          (cd release-assets && shasum -a 256 "${ARTIFACT_NAME}-${RELEASE_VERSION}-win32-x64-Setup.exe" "${ARTIFACT_NAME}-win32-x64-${RELEASE_VERSION}-portable.zip" > SHA256SUMS-Windows.txt)
       - name: Create immutable draft release
         env:
           GH_TOKEN: ${{ github.token }}

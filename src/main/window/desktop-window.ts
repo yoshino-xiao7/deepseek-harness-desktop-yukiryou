@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell, WebContentsView } from 'electron';
+import { BrowserWindow, clipboard, ipcMain, shell, WebContentsView } from 'electron';
 
 import type { RuntimeFailure } from '../runtime/runtime-supervisor.js';
 import {
@@ -51,6 +51,11 @@ import {
   type TrustedHarnessOrigin,
 } from './trusted-navigation.js';
 import { createProductWindowReadiness } from './product-window-readiness.js';
+import {
+  loadProductDocument,
+  navigateProductDocument,
+  resetProductDocument,
+} from './product-document-navigation.js';
 import { createProductWebPreferences } from './product-web-preferences.js';
 import {
   createHarnessProductBridge,
@@ -62,6 +67,34 @@ import {
   WORKSPACE_REVIEW_SHORTCUT_CHANNEL,
   workspaceReviewShortcut,
 } from '../../shared/workspace-review-shortcuts.js';
+import {
+  SHELL_CLIPBOARD_WRITE_CHANNEL,
+  validatedShellClipboardText,
+} from '../../shared/shell-clipboard.js';
+import {
+  WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL,
+  WORKSPACE_REFERENCE_TO_HARNESS_CHANNEL,
+  validatedWorkspaceConversationReference,
+  workspaceConversationInsertion,
+} from '../../shared/workspace-conversation-reference.js';
+import type {
+  ManagedPluginPreviewRequest,
+  ManagedPluginPreviewResult,
+  ManagedPluginExecuteRequest,
+  ManagedPluginExecuteResult,
+} from '../../shared/managed-plugin-preview.js';
+import type {
+  ManagedPluginInventoryRequest,
+  ManagedPluginInventoryResult,
+  ManagedPluginRemoveRequest,
+  ManagedPluginRemoveResult,
+  ManagedPluginSetEnabledRequest,
+  ManagedPluginSetEnabledResult,
+  ManagedPluginRollbackRequest,
+  ManagedPluginRollbackResult,
+} from '../../shared/managed-plugin-inventory.js';
+
+const PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS = 15_000;
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
@@ -93,6 +126,24 @@ export interface DesktopWindowOptions {
   ) => Promise<WorkspaceReviewResponse>;
   readonly onHarnessReviewIntent: (intent: ChangedFileReviewIntent) => Promise<WorkspaceReviewResponse>;
   readonly onRendererCrash: (target: RendererTarget, reason: string) => void;
+  readonly onManagedPluginPreview: (
+    request: ManagedPluginPreviewRequest,
+  ) => Promise<ManagedPluginPreviewResult>;
+  readonly onManagedPluginExecute: (
+    request: ManagedPluginExecuteRequest,
+  ) => Promise<ManagedPluginExecuteResult>;
+  readonly onManagedPluginInventory: (
+    request: ManagedPluginInventoryRequest,
+  ) => Promise<ManagedPluginInventoryResult>;
+  readonly onManagedPluginRemove: (
+    request: ManagedPluginRemoveRequest,
+  ) => Promise<ManagedPluginRemoveResult>;
+  readonly onManagedPluginSetEnabled: (
+    request: ManagedPluginSetEnabledRequest,
+  ) => Promise<ManagedPluginSetEnabledResult>;
+  readonly onManagedPluginRollback: (
+    request: ManagedPluginRollbackRequest,
+  ) => Promise<ManagedPluginRollbackResult>;
 }
 
 export function createDesktopWindow(
@@ -160,6 +211,12 @@ class ElectronDesktopWindow implements DesktopWindow {
       onFrameHealth: (health) => {
         this.#productReadiness.acceptFrameHealth(health);
       },
+      onManagedPluginPreview: options.onManagedPluginPreview,
+      onManagedPluginExecute: options.onManagedPluginExecute,
+      onManagedPluginInventory: options.onManagedPluginInventory,
+      onManagedPluginRemove: options.onManagedPluginRemove,
+      onManagedPluginSetEnabled: options.onManagedPluginSetEnabled,
+      onManagedPluginRollback: options.onManagedPluginRollback,
     });
     this.#window.contentView.addChildView(this.#harnessView);
     this.#harnessView.setVisible(false);
@@ -181,7 +238,9 @@ class ElectronDesktopWindow implements DesktopWindow {
     });
     this.#harnessView.webContents.on(
       'did-finish-load',
-      () => this.#productBridge.restoreAfterLoad(),
+      () => {
+        this.#productBridge.restoreAfterLoad();
+      },
     );
     this.#harnessView.webContents.on(
       'render-process-gone',
@@ -209,11 +268,17 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   async showHarness(origin: string): Promise<void> {
     const trustedOrigin = createTrustedHarnessOrigin(origin);
+    const currentProductUrl = this.#harnessView.webContents.getURL();
     this.#trustedOrigin = trustedOrigin;
     this.#productBridge.setTrustedOrigin(trustedOrigin);
     this.#productReadiness.begin(trustedOrigin);
     this.#rendererRecovery.reset('harness');
-    await this.#harnessView.webContents.loadURL(trustedOrigin);
+    await loadProductDocument(
+      () => navigateProductDocument(this.#harnessView.webContents, trustedOrigin),
+      PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS,
+      () => resetProductDocument(this.#harnessView.webContents),
+      currentProductUrl !== '' && currentProductUrl !== 'about:blank',
+    );
     const productState = this.#productReadiness.documentLoaded();
     if (productState.kind !== 'ready') {
       throw new Error('Legacy product window did not reach document readiness');
@@ -369,6 +434,33 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   #installCompanionBridge(): void {
     this.#window.webContents.on('ipc-message', (_event, channel, value: unknown) => {
+      if (channel === SHELL_CLIPBOARD_WRITE_CHANNEL) {
+        const text = validatedShellClipboardText(value);
+        if (text !== undefined) clipboard.writeText(text);
+        return;
+      }
+      if (channel === WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL) {
+        const reference = validatedWorkspaceConversationReference(value);
+        const workspace = this.#companionState.workspace;
+        if (
+          reference === undefined ||
+          workspace.status !== 'ready' ||
+          reference.sessionId !== workspace.sessionId ||
+          reference.workspaceId !== workspace.workspaceId ||
+          this.#harnessView.webContents.isDestroyed()
+        ) return;
+        this.#harnessView.webContents.send(
+          WORKSPACE_REFERENCE_TO_HARNESS_CHANNEL,
+          workspaceConversationInsertion(reference),
+        );
+        if (this.#companionState.previewOpen) {
+          this.#companionState = { ...this.#companionState, previewOpen: false };
+          this.#sendCompanionState();
+          this.#layoutHarnessView(true);
+        }
+        this.#harnessView.webContents.focus();
+        return;
+      }
       if (channel !== COMPANION_COMMAND_CHANNEL) return;
       const command = validatedCompanionCommand(value);
       if (command === undefined) return;
@@ -396,12 +488,13 @@ class ElectronDesktopWindow implements DesktopWindow {
       if (input.type !== 'keyDown') return;
       const shortcut = workspaceReviewShortcut(input);
       if (shortcut === undefined || shortcut === 'close-preview') return;
+      if (shortcut === 'preview-find' && !this.#companionState.previewOpen) return;
       event.preventDefault();
       const deliver = (): void => {
         if (this.#window.webContents.isDestroyed()) return;
         this.#window.webContents.send(WORKSPACE_REVIEW_SHORTCUT_CHANNEL, shortcut);
       };
-      if (shortcut === 'file-search' && !this.#window.webContents.isFocused()) {
+      if ((shortcut === 'file-search' || shortcut === 'preview-find') && !this.#window.webContents.isFocused()) {
         this.#window.webContents.once('focus', deliver);
         this.#window.webContents.focus();
       } else {

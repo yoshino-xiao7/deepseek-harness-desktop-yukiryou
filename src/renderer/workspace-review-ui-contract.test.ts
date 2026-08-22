@@ -48,4 +48,44 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/data-testid="review-search"[\s\S]*?aria-keyshortcuts="Meta\+P Control\+P"/);
     expect(html).toMatch(/data-testid="preview-close"[^>]+aria-keyshortcuts="Escape"/);
   });
+
+  it('provides explicit sequential review controls and progress', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="preview-review-bar"[^>]+aria-label="逐文件审阅"/);
+    expect(html).toMatch(/data-testid="review-previous"[^>]+aria-label="上一个变更"/);
+    expect(html).toMatch(/data-testid="review-toggle-viewed"/);
+    expect(html).toMatch(/data-testid="review-next"[^>]+aria-label="下一个变更"/);
+  });
+
+  it('provides accessible in-preview find controls', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="preview-find-toggle"[^>]+aria-keyshortcuts="Meta\+F Control\+F"/);
+    expect(html).toMatch(/data-testid="preview-find-input"[^>]+aria-label="查找文本"/);
+    expect(html).toMatch(/data-testid="preview-find-previous"[^>]+aria-label="上一个匹配项"/);
+    expect(html).toMatch(/data-testid="preview-find-next"[^>]+aria-label="下一个匹配项"/);
+    expect(html).toMatch(/data-testid="preview-find-progress"[^>]+aria-live="polite"/);
+  });
+
+  it('provides a line-aware preview copy menu', async () => {
+    const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+
+    expect(html).toMatch(/data-testid="preview-copy-menu"/);
+    expect(html).toMatch(/data-copy-target="path">复制相对路径/);
+    expect(html).toMatch(/data-copy-target="line" disabled>复制行号/);
+    expect(html).toMatch(/data-copy-target="path-line" disabled>复制 路径:行号/);
+    expect(html).toMatch(/data-testid="preview-copy-feedback"[^>]+aria-live="polite"/);
+  });
+
+  it('gives body-level workspace overlays an explicit dark foreground', async () => {
+    const styles = await readFile(new URL('./styles.css', import.meta.url), 'utf8');
+
+    expect(styles).toMatch(
+      /:root\[data-appearance-scheme="dark"\]\s*\{[^}]*--companion-overlay-foreground:\s*#f4f6fb/s,
+    );
+    expect(styles).toMatch(
+      /\.workspace-context-menu button\s*\{[^}]*color:\s*var\(--companion-overlay-foreground\)/s,
+    );
+  });
 });

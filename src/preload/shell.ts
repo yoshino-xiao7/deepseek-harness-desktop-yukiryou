@@ -28,6 +28,14 @@ import {
   type WorkspaceReviewShortcut,
   validatedWorkspaceReviewShortcut,
 } from '../shared/workspace-review-shortcuts.js';
+import {
+  SHELL_CLIPBOARD_WRITE_CHANNEL,
+  validatedShellClipboardText,
+} from '../shared/shell-clipboard.js';
+import {
+  WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL,
+  validatedWorkspaceConversationReference,
+} from '../shared/workspace-conversation-reference.js';
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
@@ -80,6 +88,18 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
   resize: (width: number): void => {
     const command = validatedCompanionCommand({ kind: 'resize', width });
     if (command !== undefined) ipcRenderer.send(COMPANION_COMMAND_CHANNEL, command);
+  },
+  writeClipboard: (value: unknown): boolean => {
+    const text = validatedShellClipboardText(value);
+    if (text === undefined) return false;
+    ipcRenderer.send(SHELL_CLIPBOARD_WRITE_CHANNEL, text);
+    return true;
+  },
+  addToConversation: (value: unknown): boolean => {
+    const reference = validatedWorkspaceConversationReference(value);
+    if (reference === undefined) return false;
+    ipcRenderer.send(WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL, reference);
+    return true;
   },
   request: async (value: unknown): Promise<WorkspaceReviewResponse> => {
     const request = validatedWorkspaceReviewRequest(value);

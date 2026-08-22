@@ -332,17 +332,37 @@ macOS 和 Windows 的 CSS 只根据 `WindowChromeDescriptor` 提供的有限 `da
 
 新增 `runtime/desktop-market-plugin/`，包含 Host 与 Client 两部分。Electron main 不解析目录、不请求 registry、不运行 package manager，也不持有市场状态。
 
-Client 注册以下 surface：
+Client 只注册一个产品入口：
 
 - `settings.plugins.tab`：完整市场与插件管理页。
-- `sidebar.footer.action`：市场入口。
-- `shell.overlay`：发现、详情与确认弹窗。
 
-若固定 Runtime 缺少某个 surface，Phase 0 必须选择已有正式 seam；不得通过 DOM append 或 selector 挂载核心入口。
+市场内部由同一个页面 Module 承载“发现、可安装、已安装、来源”四个视图，并在该 Module 内打开详情、安装预览、确认和结果弹窗。不得再增加侧栏入口、独立页面、`shell.overlay` 入口或 DOM selector 挂载点。入口视觉继续遵循本产品的设置结构，其他市场能力按下述统一合同实现。
+
+#### 完成功能合同
+
+1. **发现**：展示当前来源的完整标准化索引，支持搜索、多分类筛选、排序、分页和详情；详情显示说明、发布者声明、源码仓库、来源、读取时间与明确的信任提示。
+2. **可安装**：只展示 Host 从完整索引中 fail closed 生成的结构候选。候选必须具有规范 repository、精确稳定 npm identity 和可验证的来源证据；卡片本身不表示已经通过 npm 或代码安全审核。
+3. **已安装**：把官方 Runtime inventory、Market receipt 和当前 direct bundle 状态合并为统一只读快照。只有合法 receipt 仍匹配的受管插件允许卸载；可变 direct bundle 只能在 Loader 合同允许时启用或停用。
+4. **来源**：允许用户添加、选择、排序和移除符合版本化目录合同的来源；同一时间只浏览一个来源，不存在静默 fallback、隐式推荐或跨来源混排。
+5. **详情与操作**：点击任何卡片打开同一个详情弹窗；Host preview 成功后才转入精确安装确认，失败时保留为只读详情并解释不可安装原因。
+6. **安装结果**：受管修改串行执行，成功后明确提供“稍后重启”和“立即重启”；失败不得留下被声明为已安装的 receipt。
+
+功能对齐只约束用户可观察行为与状态语义，不复制外部实现。目录、registry、profile、恢复和 renderer 权限仍必须经过本项目自己的 Module Interface 与测试门。
+
+#### 融合原则
+
+- **吸收成熟的产品体验**：四视图、完整本地索引、多来源管理、统一详情弹窗、安装资格解释、已安装所有权、精确确认和重启引导都作为完成态能力。
+- **保留本产品入口与视觉**：市场只存在于“设置 → 插件”，复用当前主题 token、长名称收缩、深浅主题和中英文文案，不增加第二套导航结构。
+- **保留更严格的执行边界**：renderer 永远不能提交 package manager、命令、cwd、环境变量或目标路径；Host 也不执行目录命令，只消费经过标准化的 identity。
+- **保留固定 Runtime 与不可变发行物**：任何用户插件都不能修改 `.app` 或 bundled Runtime，只能进入专用 mutable profile extension。
+- **保留可验证安装图**：preview 固定完整依赖图、tarball integrity 和内容字节；execute 不重新在线解析版本，也不允许运行 lifecycle script。
+- **保留有界恢复**：receipt、配置快照、启动健康门、临时禁用和最多一次自动重启必须先于公开安装能力完成。
+- **跨平台共用合同**：目录、inventory、receipt 和恢复状态机在 macOS 与 Windows 共用；只有窗口、路径、进程 shim、签名和安装包通过平台 Adapter 分离。
+- **分阶段开放**：先交付只读完整市场，再开放 preview，最后才开放受管 mutation；任何阶段未通过恶意响应、崩溃恢复和升级测试都不得提前显示可操作按钮。
 
 #### 目录合同
 
-市场允许多个保存的目录来源，但同一时间只浏览一个已选择来源。标准目录至少包含：
+市场允许多个由用户拥有并保存的目录来源，但同一时间只浏览一个已选择来源。固定 GitHub topic 实现降级为一个内置 Adapter，不再是绕过来源选择的特殊市场后端。标准目录至少包含：
 
 ```ts
 type CatalogItem = {
@@ -366,10 +386,12 @@ type CatalogItem = {
 
 远程目录响应必须经过版本化 JSON Schema 校验和标准化。Adapter 只映射数据，不能返回 JavaScript、HTML、shell 命令或可执行安装参数。
 
+自定义来源首版采用单响应 JSON v1：顶层只接受 `schemaVersion: 1`、非空 `revision` 和最多 10,000 条 `items`；每项必须具备稳定 ID、名称、简介、规范 GitHub repository、发布者声明和有界分类，可选 `icon` 必须是无凭据、无自定义端口、无 fragment 的 HTTPS URL。来源提供的 package、命令、脚本、HTML 或其他扩展字段均不进入标准快照，自定义来源项目固定为 `browse-only / custom-source-unverified`；`icon` 原始 URL 也只留在 Host 内部快照，Client 只能取得媒体代理生成的不透明同源引用。来源记录最多 20 个，只保存规范化 HTTPS URL、显示名、启用态和顺序；内置来源不进入可变记录，因此不能被停用或删除。
+
 网络策略：
 
 - 只允许 HTTPS，无用户名、密码、fragment 和非标准端口。
-- DNS 解析后拒绝 loopback、私网、link-local、multicast 和其他保留地址；实际 TCP/TLS 连接必须绑定到本次已验证 IP，同时保留原 hostname 做 SNI 与证书校验，禁止在校验后再次自由解析形成 DNS rebinding/TOCTOU。
+- DNS 解析后拒绝 loopback、私网、link-local、multicast 和其他保留地址；固定 GitHub Adapter 可兼容 macOS TUN 代理使用的 `198.18.0.0/15` synthetic address，但 host、443 端口、路径、SNI 和证书校验必须全部保持编译期固定。实际 TCP/TLS 连接绑定到本次已验证 IP，禁止在校验后再次自由解析形成 DNS rebinding/TOCTOU。
 - redirect 每跳重新解析、校验并绑定目标 IP，最多 3 跳。
 - 单响应最大 2 MiB，连接、首字节和总请求分别设置超时。
 - 图片由 Host 校验和代理；renderer 不直接请求任意远程图片。
@@ -420,22 +442,34 @@ UI 规则：
 
 1. 目录 package 身份、repository 与 registry metadata 一致。
 2. 版本是精确稳定 SemVer，且没有 deprecated 标记。
-3. 解析完整 transitive dependency graph；根包和任一依赖都不包含 `preinstall`、`install`、`postinstall` 或 `prepare`。
+3. 解析完整 transitive dependency graph；根包和任一依赖都不包含 registry 安装会执行的 `preinstall`、`install` 或 `postinstall`。`prepare` 只在打包、本地/link 或非 registry 来源等语境执行；首版已拒绝这些来源，不能把 registry metadata 中的 `prepare` 误报成 consumer install script。
 4. Node、Harness/Cordis 和当前平台兼容。
 5. tarball 为官方 HTTPS 地址并提供合法 SHA-512 integrity。
 6. package 声明合法 DSH bundle，安装后路径仍位于 package 内。
 7. 当前 App Version、Runtime Version、profile generation 和 blocklist 没有变化。
 8. 把每个依赖的 name、精确 version、tarball URL、SHA-512 integrity、platform metadata 和 lifecycle scripts 归一化为不可变安装图，并生成 frozen lock；`previewId` 必须绑定该图和所有 tarball 字节，不能在 execute 阶段重新解析版本范围。
 
+当前下版本分支已落地上述第 1 至 6 项以及第 8 项的冻结部分。`DependencyGraphResolver` Module 通过窄 Interface 固定稳定 SemVer、递归验证全图并生成绑定 `platform/arch/Node` 的确定性图 hash；`RuntimeSnapshot` Adapter 从 production lock 只提取顶层 package identity，Peer 检查会拒绝必需包缺失、版本不满足或提供者歧义，并允许显式 optional Peer 缺失。图兼容后，`ArtifactVerifier` Module 才会通过固定 registry Adapter 读取全部实际 tarball，复核 SHA-512、归档结构和真实 `package.json`，拒绝链接、路径穿越、重复路径、包内生命周期脚本、依赖声明漂移、package 自带 `node_modules` 和缺失 bundle，并写入 Runtime Home 内容寻址缓存；frozen lock 绑定 graph hash、依赖链接、全部内容 digest 与实际归档体积。真实 `@bocha-ai/dsh-web-search-bocha@0.1.0` 已完成 4 个包体/47 个文件验证。Renderer 只看到计数、graph/lock hash 与有界公开冲突原因，不接收 URL、缓存路径、原始 lock 或 staging plan。
+
+独立 `ManagedPluginInstaller` Module 已提供窄 `stage({ generation, plan })` Interface：它不联网、不调用 package manager、不执行 lifecycle script，也不切换当前 profile；只从已验证内容缓存逐包重新核对 SHA-512、package identity、依赖声明和体积预算，在隔离目录中构建 `.store/<node>/node_modules/<package>` 多版本布局，按 frozen graph 建立受控依赖链接，再以同文件系统 rename 原子发布不可变 generation。缓存缺失、plan 漂移、路径冲突或写盘失败都会清空临时 staging，已发布且 lock 相同的 generation 可幂等复用，冲突 generation 失败关闭。
+
+预检会把来源、精确 package identity、bundle、integrity、graph hash 与 lock hash 绑定成确定性的 opaque profile generation。Runtime Host 的 `ManagedPreviewVault` 私藏 frozen plan，只通过每次 Runtime 启动轮换且恒定时间比较的 token RPC 向 Electron main 发行短时一次性 capability；main 的 `RuntimeMarketClient` 对响应大小和 schema 失败关闭，`ManagedInstallTransaction` 只保存该 capability，并在首次写盘前消费自己的 token，顺序固定为远程 `stage -> PluginProfileBootstrap.prepare`。过期、重放、generation 不匹配和并发 mutation 均失败关闭，plan 从不进入 renderer 或 main。安装图同时冻结 package 的真实 peer 声明、provider、精确版本和 Runtime snapshot hash；installer 把 graph Peer 链接到 generation 内精确节点，只把 Runtime Peer 链接到 bundled `node_modules` 中名称/版本匹配且 realpath 未逃逸的包。
+
+`PluginProfileBootstrap` Module 在 Electron 启动 Harness 之前提供原子 `prepare/commit/recover`、receipt、临时 blocklist、未知编辑拒绝和中断恢复。它按 receipt 的 generation 从 `user-plugins/generations/<generation>/node_modules` 解析 bundle；AppCoordinator 先运行进程外 Bootstrap，再只把 receipt 授权、未被 blocklist 禁用且 realpath 仍位于对应 generation 内的 bundle 作为最后一组 `--patch` 传给 Runtime。受限 preload/IPC 的 Interface 只允许 Renderer 提交目录 identity 和一次性 previewId，main 负责 Runtime token 认证、限流、摘要投影、系统原生确认和单事务互斥；用户确认后会再次检查预览期限与 Runtime 身份，成功装配才安排试运行重启。Renderer 永远拿不到 staging Interface 或可复用的执行凭据。公开 Runtime inspection 的 `executionReady` 继续为 `false`，内部 Bootstrap 的 `mutationReady` 已为 `true`；这一区分保证网页不能绕开 main 原生确认门，同时让受管事务可以落地。
+
 execute 只消费 preview 阶段已校验并缓存的内容寻址 tarball，使用 frozen lock、offline 模式与 `--ignore-scripts` 安装。若缓存缺失、integrity 改变或依赖图与 preview 不一致，必须要求重新 preview；不能回退为在线重新解析。包含原生模块的插件还必须验证目标 `os/arch/libc` 和 tarball 内已有的预编译 artifact；任何依赖安装脚本下载或构建原生代码的包首版直接拒绝。首发只允许与当前发行匹配的 `darwin-arm64` 或 `win32-x64` 目标，不在用户机器上临时下载编译工具链或执行源码构建。
 
-`ManagedPluginInstaller` 在 preview 前应用硬预算：依赖节点最多 256 个，单个 tarball 压缩体积最多 32 MiB、全图压缩体积最多 128 MiB，解包后总计最多 512 MiB/20,000 个常规文件，依赖深度最多 16，归一化相对路径最多 240 UTF-8 bytes。下载和解包必须流式计数并在写盘前检查剩余磁盘预算；内容寻址缓存设总配额，只能 LRU 删除没有 receipt/preview 引用的对象。registry metadata 与 tarball fetch 继承目录网络策略：DNS pin、每跳 redirect 重验、连接/首字节/总超时、响应上限和 TLS hostname 校验均不可绕过。
+受管安装链应用硬预算：依赖节点最多 256 个，单个 tarball 压缩体积最多 32 MiB、全图压缩体积最多 128 MiB，解包后总计最多 512 MiB/20,000 个常规文件，依赖深度最多 16，归一化相对路径最多 240 UTF-8 bytes。verifier 会先在内存中有界解包并写入内容寻址缓存，staging 再按冻结的压缩、tar、文件和内容体积逐项复核。`ArtifactCache` Module 现在提供 512 MiB 硬配额、256 MiB 剩余磁盘保留、串行 cache mutation、读取时完整性复核与 LRU touch；只删除没有 verifier lease、有效 preview、pending 或 receipt 引用的对象，引用文件损坏和 digest 形状异常均停止回收。registry metadata 与 tarball fetch 继承目录网络策略：DNS pin、每跳 redirect 重验、连接/首字节/总超时、响应上限和 TLS hostname 校验均不可绕过。
 
-tar 解包在新建的不可执行 staging 根中完成，只接受 canonical package 前缀下的常规文件和目录；拒绝绝对路径、`..`、重复/大小写碰撞路径、NUL、超长路径、device/FIFO/socket、symlink 与 hardlink。每个 entry 打开与最终 rename 都重新验证 containment；任何预算或结构违规删除 staging、释放 preview 引用并失败关闭。hostile archive corpus、压缩炸弹、超长路径和 DNS/redirect 竞态属于 Phase 3 阻塞测试。
+tar 解包在新建的 staging 根中完成，只接受 canonical package 前缀下的常规文件和目录；拒绝绝对路径、`..`、重复/大小写碰撞路径、NUL、超长路径、device/FIFO/socket、symlink、hardlink 与 package 自带 `node_modules`。生成目录和父路径拒绝 symlink；文件以受限 mode 和 `wx` 写入，依赖链接只由冻结图生成，最终通过同文件系统 rename 原子发布。任何预算或结构违规都会删除 staging 并失败关闭。公开 execute 前仍需补齐 preview 引用释放、磁盘余量与 Windows junction 的真实平台验收。
 
 Renderer 只提交 `{ sourceRecordId, itemId }` 获取短时、一次性的 `previewId`，再提交 `previewId` 执行。它不能选择 package manager、cwd、argv、环境变量或目标路径。
 
 npm SHA-512 integrity 只证明下载字节与 registry metadata 一致，不证明发布者身份、代码安全或官方背书。目录中的 publisher/repository 字段是来源声明，UI 必须与已验证事实分开显示；若未来引入 Sigstore、registry provenance 或独立签名策略，应作为额外验证层和版本化 policy 交付，不能提前写成当前保证。
+
+受管版本更新不得建立独立更新器。首次安装、同版本重装和版本更新共用 `ManagedPreviewVault -> ManagedInstallTransaction -> PluginProfileBootstrap`；更新 preview 绑定当前 receipt 的 package/version/generation，执行前若 receipt 漂移则失败关闭。更新试运行失败时只 blocklist 失败的新 generation，恢复快照中的旧 receipt，并在下一次 launch plan 中重新加载旧稳定 generation；不得按 package 名把旧版本一并禁用。
+
+Legacy 产品文档导航采用“复位残留导航 + 15 秒单次超时 + 最多一次同源重试”的有界策略。每次尝试前先 `stop()` 并导航到 `about:blank`，再加载同一可信 origin，避免第二次尝试复用已经悬挂的同 URL 导航。主文档完成事件或对应 `loadURL()` 正常完成都可结束当次等待；产品 `WebContents` 显式关闭 `backgroundThrottling`，保证隐藏视图在冷启动阶段仍能推进导航与 Agent Runtime。第一次超时不能直接把已经 ready 的 Runtime 误报为 `spawn-failed`；第二次仍不完成时才进入恢复链，因而不会重新引入无限等待。
 
 #### 安装位置与恢复
 
@@ -445,12 +479,14 @@ npm SHA-512 integrity 只证明下载字节与 registry metadata 一致，不证
 ~/Library/Application Support/<ProductName>/runtime/
 ├── bundled-links/                 # 指向当前 App Version 的只读运行时
 ├── user-plugins/
-│   ├── package.json
-│   ├── pnpm-lock.yaml
-│   ├── pnpm-workspace.yaml
-│   └── node_modules/
+│   ├── .staging/                   # 失败时清理的同盘临时目录
+│   └── generations/
+│       └── gen-<sha256>/
+│           ├── .dsh-generation.json
+│           └── node_modules/       # root link + .store 多版本依赖布局
 └── plugin-management/
     ├── receipts.json
+    ├── blocklist.json
     ├── load-state.json
     └── recovery/
 ```
@@ -463,7 +499,7 @@ npm SHA-512 integrity 只证明下载字节与 registry metadata 一致，不证
 - 保存本地诊断，但不上传、不记录凭据和远程响应正文。
 - `node_modules` 不承诺事务回滚；恢复语义必须在 UI 和文档中准确说明。
 
-恢复不能依赖可能导致崩溃的 Market Host 自救。必须随包提供 `PluginProfileBootstrap`：它在任何用户插件加载前运行，且只接受 `prepare(generation)`、`commit(generation)`、`recover(generation, reason)` 三类类型化命令。Electron main 只持有不透明 generation 与全局启动重试预算，不解析目录、package、receipt 或 load-state；实际快照/禁用集合仍由 bootstrap 在 Runtime Home 内管理。Installer 在重启前先写原子 pending generation；AppCoordinator 只有同时收到 Runtime Host 和 Product Renderer 健康报告才调用 commit。若 Runtime 在 Market Host 建立 route 前退出或超时，AppCoordinator 调用 recover 后最多完整重启一次，该次数与全局 Runtime recovery 共用同一个预算，不能形成嵌套无限重试。Phase 0 必须验证 bootstrap 的加载顺序先于全部 user plugin；固定 Runtime 无法保证该顺序时，安装功能保持关闭。
+恢复不能依赖可能导致崩溃的 Market Host 自救。`PluginProfileBootstrap` 已实现为 Electron main 中独立于 Harness 的前置 Module：它只操作 Runtime Home 下固定、版本化、限制大小且拒绝 symlink 的 `plugin-management` 状态文件，并提供安装 `prepare`、精确 `prepareRemoval`/`prepareEnabled`/`prepareRollback`、`commit`、`recover` 和只读 inventory。安装 prepare 会自行重算并核对绑定 bundle/graph/lock 的 generation；卸载、启停与回滚 prepare 则冻结当前 receipt 集合与目标 package/version/generation。所有动作都会在原子发布带 `install | remove | set-enabled | rollback` 类型的 pending 前保留 recovery snapshot。`prepareRuntimeLaunch` 只允许 pending 从 `prepared` 原子进入一次 `trial-launched`：安装将候选加入 launch plan，卸载或停用安全移除 Bootstrap 自有 profile 链接并排除目标，启用则恢复链接并加入目标，回滚则只切换到上一已验证 generation。`commit` 只接受已经试启动且 receipt 状态未漂移的事务；`recover` 只接受事务前或事务自身可推导的中间状态，遇到未知编辑失败关闭。正常升级只保留一个上一已验证版本；成功回滚会消费该回滚点，失败或中断恢复当前版本、receipt 与 profile 链接。安装失败恢复 receipt 并临时 blocklist 候选；卸载和启停失败恢复 receipt、启用状态与 profile 链接，且不 blocklist 原有健康插件。用户重新完成核验并确认安装，或明确启用、回滚已停用/阻断的 receipt generation 时，可发起一次受控重试：试运行期间临时解除阻断，失败恢复旧 blocklist，成功才永久清除。每次启动由 Bootstrap 从 receipt、`enabled` 与 blocklist 生成窄 launch plan，逐个 realpath 验证 bundle 未逃逸受管 `node_modules`，然后 AppCoordinator 才把这些路径作为桌面 overlay 之后的最终 `--patch` 启动 Runtime。rc.8 同组条目并发启动，所以这里明确不依赖插件配置行顺序。Runtime Host 的受保护 Companion route ready 与 Product Renderer 的文档/Frame health 均完成后，AppCoordinator 才 commit；任一失败会 recover 并消费同一个全局恢复预算，随后完整重启。Legacy carrier 对产品文档导航另设 15 秒超时：新建空白视图直接加载；Runtime 重启且旧文档仍在时，首次加载前以及超时重试前都会 `stop()` 并导航到 `about:blank`，被中止旧导航产生的预期 `ERR_ABORTED` 不会误判为失败。若进程在标记 trial 后直接中断，下一次 `prepareRuntimeLaunch` 会先恢复而不会再次加载未确认的配置。receipt 受管安装、启用、停用、上一版本回滚和卸载入口均已闭环。
 
 ## Module 与 seam
 
@@ -477,7 +513,9 @@ npm SHA-512 integrity 只证明下载字节与 registry metadata 一致，不证
 | `DesktopCompanion` | Client command/snapshot | 面板状态、Workspace 请求、预览和取消 |
 | `Catalog` | Market Host route | 来源、Schema、Adapter、网络限制、缓存和索引 |
 | `PluginInventory` | Market Host route | 系统/受管/外部所有权、状态原因、允许动作 |
-| `ManagedPluginInstaller` | preview/execute | registry 复核、package manager、receipt、恢复和启动验证 |
+| `ManagedPluginInstaller` | `stage(generation, frozenPlan)` | 缓存复核、安全解包、多版本依赖布局、失败清理和 generation 原子发布 |
+| `ManagedPreviewVault` | authenticated Host RPC | frozen plan 私藏、短时 staging capability、过期/重放防护 |
+| `ManagedInstallTransaction` | `issue(stagingCapability)` / `execute(previewId)` | main 侧一次性 token、远程 staging Adapter 与 mutation 串行化 |
 | `PluginProfileBootstrap` | AppCoordinator opaque generation commands | 用户插件加载前的 pending/commit/recover、安全模式与单次重试协调 |
 
 目录网络和 npm registry 是 true external 依赖，分别通过受限 HTTP Adapter 接入并使用 mock Adapter 测试。文件系统、package manager 和配置存储是 local-substitutable 依赖，使用临时 Runtime Home 做集成测试。`DesktopLayout` 是纯 in-process Module，不对外暴露 Adapter。
@@ -531,6 +569,8 @@ runtime/
 ├── desktop-market-plugin/
 │   ├── index.js
 │   ├── client.js
+│   ├── artifact-verifier.js
+│   ├── managed-installer.js
 │   ├── package.json
 │   ├── contracts/
 │   ├── catalog/
@@ -561,7 +601,7 @@ Windows
 
 进程关闭同样按平台实现：macOS 使用已拥有的进程组语义；Windows 使用受所有权记录约束的 process tree/job object Adapter。禁止按进程名进行全局清理。
 
-## 双平台打包、签名与更新
+## 双平台打包与发行
 
 ### macOS 发行
 
@@ -572,19 +612,19 @@ Windows
 
 ### Windows 发行
 
-- 产物：首发固定使用 Electron Forge `@electron-forge/maker-squirrel`，发布 `Setup.exe`、`-full.nupkg` 和 `RELEASES`；便携 ZIP 仅供诊断，不进入自动更新 feed。
+- 产物：同一 GitHub Release 公开版本化的 Squirrel `Setup.exe` 与便携 ZIP；`-full.nupkg` 和 `RELEASES` 只留给 CI 安装生命周期验证，不作为用户下载入口。
 - 生命周期：main 入口在 `app.ready` 前处理 Squirrel install/update/uninstall/obsolete 事件，事件处理期间不启动 Harness Runtime。
-- 签名：使用组织持有的 Windows Authenticode 代码签名证书；私钥只存在于 CI Secret 或受管签名服务。
-- 安装验证：全新 Windows 11 VM 验证安装、覆盖升级、卸载、用户数据保留、开始菜单入口和实际启动。
-- 安全验证：检查 Authenticode、SmartScreen 下载链路、安装包 hash、可执行文件和原生 `.node` 架构。
-- 更新 feed 与资产名显式包含 `win32-x64`，不得与 macOS 共用模糊资产名。
+- 签名：早期 Beta 不接入 Authenticode；Release Notes 必须明确未签名和 SmartScreen 风险，并提供独立 SHA-256。用户规模需要时再把签名作为附加发行门，不追溯覆盖旧资产。
+- 安装验证：全新 Windows runner 验证 EXE 首装、同版本修复、卸载、用户数据保留、开始菜单入口和实际启动；便携 ZIP 解压后也必须从精确产物启动并恢复会话。
+- 安全验证：检查来源 commit、安装包/ZIP hash、可执行文件和原生 `.node` 架构；未签名状态不得被描述为 Windows 信任背书。
+- 自动更新不作为首个未签名 Beta 的承诺；资产名显式包含 `win32-x64`，不得与 macOS 共用模糊名称。
 
 推荐发布拓扑：
 
 ```text
 version tag
 ├── macOS build -> sign -> remote verify -> notarize -> final verify
-├── Windows build -> sign -> clean-VM install/upgrade/launch verify
+├── Windows build -> EXE + portable ZIP -> clean-runner lifecycle/launch verify
 └── release manifest
     ├── commit
     ├── App/Runtime version
@@ -623,6 +663,8 @@ version tag
 - 已把 Harness 的 preload、`nodeIntegration: false`、`contextIsolation: true`、`sandbox: true` 与 `webSecurity: true` 收敛到所有 Product carrier 共用的安全 Module；现有 Legacy `WebContentsView` 已改为消费该 Interface。
 - 已把产品 webContents 的可信导航、HTTPS 外开、权限/下载拒绝、更新命令与状态重放、余额请求竞态、Harness Context 限流去重、Review intent 和 Frame health 收敛到 `HarnessProductBridge` 深 Module；Legacy 与 Integrated 共用该 Module。
 - 固定 Runtime 已同时携带但隔离两份装配 patch：Legacy 只加载 Settings/Companion，Integrated 才额外加载 Frame prototype；`runtime:verify` 强制检查 Legacy 不含 Frame、Integrated 必须含 Frame，保证回退只需切换载体而不是改写安装内容。
+- 插件管理 Phase 0 已开始复用 rc.8 官方 `pluginInventory.list()` 只读快照，并通过加法型 `settings.plugins.tab` 提供来源、状态和不可操作原因说明。该阶段所有动作集合保持为空：不联网、不安装、不修改 Loader；系统/依赖标签只表示部署来源，不宣称安全隔离。
+- 只读目录已建立独立 `DesktopMarketPlugin` Module：Host 通过 `Catalog.read({ sourceId, refresh })` 隐藏来源扫描、固定数据版本、schema 标准化、5 分钟内存缓存、24 小时持久缓存和同源并发请求合并。`CatalogSnapshotStore` Adapter 只在受信任的 Runtime Home 固定子目录读写枚举来源，使用同目录临时文件原子替换；载入快照按白名单 schema 重建而不信任磁盘 JSON，损坏、错源、未来时间、符号链接或超限文件均失败关闭。完整来源必须遍历全部分页后一次性发布索引；来源报告总数、规范化索引数和完整性状态分别保留。只能返回有限窗口的来源明确标为 `truncated`，不得产生可安装候选。Client 通过同一官方设置 Slot 提供四视图、搜索、分类、分页、详情、来源选择及缓存新鲜度提示。目录没有 mutation 接口或可执行字段，并已在真实 TUN 网络、深色主题与长名称列表中完成开发版冒烟。
 
 Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独立 `RecoveryWindow`、共用 Product bridge 与 Frame 健康门。真实 macOS 评审确认它缺少产品所需的占位侧栏、自然拖动区和主题 contract，`shell.overlay` Workspace Review 已撤回。该路径只允许双开关内部 E2E，默认和单开关请求都使用 Legacy；上游 seam 未补齐前不得继续迁移产品 UI或作为生产默认路径。
 
@@ -657,28 +699,42 @@ Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独�
 ### Phase 4：只读插件市场
 
 - 实现版本化目录合同、受限 HTTP、来源存储、完整本地索引和媒体代理。
-- 实现发现、详情、来源和已安装 inventory。
+- 在唯一设置入口内实现发现、可安装、已安装、来源四视图及统一详情弹窗；Phase 4 的可安装仅展示结构资格与不可安装原因，不执行 profile mutation。
 - 首版不执行安装；明确显示系统、受管和外部所有权及停用原因。
+
+当前增量：四视图、统一详情、三种内置来源、完整分页索引、固定 provider revision、完整性/截断状态、结构化可安装候选、搜索/分类/分页、刷新/仓库跳转、installed inventory 说明、Host 持久化索引、失效缓存显式降级，以及自定义来源的添加/排序/停用/移除和原子恢复均已完成。媒体代理也已落地：目录中的远程图片 URL 只保存在 Host 快照中，Client 只收到不透明同源引用；Host 对每次跳转重新执行 DNS/IP 策略，限制响应类型与体积，再用 sharp 限制像素并重编码为无元数据 WebP。dshfind 与 1024Store 当前没有图片字段，因此继续使用文字占位；GitHub Topic 头像和自定义 JSON v1 的可选 `icon` 字段走代理。
 
 退出门：断网、无来源、恶意响应、超限响应和失效缓存均有明确且安全的 UI 状态。
 
 ### Phase 5：受管安装、启停、卸载与恢复
 
-- 实现 npm preview/execute、receipt、profile mutation 串行化和 blocklist。
-- 实现用户插件加载清单及启用/停用。
+- 把 Phase 4 的结构候选接入 npm preview/execute、精确确认、receipt、profile mutation 串行化和 blocklist。
+- 实现用户插件加载清单及 fail-closed 启用/停用；receipt 拥有的插件与外部 direct bundle 保持不同所有权语义。
 - 实现启动健康验证、配置恢复、单次自动重启和安全模式。
 - 将在线安装标为实验能力，完成至少一个 beta 周期后再默认开放。
+
+当前增量：安全预检已经贯通根包 metadata、完整传递依赖图、Runtime Peer 和真实 tarball。Renderer 只能提交 `{ sourceRecordId, itemId }`，Host 从已验证目录快照重新取得精确 identity；`DependencyGraphResolver`、`RuntimeSnapshot` 和 `ArtifactVerifier` 三个 Module 依次冻结版本、Peer provider、Runtime snapshot、包体与真实 `package.json`，然后写入内容寻址缓存并生成 frozen lock hash。`ManagedPluginInstaller.stage()` 已能从该缓存离线、无脚本地构建多版本隔离依赖布局，按冻结 provider 链接 graph/Runtime Peer，失败清理临时目录并原子发布不可变 generation。Host `ManagedPreviewVault`、token 认证 RPC、main `RuntimeMarketClient` 和 `ManagedInstallTransaction` 已贯通内部 transport 与 `stage -> prepare` 次序；无 token 的真实 rc.8 请求已验证返回 403，过期、重放、candidate 替换、并发和失败重试语义均有测试。AppCoordinator 已在每次 Runtime ready 后重新绑定 token、origin 和本地一次性 preview capability；产品 preload 提供受限预览、执行、只读 inventory 与精确启停、回滚、卸载方法，产品桥限制请求速率和共享 mutation 并发，main 再把 inspection 与 profile 状态投影成固定白名单摘要。精确原生确认后才允许 staging 与 Bootstrap prepare；开发版重启 Runtime，正式包重启应用。`ArtifactCache` 已用硬配额、磁盘余量、LRU 和 verifier/preview/pending/receipt（含上一验证版本）引用完成回收 seam，staging 返回的 cache digest 会经 main 严格校验后进入 Bootstrap 状态。独立 `PluginProfileBootstrap` 已实现原子 pending、receipt、blocklist、generation-scoped 受管 launch plan、只能消费一次的试启动和启动前恢复；pending 现区分 `install | remove | set-enabled | rollback`。`ManagedPluginRemoval`、`ManagedPluginActivation` 与 `ManagedPluginRollback` 仅接受当前 receipt 的精确 package/version/generation；升级保留一个上一健康 generation，回滚直接复用已核验包体并在成功后消费回滚点。卸载与停用试启动会移除 Bootstrap 自有 profile 链接并生成不含目标插件的新 launch plan，启用或回滚则恢复对应链接，双健康后才提交 receipt 变化，失败或中断恢复 receipt、启用状态、链接和原配置。包体与 generation 不在交互中直接删除，而由引用感知的缓存回收处理。显式安装、启用或回滚重试可在事务内临时解除 blocklist，并保留失败恢复语义。AppCoordinator 在启动 Runtime 前完成所有状态读取与 realpath containment 校验，把允许的 bundle 作为最终 `--patch`，并只在 Host 与 Product Renderer 双健康后 commit。Legacy 产品导航用主文档完成事件或对应 `loadURL()` 正常完成收敛；失败重试会先用 `about:blank` 真正复位空白或陈旧的 WebContentsView，隐藏视图关闭后台节流，再进入同一恢复链。公开 Host inspection 的 `executionReady` 继续固定为 `false`，页面不能绕过 main 直接执行 profile mutation。已安装页把 rc.8 Runtime inventory 与校验后的 receipt/blocklist 摘要合并，精确区分系统、依赖、受管和外部插件，并显示受管版本、格式化时间、实际加载状态、上一可回滚版本与自动恢复记录；只有 receipt 所有者提供启用/停用、上一版本回滚和安全卸载。
+
+真实失败演练已经通过：开发目录提供健康基线 `@dsh-desktop/development-install-fixture@1.0.3` 和顶层立即抛错的更新候选 `1.0.4-failure.1`，二者走与社区包相同的目录身份、安全预检、包体缓存、原生确认、staging、Bootstrap 与重启链。失败候选让真实 Harness Loader 在 ready 前退出后，Host 恢复基线 receipt/profile、以 `runtime-unhealthy` 阻断失败 generation，并只执行一次恢复重启；随后 Runtime 与产品文档均恢复健康，已安装页显示基线版本和自动恢复记录。开发 adapter 按来源边界路由全部 fixture identity，正式 vendor/verify 策略仍保证测试 fixture 不进入发行包。
 
 退出门：任何失败路径都不能修改 bundled Runtime，不能执行目录命令，不能进入无限重启。
 
 ### Phase 6：移除 legacy 模式
 
 - 完成升级、长期运行、renderer crash、Runtime crash 和恶意插件 fixture 验证。
-- 完成 Windows 11 x64 的安装、签名、升级、卸载、自动更新和 packaged soak 流水线。
+- 完成 Windows 11 x64 的安装 EXE、便携 ZIP、卸载和 packaged smoke 流水线；跨版本升级与自动更新作为后续门禁，Authenticode 按实际分发规模接入。
 - 将 `isUpdaterSupported()` 扩展为显式支持 `darwin-arm64 | win32-x64`，并分别验证 feed URL 与资产选择。
 - Forge 配置按平台选择 `.icns`/`.ico`、DMG/ZIP/Squirrel maker 和签名参数，macOS 专用 `extendInfo` 不进入 Windows 包。
 - 删除 `LegacyDesktopProductCarrier`、其 `WebContentsView` 产品路径和环境开关。
 - 同步架构、安全、开发、测试、当前状态和发布说明。
+
+当前增量：发行壳的首个 Windows seam 已建立。Forge 的图标基址不带扩展名，由 Electron Packager 针对 macOS/Windows 分别解析 `.icns`/`.ico`；Squirrel.Windows Maker 与 Windows ZIP Maker 都只在 `win32` 生成对应产物，DMG 继续只属于 macOS。Windows 使用固定的 `DeepSeekYukiRyou` Squirrel package ID、`DeepSeek YukiRyou.exe` 与匹配的 AppUserModelID，主进程在正常启动前消费 Squirrel 生命周期事件。更新器目标白名单已从单一 `darwin-arm64` 扩展为 `darwin-arm64 | win32-x64`，Linux、macOS x64、Windows arm64 和开发态仍关闭。七尺寸 Windows ICO 由现有品牌 PNG 通过仓库脚本生成；Packager 对目标目录使用覆盖语义。
+
+Runtime 门禁现已完成代码侧扩展。schema 2 manifest 用 `darwin-arm64 | darwin-x64 | win32-x64` 完整 target 绑定 Node 归档和 SHA-256，不再让同一个 `x64` 键含糊代表宿主平台。`RuntimePlatformLayout` 统一提供 Node executable、npm CLI、PATH 根、node-pty prebuild/native files 和 PTY smoke command；应用启动也从该合同解析 Windows 的 `node/node.exe`。vendor 强制目标平台等于执行主机，Windows runner 使用锁定 Node ZIP、`npm_config_os=win32` 与 `npm_config_cpu=x64` 进行真实原生依赖装配，保留 ConPTY 所需的两个 `.node`、DLL 与 OpenConsole，裁剪其他平台及 PDB。verify 在 Windows 读取 PE header 确认 x64，并用目标 Node 实际加载 DSH、pnpm、node-pty、Sharp 和 Koffi；Darwin 的 lipo、spawn-helper execute bit 和 zsh smoke 保持原样。macOS arm64 与 Windows x64 都由各自宿主验证，跨主机装配会在网络和写盘前失败关闭。
+
+Windows CI 候选门禁现已落地为可复用工作流。它在 `windows-latest` x64 runner 上先执行 lint、typecheck、完整单元与集成测试，再由全新的干净 job 执行 host-native Runtime vendor/verify，并同时生成 Squirrel EXE 与便携 ZIP；随后分别从打包目录和解压后的精确 ZIP 启动/重启应用。候选冻结器要求品牌 `Setup.exe`、一个 `-full.nupkg`、`RELEASES` 和精确版本 portable ZIP，验证 `RELEASES` 绑定后生成带 package version、`win32-x64` target、Git commit、逐文件字节数和 SHA-256 的 manifest。普通 PR 只上传短期候选；桌面发行工作流复用同一门禁，只选择版本化 EXE、便携 ZIP 和独立 SHA-256 清单加入与 macOS 相同的 Draft Release。
+
+冻结候选之后，CI 还会运行真实 Squirrel 生命周期门禁：执行 `Setup.exe --silent`，等待安装目录和快捷方式出现，从实际安装路径启动应用并复跑会话恢复测试，然后执行同版本修复安装、再次启动和 `Update.exe --uninstall --silent`。卸载必须移除可运行主程序、更新包、快捷方式和“程序与功能”注册项，同时保留带随机 nonce 的应用用户数据标记。旧 Squirrel 会在部分 Windows 环境留下 `.dead`、`Update.exe`、`squirrel.exe` 和 V8 snapshot 自清理墓碑；门禁只接受这组精确残留，任何产品文件或额外条目均失败。这个门禁刻意把当前能力称为“修复安装”而非“覆盖升级”；跨版本升级、自动更新和独立 Windows 11 客户端验收继续作为后续质量工作，不阻塞明确标注未签名的早期 Beta。
 
 ## 测试与验收
 
@@ -711,10 +767,10 @@ Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独�
 | --- | --- | --- |
 | 首发架构 | arm64 | x64 |
 | 最低系统 | macOS 14 | Windows 11 |
-| 安装 | DMG、ZIP | Squirrel Setup.exe、诊断 ZIP |
+| 安装 | DMG、ZIP | Squirrel Setup.exe、便携 ZIP |
 | 原生 chrome | hiddenInset、traffic lights、vibrancy | titleBarOverlay、caption buttons、Mica/opaque |
-| 签名 | Developer ID + notarization | Authenticode |
-| 必测升级 | 上一公开版本覆盖安装 | 上一公开版本安装包升级 |
+| 签名 | Developer ID + notarization | 早期 Beta 未签名并披露；后续可选 Authenticode |
+| 必测升级 | 上一公开版本覆盖安装 | 首版验证同版本修复；跨版本升级后续补齐 |
 | 必测显示 | Retina、外接屏、全屏 | 100–200% DPI、多显示器、最大化 |
 | Runtime | darwin-arm64 独立闭包 | win32-x64 独立闭包 |
 
@@ -731,7 +787,7 @@ Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独�
 7. 用户插件永不修改 bundled Runtime，安装和首次启动失败存在有界恢复路径。
 8. legacy 路径删除前，集成模式至少经过一个完整 beta 周期和 packaged soak 验证。
 9. 同一 Desktop Frame 与市场 Client 在 macOS、Windows 不分叉；平台差异只存在于已列出的 Adapter。
-10. macOS 与 Windows 都具备签名、干净机器安装、升级、启动和更新验证回执。
+10. macOS 具备签名、公证、升级、启动和更新验证回执；Windows 未签名 Beta 具备来源/hash、EXE 生命周期和便携 ZIP 启动回执，并明确披露尚未完成的跨版本更新边界。
 11. `DesktopProductCarrier` 是唯一理解 Electron 载体切换的 main Module，`DesktopFramePlugin` 是唯一理解 Integrated 加法型装配的 Runtime Module；固定 rc.8 的 root 始终归官方 `AppFrame` 所有。
 12. 运行时代码不新增 DOM selector、页面 MutationObserver 或编译 bundle 字符串补丁。
 

@@ -1,4 +1,4 @@
-name: Resume notarized macOS release
+name: Resume notarized desktop release
 
 on:
   workflow_dispatch:
@@ -73,6 +73,13 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v5
+        with:
+          name: windows-x64-unsigned-exe-and-portable
+          path: windows-assets
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
       - name: Require matching notarized provenance
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
@@ -80,9 +87,20 @@ jobs:
           node -e "const fs=require('node:fs'); const m=JSON.parse(fs.readFileSync('out/release/release-manifest.json','utf8')); if (m.schemaVersion !== 1 || m.version !== process.env.RELEASE_VERSION || m.architecture !== 'arm64' || m.gitCommit !== process.env.SOURCE_SHA || m.dirtyWorktree !== false || typeof m.notarizationSubmissionId !== 'string') throw new Error('Notarized artifact provenance does not match the source run')"
       - name: Normalize GitHub release asset names
         run: node scripts/normalize-release-asset-names.ts --directory=out/release
+      - name: Verify and select public Windows assets
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          (cd windows-assets && shasum -a 256 -c SHA256SUMS)
+          node -e "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync('windows-assets/windows-candidate-manifest.json','utf8'));if(m.schemaVersion!==1||m.version!==process.env.RELEASE_VERSION||m.target!=='win32-x64'||m.gitCommit!==process.env.SOURCE_SHA)throw new Error('Windows candidate does not match the resumed release');const names=m.artifacts.map(a=>a.file);if(!names.includes('DeepSeek-YukiRyou-Setup.exe')||!names.includes('DeepSeek.YukiRyou-win32-x64-'+process.env.RELEASE_VERSION+'-portable.zip'))throw new Error('Windows public assets are missing')"
+          cp windows-assets/DeepSeek-YukiRyou-Setup.exe "out/release/${ARTIFACT_NAME}-${RELEASE_VERSION}-win32-x64-Setup.exe"
+          cp "windows-assets/${ARTIFACT_NAME}-win32-x64-${RELEASE_VERSION}-portable.zip" out/release/
+          (cd out/release && shasum -a 256 "${ARTIFACT_NAME}-${RELEASE_VERSION}-win32-x64-Setup.exe" "${ARTIFACT_NAME}-win32-x64-${RELEASE_VERSION}-portable.zip" > SHA256SUMS-Windows.txt)
       - name: Verify checksums
         working-directory: out/release
-        run: shasum -a 256 -c SHA256SUMS.txt
+        run: |
+          shasum -a 256 -c SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS-Windows.txt
       - name: Verify ZIP through Applications
         run: |
           pnpm verify:distribution -- \

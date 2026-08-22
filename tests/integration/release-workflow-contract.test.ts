@@ -47,6 +47,45 @@ describe('macOS release workflow contract', () => {
     expect(releaseNotes).not.toMatch(/^# /m);
   });
 
+  it('publishes the verified Windows installer and portable ZIP beside macOS assets', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const release = workflow.jobs?.release;
+    const commands = (release?.steps ?? [])
+      .map((step) => step.run?.trim() ?? '')
+      .join('\n');
+
+    expect(release?.needs).toEqual(['verify_final', 'windows']);
+    expect(commands).toContain('Windows candidate does not match this release');
+    expect(commands).toContain('-win32-x64-Setup.exe');
+    expect(commands).toContain('-portable.zip');
+    expect(commands).toContain('SHA256SUMS-Windows.txt');
+  });
+
+  it('smoke-tests the executable extracted from the portable ZIP', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const portableStep = workflow.jobs?.build_candidate?.steps?.find(
+      (step) => step.name === 'Start and restart the exact portable ZIP application',
+    );
+    const command = portableStep?.run ?? '';
+
+    expect(command).toContain(
+      '$env:DSH_E2E_EXECUTABLE_PATH = $executables[0].FullName',
+    );
+    expect(command.indexOf('$env:DSH_E2E_EXECUTABLE_PATH')).toBeLessThan(
+      command.indexOf('pnpm exec vitest run'),
+    );
+  });
+
   it('vendors the bundled runtime before running integration tests', async () => {
     const workflow = parse(
       await readFile(

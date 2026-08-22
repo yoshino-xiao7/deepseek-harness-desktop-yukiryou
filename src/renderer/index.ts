@@ -10,10 +10,6 @@ import type {
 } from '../shared/workspace-review.js';
 import { structuredDiffRows } from './diff-model.js';
 import {
-  filterWorkspaceChanges,
-  type WorkspaceChangeScope,
-} from './workspace-review-query.js';
-import {
   companionPanelDragDecision,
   companionPanelWidthFromKey,
   companionPanelWidthFromPointer,
@@ -24,13 +20,19 @@ import {
 } from './safe-markdown.js';
 import { startupFailureCopy } from './startup-failure-copy.js';
 import {
-  createWorkspacePreviewHistory,
-  type WorkspacePreviewHistorySnapshot,
-} from './workspace-preview-history.js';
+  createWorkspaceReviewController,
+  type WorkspaceChangeScope,
+  type WorkspaceReviewSnapshot,
+} from './workspace-review-controller.js';
 import {
   type WorkspaceReviewShortcut,
   workspaceReviewShortcut,
 } from '../shared/workspace-review-shortcuts.js';
+import {
+  type WorkspaceConversationReference,
+  workspaceConversationInsertion,
+  workspaceConversationReferenceText,
+} from '../shared/workspace-conversation-reference.js';
 
 const parameters = new URLSearchParams(window.location.search);
 const failed = parameters.get('state') === 'failure';
@@ -55,17 +57,32 @@ const previewContent = document.querySelector<HTMLElement>('[data-testid="previe
 const previewMode = document.querySelector<HTMLButtonElement>('[data-testid="preview-mode"]');
 const previewBack = document.querySelector<HTMLButtonElement>('[data-testid="preview-back"]');
 const previewForward = document.querySelector<HTMLButtonElement>('[data-testid="preview-forward"]');
+const previewFindToggle = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-toggle"]');
+const previewFindBar = document.querySelector<HTMLElement>('[data-testid="preview-find-bar"]');
+const previewFindInput = document.querySelector<HTMLInputElement>('[data-testid="preview-find-input"]');
+const previewFindProgress = document.querySelector<HTMLElement>('[data-testid="preview-find-progress"]');
+const previewFindPrevious = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-previous"]');
+const previewFindNext = document.querySelector<HTMLButtonElement>('[data-testid="preview-find-next"]');
+const previewCopyMenu = document.querySelector<HTMLDetailsElement>('[data-testid="preview-copy-menu"]');
+const previewCopyFeedback = document.querySelector<HTMLElement>('[data-testid="preview-copy-feedback"]');
+const reviewBar = document.querySelector<HTMLElement>('[data-testid="preview-review-bar"]');
+const reviewProgress = document.querySelector<HTMLElement>('[data-testid="review-progress"]');
+const reviewPrevious = document.querySelector<HTMLButtonElement>('[data-testid="review-previous"]');
+const reviewNext = document.querySelector<HTMLButtonElement>('[data-testid="review-next"]');
+const reviewToggleViewed = document.querySelector<HTMLButtonElement>('[data-testid="review-toggle-viewed"]');
 let loadedWorkspaceId: string | undefined;
 let reviewLoadRevision = 0;
 let currentPreview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined;
 let showingMarkdownSource = false;
-let currentOverview: Extract<WorkspaceReviewResponse, { kind: 'overview' }> | undefined;
-let activeReviewTab: 'changes' | 'files' = 'changes';
 let searchRevision = 0;
 let searchTimer: number | undefined;
 let overviewNote = '';
 let latestCompanionSnapshot: DesktopCompanionSnapshot | undefined;
-const previewHistory = createWorkspacePreviewHistory();
+let workspaceLossTimer: number | undefined;
+let copyFeedbackTimer: number | undefined;
+let workspaceContextMenu: HTMLElement | undefined;
+let referenceFeedbackTimer: number | undefined;
+const reviewController = createWorkspaceReviewController();
 const companionPanelWidthStorageKey = 'dsh.desktop.companion.panel-width';
 const companionBridge = (
   window as unknown as {
@@ -76,6 +93,8 @@ const companionBridge = (
       toggle(): void;
       setPreviewOpen(open: boolean): void;
       resize(width: number): void;
+      writeClipboard(text: string): boolean;
+      addToConversation(reference: WorkspaceConversationReference): boolean;
       request(request: WorkspaceReviewRequest): Promise<WorkspaceReviewResponse>;
       subscribeReviewTarget(listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): () => void;
     };
@@ -136,14 +155,43 @@ function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
     }
   }
   if (workspace.status === 'ready') {
+    if (workspaceLossTimer !== undefined) {
+      window.clearTimeout(workspaceLossTimer);
+      workspaceLossTimer = undefined;
+    }
     if (workspace.workspaceId !== loadedWorkspaceId) {
       loadedWorkspaceId = workspace.workspaceId;
+      applyReviewSnapshot(reviewController.execute({
+        kind: 'workspace.select', workspaceId: workspace.workspaceId,
+      }).snapshot);
       void loadOverview(workspace.workspaceId);
     }
   } else {
+    const preserveReviewSurface = loadedWorkspaceId !== undefined || workspaceLossTimer !== undefined;
     loadedWorkspaceId = undefined;
-    if (reviewBrowser !== null) reviewBrowser.hidden = true;
-    if (companionEmpty !== null) companionEmpty.hidden = false;
+    const suspended = reviewController.execute({
+      kind: 'workspace.select', workspaceId: undefined,
+    }).snapshot;
+    applyReviewSnapshot(suspended);
+    if (preserveReviewSurface && snapshot.active) {
+      syncReviewControls(suspended);
+      changesView?.replaceChildren(createEmptyRow('正在重新确认工作区…'));
+      filesView?.replaceChildren(createEmptyRow('正在重新确认工作区…'));
+      if (reviewNote !== null) reviewNote.textContent = '文件能力已暂时释放，正在重新连接。';
+      if (reviewBrowser !== null) reviewBrowser.hidden = false;
+      if (companionEmpty !== null) companionEmpty.hidden = true;
+      if (workspaceLossTimer === undefined) {
+        workspaceLossTimer = window.setTimeout(() => {
+          workspaceLossTimer = undefined;
+          if (latestCompanionSnapshot?.workspace.status === 'ready') return;
+          if (reviewBrowser !== null) reviewBrowser.hidden = true;
+          if (companionEmpty !== null) companionEmpty.hidden = false;
+        }, 1_500);
+      }
+    } else {
+      if (reviewBrowser !== null) reviewBrowser.hidden = true;
+      if (companionEmpty !== null) companionEmpty.hidden = false;
+    }
     closePreview();
   }
 }
@@ -162,10 +210,10 @@ if (companionBridge !== undefined) {
   companionBridge.subscribeShortcut(handleWorkspaceReviewShortcut);
   companionBridge.subscribeReviewTarget((preview) => {
     if (preview === undefined) {
-      applyPreviewHistory(previewHistory.clear());
+      applyReviewSnapshot(reviewController.execute({ kind: 'preview.clear' }).snapshot);
       return;
     }
-    applyPreviewHistory(previewHistory.visit(preview));
+    applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview }).snapshot);
   });
   companionToggle?.addEventListener('click', () => companionBridge.toggle());
 
@@ -228,7 +276,7 @@ async function loadOverview(workspaceId: string): Promise<void> {
     if (reviewNote !== null) reviewNote.textContent = '暂时无法读取工作区，请稍后刷新。';
     return;
   }
-  currentOverview = response;
+  const reviewSnapshot = reviewController.execute({ kind: 'overview.replace', overview: response }).snapshot;
   overviewNote = response.truncated
     ? '内容较多，仅显示前一部分。'
     : response.gitAvailable
@@ -236,7 +284,7 @@ async function loadOverview(workspaceId: string): Promise<void> {
       : '此目录不是 Git 工作区，仍可浏览文件。';
   if (companionEmpty !== null) companionEmpty.hidden = true;
   if (reviewBrowser !== null) reviewBrowser.hidden = false;
-  applyReviewQuery();
+  renderReviewSnapshot(reviewSnapshot);
   setReviewSelection(currentPreview?.nodeId);
   if (reviewNote !== null) reviewNote.textContent = overviewNote;
 }
@@ -246,14 +294,13 @@ function setReviewLoading(loading: boolean): void {
   if (refresh !== null) refresh.disabled = loading;
 }
 
-function renderChanges(response: Extract<WorkspaceReviewResponse, {kind:'overview'}>): void {
+function renderChanges(snapshot: WorkspaceReviewSnapshot): void {
   if (changesView === null) return;
   changesView.replaceChildren();
-  const scope = validatedChangeScope(changeFilter?.value);
-  const changes = filterWorkspaceChanges(response.changes, {
-    query: reviewSearch?.value ?? '',
-    scope,
-  });
+  const response = snapshot.overview;
+  if (response === undefined) return;
+  const changes = snapshot.visibleChanges;
+  const scope = snapshot.scope;
   const filtering = (reviewSearch?.value.trim() ?? '') !== '' || scope !== 'all';
   if (changeCount !== null) {
     changeCount.textContent = filtering
@@ -268,7 +315,8 @@ function renderChanges(response: Extract<WorkspaceReviewResponse, {kind:'overvie
     return;
   }
   const tree = createChangeTree(changes);
-  appendChangeTree(changesView, tree, 0);
+  appendChangeTree(changesView, tree, 0, new Set(snapshot.review.viewedNodeIds));
+  setReviewSelection(snapshot.preview?.nodeId);
 }
 
 interface ChangeTree {
@@ -294,7 +342,7 @@ function createChangeTree(changes: Extract<WorkspaceReviewResponse, {kind:'overv
   return root;
 }
 
-function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number): void {
+function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number, viewed: ReadonlySet<string>): void {
   for (const [name, child] of tree.directories) {
     const group = document.createElement('div');
     group.className = 'change-directory-group';
@@ -311,7 +359,7 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     row.append(chevron, label);
     const children = document.createElement('div');
     children.className = 'change-directory-children';
-    appendChangeTree(children, child, depth + 1);
+    appendChangeTree(children, child, depth + 1, viewed);
     row.addEventListener('click', () => {
       const expanded = row.getAttribute('aria-expanded') === 'true';
       row.setAttribute('aria-expanded', String(!expanded));
@@ -326,6 +374,7 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     button.className = 'change-row';
     button.style.setProperty('--tree-depth', String(depth));
     if (change.nodeId !== undefined) button.dataset.nodeId = change.nodeId;
+    if (change.nodeId !== undefined && viewed.has(change.nodeId)) button.dataset.reviewed = 'true';
     button.disabled = change.nodeId === undefined;
     const badge = document.createElement('span');
     badge.className = `change-badge status-${change.status}`;
@@ -337,8 +386,16 @@ function appendChangeTree(parent: HTMLElement, tree: ChangeTree, depth: number):
     const stats = document.createElement('small');
     stats.className = 'change-stats';
     stats.textContent = change.additions === undefined ? '' : `+${String(change.additions)} −${String(change.deletions ?? 0)}`;
-    button.append(badge, path, stats);
-    if (change.nodeId !== undefined) button.addEventListener('click', () => void openDiff(change.nodeId!));
+    const reviewed = document.createElement('span');
+    reviewed.className = 'change-reviewed';
+    reviewed.textContent = '✓';
+    reviewed.setAttribute('aria-label', '已查看');
+    reviewed.hidden = button.dataset.reviewed !== 'true';
+    button.append(badge, path, reviewed, stats);
+    if (change.nodeId !== undefined) {
+      button.addEventListener('click', () => void openDiff(change.nodeId!));
+      installPathReferenceInteractions(button, change.path, 'file');
+    }
     parent.append(button);
   }
 }
@@ -350,7 +407,7 @@ function renderFileTree(nodes: readonly WorkspaceNode[]): void {
     filesView.append(createEmptyRow('工作区中没有可预览文件'));
     return;
   }
-  for (const node of nodes) filesView.append(createNodeRow(node, 0));
+  for (const node of nodes) filesView.append(createNodeRow(node, 0, ''));
 }
 
 function renderSearchResults(
@@ -380,6 +437,7 @@ function renderSearchResults(
     copy.append(name, path);
     button.append(icon, copy);
     button.addEventListener('click', () => void openPreview(node.id));
+    installPathReferenceInteractions(button, node.path, 'file');
     filesView.append(button);
   }
 }
@@ -392,14 +450,16 @@ function validatedChangeScope(value: string | undefined): WorkspaceChangeScope {
 }
 
 function applyReviewQuery(): void {
-  const overview = currentOverview;
+  const snapshot = reviewController.getSnapshot();
+  syncReviewProgress(snapshot);
+  const overview = snapshot.overview;
   if (overview === undefined) return;
-  if (activeReviewTab === 'changes') {
+  if (snapshot.tab === 'changes') {
     if (reviewNote !== null) reviewNote.textContent = overviewNote;
-    renderChanges(overview);
+    renderChanges(snapshot);
     return;
   }
-  const query = reviewSearch?.value.trim() ?? '';
+  const query = snapshot.query.trim();
   if (query === '') {
     searchRevision += 1;
     renderFileTree(overview.nodes);
@@ -415,8 +475,8 @@ async function searchFiles(query: string): Promise<void> {
   filesView.replaceChildren(createEmptyRow('正在搜索文件…'));
   const response = await companionBridge.request({ kind: 'file.search', query });
   if (
-    revision !== searchRevision || activeReviewTab !== 'files'
-    || query !== (reviewSearch?.value.trim() ?? '')
+    revision !== searchRevision || reviewController.getSnapshot().tab !== 'files'
+    || query !== reviewController.getSnapshot().query.trim()
   ) return;
   if (response.kind !== 'search') {
     filesView.replaceChildren(createEmptyRow('文件搜索暂时不可用'));
@@ -432,8 +492,11 @@ async function searchFiles(query: string): Promise<void> {
 }
 
 function scheduleReviewQuery(): void {
+  const snapshot = reviewController.execute({
+    kind: 'query.change', query: reviewSearch?.value ?? '',
+  }).snapshot;
   if (searchTimer !== undefined) window.clearTimeout(searchTimer);
-  if (activeReviewTab === 'changes') {
+  if (snapshot.tab === 'changes') {
     applyReviewQuery();
     return;
   }
@@ -443,7 +506,7 @@ function scheduleReviewQuery(): void {
   }, 180);
 }
 
-function createNodeRow(node: WorkspaceNode, depth: number): HTMLElement {
+function createNodeRow(node: WorkspaceNode, depth: number, parentPath: string): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node';
   const button = document.createElement('button');
@@ -451,6 +514,7 @@ function createNodeRow(node: WorkspaceNode, depth: number): HTMLElement {
   button.className = 'file-row';
   button.style.setProperty('--tree-depth', String(depth));
   button.dataset.nodeId = node.id;
+  const relativePath = parentPath === '' ? node.name : `${parentPath}/${node.name}`;
   const icon = document.createElement('span');
   icon.className = 'file-icon';
   icon.textContent = node.kind === 'directory' ? '' : fileIcon(node.extension);
@@ -465,14 +529,16 @@ function createNodeRow(node: WorkspaceNode, depth: number): HTMLElement {
   wrapper.append(button);
   if (node.kind === 'file') {
     button.addEventListener('click', () => void openPreview(node.id));
+    installPathReferenceInteractions(button, relativePath, 'file');
   } else {
     button.setAttribute('aria-expanded', 'false');
-    button.addEventListener('click', () => void toggleDirectory(wrapper, button, node, depth));
+    installPathReferenceInteractions(button, relativePath, 'directory');
+    button.addEventListener('click', () => void toggleDirectory(wrapper, button, node, depth, relativePath));
   }
   return wrapper;
 }
 
-async function toggleDirectory(wrapper: HTMLElement, button: HTMLButtonElement, node: WorkspaceNode, depth: number): Promise<void> {
+async function toggleDirectory(wrapper: HTMLElement, button: HTMLButtonElement, node: WorkspaceNode, depth: number, relativePath: string): Promise<void> {
   const existing = wrapper.querySelector<HTMLElement>(':scope > .tree-children');
   if (existing !== null) {
     const expanded = button.getAttribute('aria-expanded') !== 'true';
@@ -487,7 +553,7 @@ async function toggleDirectory(wrapper: HTMLElement, button: HTMLButtonElement, 
   if (response.kind !== 'directory') return;
   const children = document.createElement('div');
   children.className = 'tree-children';
-  for (const child of response.nodes) children.append(createNodeRow(child, depth + 1));
+  for (const child of response.nodes) children.append(createNodeRow(child, depth + 1, relativePath));
   wrapper.append(children);
   button.setAttribute('aria-expanded', 'true');
 }
@@ -497,7 +563,7 @@ async function openPreview(nodeId: string): Promise<void> {
   const response = await companionBridge.request({ kind: 'file.preview', nodeId });
   if (response.kind !== 'preview') return;
   companionBridge.setPreviewOpen(true);
-  applyPreviewHistory(previewHistory.visit(response));
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview: response }).snapshot);
 }
 
 async function openRelativePreview(nodeId: string, target: string): Promise<void> {
@@ -505,7 +571,7 @@ async function openRelativePreview(nodeId: string, target: string): Promise<void
   const response = await companionBridge.request({ kind: 'file.preview-relative', nodeId, target });
   if (response.kind !== 'preview') return;
   companionBridge.setPreviewOpen(true);
-  applyPreviewHistory(previewHistory.visit(response));
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview: response }).snapshot);
 }
 
 async function openDiff(nodeId: string): Promise<void> {
@@ -513,32 +579,361 @@ async function openDiff(nodeId: string): Promise<void> {
   const response = await companionBridge.request({ kind: 'change.diff', nodeId });
   if (response.kind !== 'preview') return;
   companionBridge.setPreviewOpen(true);
-  applyPreviewHistory(previewHistory.visit(response));
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.visit', preview: response }).snapshot);
 }
 
-function applyPreviewHistory(snapshot: WorkspacePreviewHistorySnapshot): void {
-  currentPreview = snapshot.current;
+function applyReviewSnapshot(snapshot: WorkspaceReviewSnapshot): void {
+  syncReviewControls(snapshot);
+  currentPreview = snapshot.preview;
   showingMarkdownSource = false;
   if (previewBack !== null) previewBack.disabled = !snapshot.canBack;
   if (previewForward !== null) previewForward.disabled = !snapshot.canForward;
-  setReviewSelection(snapshot.current?.nodeId);
-  if (snapshot.current === undefined) {
+  syncReviewProgress(snapshot);
+  syncPreviewFindControls(snapshot);
+  syncPreviewCopyControls(snapshot);
+  setReviewSelection(snapshot.preview?.nodeId);
+  if (snapshot.preview === undefined) {
     previewContent?.replaceChildren();
     return;
   }
   companionBridge?.setPreviewOpen(true);
+  renderPreview(snapshot.find.open && snapshot.find.query !== '');
+}
+
+function syncPreviewCopyControls(snapshot: WorkspaceReviewSnapshot): void {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-target="line"], [data-copy-target="path-line"]')) {
+    button.disabled = snapshot.selectedLine === undefined;
+  }
+  for (const row of previewContent?.querySelectorAll<HTMLElement>('.text-row, .diff-row') ?? []) {
+    row.removeAttribute('data-selected');
+  }
+  if (snapshot.selectedLineKey === undefined) return;
+  const lineButton = [...(previewContent?.querySelectorAll<HTMLButtonElement>('[data-line-key]') ?? [])]
+    .find((button) => button.dataset.lineKey === snapshot.selectedLineKey);
+  lineButton?.closest<HTMLElement>('.text-row, .diff-row')?.setAttribute('data-selected', 'true');
+}
+
+function selectPreviewLine(line: number, key: string): void {
+  const snapshot = reviewController.execute({ kind: 'line.select', line, key }).snapshot;
+  syncPreviewCopyControls(snapshot);
+}
+
+function copyPreviewTarget(target: 'path' | 'line' | 'path-line'): void {
+  const transition = reviewController.execute({ kind: 'copy.request', target });
+  if (transition.effect?.kind !== 'copy-text') return;
+  if (companionBridge?.writeClipboard(transition.effect.text) !== true) return;
+  if (previewCopyMenu !== null) previewCopyMenu.open = false;
+  if (previewCopyFeedback !== null) {
+    previewCopyFeedback.textContent = `已复制${transition.effect.label}`;
+    previewCopyFeedback.hidden = false;
+    if (copyFeedbackTimer !== undefined) window.clearTimeout(copyFeedbackTimer);
+    copyFeedbackTimer = window.setTimeout(() => {
+      copyFeedbackTimer = undefined;
+      previewCopyFeedback.hidden = true;
+    }, 1_200);
+  }
+}
+
+interface WorkspaceContextAction {
+  readonly label: string;
+  readonly run: () => void;
+}
+
+function conversationReferenceTarget(): {
+  readonly sessionId: string;
+  readonly workspaceId: string;
+} | undefined {
+  const workspace = latestCompanionSnapshot?.workspace;
+  return workspace?.status === 'ready'
+    ? { sessionId: workspace.sessionId, workspaceId: workspace.workspaceId }
+    : undefined;
+}
+
+function pathConversationReference(
+  path: string,
+  kind: 'file' | 'directory',
+): WorkspaceConversationReference | undefined {
+  const target = conversationReferenceTarget();
+  return target === undefined ? undefined : { kind, ...target, path };
+}
+
+function addReferenceToConversation(reference: WorkspaceConversationReference): void {
+  if (companionBridge?.addToConversation(reference) !== true) {
+    showReferenceFeedback('当前没有可用的对话');
+    return;
+  }
+  showReferenceFeedback(
+    reference.kind === 'file'
+      ? '已添加文件到对话'
+      : reference.kind === 'directory'
+        ? '已添加文件夹到对话'
+        : '已添加选中内容到对话',
+  );
+}
+
+function installPathReferenceInteractions(
+  element: HTMLElement,
+  path: string,
+  kind: 'file' | 'directory',
+): void {
+  element.draggable = true;
+  element.addEventListener('dragstart', (event) => {
+    const reference = pathConversationReference(path, kind);
+    if (reference === undefined || event.dataTransfer === null) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('text/plain', workspaceConversationReferenceText(reference));
+    event.dataTransfer.setData(
+      'application/x-deepseek-workspace-reference',
+      JSON.stringify(workspaceConversationInsertion(reference)),
+    );
+    element.dataset.dragging = 'true';
+  });
+  element.addEventListener('dragend', () => delete element.dataset.dragging);
+  element.addEventListener('contextmenu', (event) => {
+    const reference = pathConversationReference(path, kind);
+    if (reference === undefined) return;
+    event.preventDefault();
+    showWorkspaceContextMenu(event.clientX, event.clientY, [
+      {
+        label: kind === 'directory' ? '添加文件夹到对话' : '添加到对话',
+        run: () => addReferenceToConversation(reference),
+      },
+      { label: '复制相对路径', run: () => copyPlainText(path, '已复制相对路径') },
+    ]);
+  });
+}
+
+function previewSelectionReference(): Extract<
+  WorkspaceConversationReference,
+  { kind: 'selection' }
+> | undefined {
+  const preview = currentPreview;
+  const target = conversationReferenceTarget();
+  const selection = window.getSelection();
+  if (
+    preview === undefined || target === undefined || selection === null ||
+    selection.rangeCount === 0 || selection.isCollapsed || previewContent === null
+  ) return undefined;
+  const range = selection.getRangeAt(0);
+  if (!previewContent.contains(range.commonAncestorContainer)) return undefined;
+  const text = selection.toString();
+  if (text.trim() === '') return undefined;
+  const lines = [...previewContent.querySelectorAll<HTMLElement>('[data-reference-line]')]
+    .filter((row) => {
+      try {
+        return range.intersectsNode(row);
+      } catch {
+        return false;
+      }
+    })
+    .map((row) => Number(row.dataset.referenceLine))
+    .filter((line) => Number.isSafeInteger(line) && line > 0);
+  return {
+    kind: 'selection',
+    ...target,
+    path: preview.path,
+    text,
+    ...(lines.length === 0 ? {} : {
+      startLine: Math.min(...lines),
+      endLine: Math.max(...lines),
+    }),
+  };
+}
+
+function selectedLineReference(row: HTMLElement): Extract<
+  WorkspaceConversationReference,
+  { kind: 'selection' }
+> | undefined {
+  const preview = currentPreview;
+  const target = conversationReferenceTarget();
+  const line = Number(row.dataset.referenceLine);
+  const code = row.querySelector<HTMLElement>('.text-line-code, .diff-code')?.textContent;
+  if (
+    preview === undefined || target === undefined || !Number.isSafeInteger(line) ||
+    line <= 0 || code === undefined
+  ) return undefined;
+  return {
+    kind: 'selection',
+    ...target,
+    path: preview.path,
+    text: code,
+    startLine: line,
+    endLine: line,
+  };
+}
+
+function showWorkspaceContextMenu(
+  clientX: number,
+  clientY: number,
+  actions: readonly WorkspaceContextAction[],
+): void {
+  closeWorkspaceContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'workspace-context-menu';
+  menu.setAttribute('role', 'menu');
+  for (const action of actions) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'menuitem');
+    button.textContent = action.label;
+    button.addEventListener('click', () => {
+      closeWorkspaceContextMenu();
+      action.run();
+    });
+    menu.append(button);
+  }
+  document.body.append(menu);
+  const bounds = menu.getBoundingClientRect();
+  menu.style.left = `${String(Math.max(8, Math.min(clientX, window.innerWidth - bounds.width - 8)))}px`;
+  menu.style.top = `${String(Math.max(8, Math.min(clientY, window.innerHeight - bounds.height - 8)))}px`;
+  workspaceContextMenu = menu;
+  menu.querySelector<HTMLButtonElement>('button')?.focus();
+}
+
+function closeWorkspaceContextMenu(): void {
+  workspaceContextMenu?.remove();
+  workspaceContextMenu = undefined;
+}
+
+function copyPlainText(text: string, message: string): void {
+  if (companionBridge?.writeClipboard(text) === true) showReferenceFeedback(message);
+}
+
+function showReferenceFeedback(message: string): void {
+  let feedback = document.querySelector<HTMLElement>('[data-testid="reference-feedback"]');
+  if (feedback === null) {
+    feedback = document.createElement('div');
+    feedback.className = 'reference-feedback';
+    feedback.dataset.testid = 'reference-feedback';
+    feedback.setAttribute('role', 'status');
+    document.body.append(feedback);
+  }
+  feedback.textContent = message;
+  feedback.dataset.visible = 'true';
+  if (referenceFeedbackTimer !== undefined) window.clearTimeout(referenceFeedbackTimer);
+  referenceFeedbackTimer = window.setTimeout(() => {
+    referenceFeedbackTimer = undefined;
+    feedback.dataset.visible = 'false';
+  }, 1_500);
+}
+
+function syncPreviewFindControls(snapshot: WorkspaceReviewSnapshot): void {
+  const find = snapshot.find;
+  if (previewFindBar !== null) previewFindBar.hidden = !find.open || snapshot.preview === undefined;
+  if (previewFindToggle !== null) previewFindToggle.setAttribute('aria-pressed', String(find.open));
+  if (previewFindInput !== null && previewFindInput.value !== find.query) {
+    previewFindInput.value = find.query;
+  }
+  if (previewFindProgress !== null) {
+    previewFindProgress.textContent = find.query === ''
+      ? '0 / 0'
+      : `${String(find.position ?? 0)} / ${String(find.total)}`;
+  }
+  if (previewFindPrevious !== null) previewFindPrevious.disabled = !find.canPrevious;
+  if (previewFindNext !== null) previewFindNext.disabled = !find.canNext;
+}
+
+function refreshPreviewFindMatches(scrollCurrent: boolean): WorkspaceReviewSnapshot {
+  const state = reviewController.getSnapshot();
+  if (previewContent === null || !state.find.open || state.find.query === '') {
+    const snapshot = reviewController.execute({ kind: 'find.matches', total: 0 }).snapshot;
+    syncPreviewFindControls(snapshot);
+    return snapshot;
+  }
+  const query = state.find.query.toLocaleLowerCase();
+  const walker = document.createTreeWalker(previewContent, NodeFilter.SHOW_TEXT);
+  const matches: Array<{ node: Text; start: number; index: number }> = [];
+  let node = walker.nextNode();
+  while (node !== null) {
+    const textNode = node as Text;
+    if (textNode.parentElement?.closest('.text-line-number, .diff-old-number, .diff-new-number') !== null) {
+      node = walker.nextNode();
+      continue;
+    }
+    const content = textNode.data.toLocaleLowerCase();
+    let start = content.indexOf(query);
+    while (start >= 0) {
+      matches.push({ node: textNode, start, index: matches.length });
+      start = content.indexOf(query, start + Math.max(1, query.length));
+    }
+    node = walker.nextNode();
+  }
+  for (const textNode of new Set(matches.map((match) => match.node))) {
+    const nodeMatches = matches.filter((match) => match.node === textNode);
+    for (const match of [...nodeMatches].reverse()) {
+      const matched = textNode.splitText(match.start);
+      matched.splitText(state.find.query.length);
+      const mark = document.createElement('mark');
+      mark.className = 'preview-find-match';
+      mark.dataset.matchIndex = String(match.index);
+      matched.replaceWith(mark);
+      mark.append(matched);
+    }
+  }
+  const snapshot = reviewController.execute({ kind: 'find.matches', total: matches.length }).snapshot;
+  syncPreviewFindControls(snapshot);
+  applyPreviewFindPosition(snapshot, scrollCurrent);
+  return snapshot;
+}
+
+function applyPreviewFindPosition(snapshot: WorkspaceReviewSnapshot, scrollCurrent: boolean): void {
+  for (const mark of previewContent?.querySelectorAll<HTMLElement>('.preview-find-match') ?? []) {
+    mark.removeAttribute('data-current');
+  }
+  if (snapshot.find.position === undefined) return;
+  const current = previewContent?.querySelector<HTMLElement>(
+    `.preview-find-match[data-match-index="${String(snapshot.find.position - 1)}"]`,
+  );
+  if (current === null || current === undefined) return;
+  current.dataset.current = 'true';
+  if (scrollCurrent) current.scrollIntoView({ block: 'center', inline: 'nearest' });
+}
+
+function openPreviewFind(): void {
+  const snapshot = reviewController.execute({ kind: 'find.open' }).snapshot;
+  if (!snapshot.find.open) return;
+  syncPreviewFindControls(snapshot);
+  previewFindInput?.focus();
+  previewFindInput?.select();
+}
+
+function closePreviewFind(): void {
+  const snapshot = reviewController.execute({ kind: 'find.close' }).snapshot;
+  syncPreviewFindControls(snapshot);
   renderPreview();
+}
+
+function movePreviewFind(direction: 'previous' | 'next'): void {
+  const snapshot = reviewController.execute({ kind: 'find.move', direction }).snapshot;
+  syncPreviewFindControls(snapshot);
+  applyPreviewFindPosition(snapshot, true);
+}
+
+function syncReviewProgress(snapshot: WorkspaceReviewSnapshot): void {
+  const showingReview = snapshot.preview?.content.kind === 'diff' && snapshot.review.position !== undefined;
+  if (reviewBar !== null) reviewBar.hidden = !showingReview;
+  if (reviewProgress !== null) {
+    reviewProgress.textContent = `${String(snapshot.review.position ?? 0)} / ${String(snapshot.review.total)} · 已查看 ${String(snapshot.review.viewed)}`;
+  }
+  if (reviewPrevious !== null) reviewPrevious.disabled = !snapshot.review.canPrevious;
+  if (reviewNext !== null) reviewNext.disabled = !snapshot.review.canNext;
+  if (reviewToggleViewed !== null) {
+    reviewToggleViewed.dataset.viewed = String(snapshot.review.currentViewed);
+    reviewToggleViewed.textContent = snapshot.review.currentViewed ? '已查看' : '标为已查看';
+  }
 }
 
 function closePreview(): void {
   if (currentPreview === undefined && previewPanel?.hidden !== false) return;
-  currentPreview = undefined;
-  setReviewSelection();
+  applyReviewSnapshot(reviewController.execute({ kind: 'preview.close' }).snapshot);
   companionBridge?.setPreviewOpen(false);
   if (previewPanel !== null) previewPanel.hidden = true;
 }
 
-function renderPreview(): void {
+function renderPreview(scrollFind = false): void {
   const preview = currentPreview;
   if (preview === undefined || previewContent === null) return;
   if (previewName !== null) previewName.textContent = preview.name;
@@ -561,22 +956,47 @@ function renderPreview(): void {
   } else if (content.kind === 'diff') {
     previewContent.append(renderDiff(content.text));
   } else if ('text' in content) {
-    const pre = document.createElement('pre');
-    const code = document.createElement('code');
-    code.textContent = content.text;
-    pre.append(code);
-    previewContent.append(pre);
+    previewContent.append(renderText(content.text));
   } else {
     previewContent.append(createEmptyRow(
       content.reason === 'too-large' ? '文件过大，无法在应用内预览' : content.reason === 'binary' ? '二进制文件不支持预览' : '此文件类型暂不支持预览',
     ));
   }
+  refreshPreviewFindMatches(scrollFind);
+}
+
+function renderText(source: string): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'text-view';
+  const selectedKey = reviewController.getSnapshot().selectedLineKey;
+  for (const [index, text] of source.replaceAll('\r\n', '\n').split('\n').entries()) {
+    const line = index + 1;
+    const key = `text-${String(line)}`;
+    const row = document.createElement('div');
+    row.className = 'text-row';
+    row.dataset.referenceLine = String(line);
+    if (key === selectedKey) row.dataset.selected = 'true';
+    const number = document.createElement('button');
+    number.type = 'button';
+    number.className = 'text-line-number';
+    number.dataset.lineKey = key;
+    number.textContent = String(line);
+    number.setAttribute('aria-label', `选择第 ${String(line)} 行`);
+    number.addEventListener('click', () => selectPreviewLine(line, key));
+    const code = document.createElement('span');
+    code.className = 'text-line-code';
+    code.textContent = text === '' ? ' ' : text;
+    row.append(number, code);
+    container.append(row);
+  }
+  return container;
 }
 
 function renderDiff(source: string): HTMLElement {
   const container = document.createElement('div');
   container.className = 'diff-view';
-  for (const row of structuredDiffRows(source)) {
+  const selectedKey = reviewController.getSnapshot().selectedLineKey;
+  for (const [index, row] of structuredDiffRows(source).entries()) {
     const element = document.createElement('div');
     element.className = `diff-row diff-${row.kind}`;
     if (row.kind === 'fold' || row.kind === 'hunk') {
@@ -585,12 +1005,31 @@ function renderDiff(source: string): HTMLElement {
       label.textContent = row.label;
       element.append(label);
     } else {
-      const oldNumber = document.createElement('span');
+      const oldNumber = document.createElement('button');
+      oldNumber.type = 'button';
       oldNumber.className = 'diff-old-number';
       oldNumber.textContent = row.oldLine === undefined ? '' : String(row.oldLine);
-      const newNumber = document.createElement('span');
+      oldNumber.disabled = row.oldLine === undefined;
+      const oldKey = `diff-${String(index)}-old-${String(row.oldLine ?? 0)}`;
+      oldNumber.dataset.lineKey = oldKey;
+      if (row.oldLine !== undefined) {
+        oldNumber.setAttribute('aria-label', `选择旧文件第 ${String(row.oldLine)} 行`);
+        oldNumber.addEventListener('click', () => selectPreviewLine(row.oldLine!, oldKey));
+      }
+      const newNumber = document.createElement('button');
+      newNumber.type = 'button';
       newNumber.className = 'diff-new-number';
       newNumber.textContent = row.newLine === undefined ? '' : String(row.newLine);
+      newNumber.disabled = row.newLine === undefined;
+      const newKey = `diff-${String(index)}-new-${String(row.newLine ?? 0)}`;
+      newNumber.dataset.lineKey = newKey;
+      if (row.newLine !== undefined) {
+        newNumber.setAttribute('aria-label', `选择新文件第 ${String(row.newLine)} 行`);
+        newNumber.addEventListener('click', () => selectPreviewLine(row.newLine!, newKey));
+      }
+      if (oldKey === selectedKey || newKey === selectedKey) element.dataset.selected = 'true';
+      const referenceLine = row.newLine ?? row.oldLine;
+      if (referenceLine !== undefined) element.dataset.referenceLine = String(referenceLine);
       const marker = document.createElement('span');
       marker.className = 'diff-marker';
       marker.textContent = row.kind === 'added' ? '+' : row.kind === 'deleted' ? '−' : ' ';
@@ -681,18 +1120,42 @@ function fileIcon(extension?: string): string {
 }
 
 function activateReviewTab(target: 'changes' | 'files'): void {
-  activeReviewTab = target;
+  const snapshot = reviewController.execute({ kind: 'tab.select', tab: target }).snapshot;
+  syncReviewControls(snapshot);
+  renderReviewSnapshot(snapshot);
+}
+
+function syncReviewControls(snapshot: WorkspaceReviewSnapshot): void {
   for (const candidate of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
-    candidate.setAttribute('aria-selected', String(candidate.dataset.reviewTab === target));
+    candidate.setAttribute('aria-selected', String(candidate.dataset.reviewTab === snapshot.tab));
   }
-  if (changesView !== null) changesView.hidden = target !== 'changes';
-  if (filesView !== null) filesView.hidden = target !== 'files';
+  if (changesView !== null) changesView.hidden = snapshot.tab !== 'changes';
+  if (filesView !== null) filesView.hidden = snapshot.tab !== 'files';
   if (reviewSearch !== null) {
-    reviewSearch.placeholder = target === 'files' ? '搜索文件…' : '筛选变更…';
-    reviewSearch.setAttribute('aria-label', target === 'files' ? '搜索工作区文件' : '筛选工作区变更');
+    if (reviewSearch.value !== snapshot.query) reviewSearch.value = snapshot.query;
+    reviewSearch.placeholder = snapshot.tab === 'files' ? '搜索文件…' : '筛选变更…';
+    reviewSearch.setAttribute('aria-label', snapshot.tab === 'files' ? '搜索工作区文件' : '筛选工作区变更');
   }
-  if (changeFilter !== null) changeFilter.hidden = target !== 'changes';
-  applyReviewQuery();
+  if (changeFilter !== null) {
+    changeFilter.hidden = snapshot.tab !== 'changes';
+    changeFilter.value = snapshot.scope;
+  }
+}
+
+function renderReviewSnapshot(snapshot: WorkspaceReviewSnapshot): void {
+  syncReviewControls(snapshot);
+  syncReviewProgress(snapshot);
+  if (snapshot.tab === 'changes') {
+    if (reviewNote !== null) reviewNote.textContent = overviewNote;
+    renderChanges(snapshot);
+  } else {
+    applyReviewQuery();
+  }
+}
+
+function moveReview(direction: 'previous' | 'next'): void {
+  const transition = reviewController.execute({ kind: 'review.move', direction });
+  if (transition.effect?.kind === 'open-diff') void openDiff(transition.effect.nodeId);
 }
 
 function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boolean {
@@ -705,15 +1168,23 @@ function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boole
     reviewSearch?.select();
     return true;
   }
+  if (shortcut === 'preview-find' && currentPreview !== undefined) {
+    openPreviewFind();
+    return true;
+  }
   if (shortcut === 'preview-back' && previewBack?.disabled === false) {
-    applyPreviewHistory(previewHistory.back());
+    applyReviewSnapshot(reviewController.execute({ kind: 'preview.back' }).snapshot);
     return true;
   }
   if (shortcut === 'preview-forward' && previewForward?.disabled === false) {
-    applyPreviewHistory(previewHistory.forward());
+    applyReviewSnapshot(reviewController.execute({ kind: 'preview.forward' }).snapshot);
     return true;
   }
   if (shortcut === 'close-preview' && currentPreview !== undefined) {
+    if (reviewController.getSnapshot().find.open) {
+      closePreviewFind();
+      return true;
+    }
     closePreview();
     return true;
   }
@@ -722,7 +1193,8 @@ function handleWorkspaceReviewShortcut(shortcut: WorkspaceReviewShortcut): boole
 
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
   tab.addEventListener('click', () => {
-    activateReviewTab(tab.dataset.reviewTab === 'files' ? 'files' : 'changes');
+    const target = tab.dataset.reviewTab === 'files' ? 'files' : 'changes';
+    activateReviewTab(target);
   });
 }
 reviewSearch?.addEventListener('input', scheduleReviewQuery);
@@ -732,14 +1204,99 @@ reviewSearch?.addEventListener('keydown', (event) => {
   reviewSearch.value = '';
   scheduleReviewQuery();
 });
-changeFilter?.addEventListener('change', applyReviewQuery);
+changeFilter?.addEventListener('change', () => {
+  reviewController.execute({ kind: 'scope.change', scope: validatedChangeScope(changeFilter.value) });
+  applyReviewQuery();
+});
 document.querySelector('[data-testid="review-refresh"]')?.addEventListener('click', () => {
   if (loadedWorkspaceId !== undefined) void loadOverview(loadedWorkspaceId);
 });
 document.querySelector('[data-testid="preview-close"]')?.addEventListener('click', closePreview);
-previewBack?.addEventListener('click', () => applyPreviewHistory(previewHistory.back()));
-previewForward?.addEventListener('click', () => applyPreviewHistory(previewHistory.forward()));
-previewMode?.addEventListener('click', () => { showingMarkdownSource = !showingMarkdownSource; renderPreview(); });
+previewBack?.addEventListener('click', () => applyReviewSnapshot(reviewController.execute({ kind: 'preview.back' }).snapshot));
+previewForward?.addEventListener('click', () => applyReviewSnapshot(reviewController.execute({ kind: 'preview.forward' }).snapshot));
+previewFindToggle?.addEventListener('click', () => {
+  if (reviewController.getSnapshot().find.open) closePreviewFind();
+  else openPreviewFind();
+});
+previewFindInput?.addEventListener('input', () => {
+  reviewController.execute({ kind: 'find.change', query: previewFindInput.value });
+  renderPreview(true);
+});
+previewFindInput?.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    closePreviewFind();
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    movePreviewFind(event.shiftKey ? 'previous' : 'next');
+  }
+});
+document.querySelector('[data-testid="preview-find-close"]')?.addEventListener('click', closePreviewFind);
+previewFindPrevious?.addEventListener('click', () => movePreviewFind('previous'));
+previewFindNext?.addEventListener('click', () => movePreviewFind('next'));
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-target]')) {
+  button.addEventListener('click', () => {
+    const target = button.dataset.copyTarget;
+    if (target === 'path' || target === 'line' || target === 'path-line') copyPreviewTarget(target);
+  });
+}
+document.addEventListener('pointerdown', (event) => {
+  if (previewCopyMenu?.open === true && !previewCopyMenu.contains(event.target as Node)) {
+    previewCopyMenu.open = false;
+  }
+  if (workspaceContextMenu !== undefined && !workspaceContextMenu.contains(event.target as Node)) {
+    closeWorkspaceContextMenu();
+  }
+});
+previewContent?.addEventListener('contextmenu', (event) => {
+  const selectionReference = previewSelectionReference();
+  if (selectionReference !== undefined) {
+    event.preventDefault();
+    showWorkspaceContextMenu(event.clientX, event.clientY, [
+      {
+        label: '添加选中内容到对话',
+        run: () => addReferenceToConversation(selectionReference),
+      },
+      {
+        label: '复制选中文本',
+        run: () => copyPlainText(selectionReference.text, '已复制选中文本'),
+      },
+    ]);
+    return;
+  }
+  const row = (event.target as Element | null)?.closest<HTMLElement>('[data-reference-line]');
+  if (row === null || row === undefined) return;
+  const lineReference = selectedLineReference(row);
+  if (lineReference === undefined) return;
+  event.preventDefault();
+  showWorkspaceContextMenu(event.clientX, event.clientY, [
+    { label: '添加此行到对话', run: () => addReferenceToConversation(lineReference) },
+    { label: '复制此行文本', run: () => copyPlainText(lineReference.text, '已复制此行文本') },
+    {
+      label: '复制 路径:行号',
+      run: () => copyPlainText(
+        `${lineReference.path}:${String(lineReference.startLine)}`,
+        '已复制位置',
+      ),
+    },
+  ]);
+});
+window.addEventListener('blur', closeWorkspaceContextMenu);
+window.addEventListener('scroll', closeWorkspaceContextMenu, true);
+previewMode?.addEventListener('click', () => {
+  showingMarkdownSource = !showingMarkdownSource;
+  const snapshot = reviewController.execute({ kind: 'line.select', line: undefined }).snapshot;
+  syncPreviewCopyControls(snapshot);
+  renderPreview(true);
+});
+reviewPrevious?.addEventListener('click', () => moveReview('previous'));
+reviewNext?.addEventListener('click', () => moveReview('next'));
+reviewToggleViewed?.addEventListener('click', () => {
+  const snapshot = reviewController.execute({ kind: 'review.toggle' }).snapshot;
+  applyReviewSnapshot(snapshot);
+  renderChanges(snapshot);
+});
 document.addEventListener('keydown', (event) => {
   const shortcut = workspaceReviewShortcut(event);
   if (shortcut !== undefined && handleWorkspaceReviewShortcut(shortcut)) event.preventDefault();

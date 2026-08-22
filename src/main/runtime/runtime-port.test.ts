@@ -33,9 +33,11 @@ describe('stable Runtime port', () => {
       }),
     ).resolves.toEqual({ port: 54_321, source: 'state' });
     expect(allocatePort).toHaveBeenCalledTimes(1);
-    expect((await stat(join(userData, 'runtime-endpoint.json'))).mode & 0o777).toBe(
-      0o600,
-    );
+    if (process.platform !== 'win32') {
+      expect((await stat(join(userData, 'runtime-endpoint.json'))).mode & 0o777).toBe(
+        0o600,
+      );
+    }
   });
 
   it('migrates the most recent legacy ready origin from rotated app logs', async () => {

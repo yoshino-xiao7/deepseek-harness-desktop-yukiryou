@@ -1,5 +1,13 @@
 # Repository Instructions
 
+## Release branch workflow
+
+- Treat `main` as the released product baseline. Do not commit or push ordinary development work directly to `main`.
+- Start each upcoming release on a dedicated `yukiryou/v<next-version>` branch. Keep implementation, fixes, tests, documentation, and user-accepted iteration commits on that branch while the release is in development.
+- Do not merge a version branch into `main` merely because an individual milestone was accepted. Merge only when the repository owner explicitly starts release preparation or authorizes the release merge.
+- Keep the package version, changelog, release notes, tag, and published artifacts aligned during release preparation. Merge the completed version branch into `main` before creating the immutable release tag.
+- After a release, create the next version branch from the released `main` before continuing product development.
+
 ## Archived pet experiment
 
 - `yukiryou/pet-experiment-archive-20260820` is a cold-backup branch for the abandoned pet experiment. Its archive commit is `a05117e` (`archive: preserve abandoned pet experiment`).
