@@ -3,7 +3,9 @@ import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { execFile } from 'node:child_process';
 import { closeSync, openSync, readSync } from 'node:fs';
+import path from 'node:path';
 
 import {
   windowsExecutableName,
@@ -22,6 +24,42 @@ const machOMagicNumbers = new Set([
   0xbfbafeca,
 ]);
 const codeBundleSuffixes = ['.app', '.framework', '.xpc', '.appex'];
+
+function runExecutable(file: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { windowsHide: true }, (error) => {
+      if (error === null) resolve();
+      else reject(error);
+    });
+  });
+}
+
+export class LongPathWindowsMakerZIP extends MakerZIP {
+  override async make(
+    options: Parameters<MakerZIP['make']>[0],
+  ): Promise<string[]> {
+    if (options.targetPlatform !== 'win32') {
+      return super.make(options);
+    }
+
+    const zipName = `${path.basename(options.dir)}-${options.packageJSON.version}.zip`;
+    const zipPath = path.resolve(
+      options.makeDir,
+      'zip',
+      options.targetPlatform,
+      options.targetArch,
+      zipName,
+    );
+    await this.ensureFile(zipPath);
+
+    const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+    await runExecutable(
+      path.join(systemRoot, 'System32', 'tar.exe'),
+      ['-a', '-cf', zipPath, '-C', options.dir, '.'],
+    );
+    return [zipPath];
+  }
+}
 
 export function shouldIgnoreCodeSigningPath(path: string): boolean {
   if (codeBundleSuffixes.some((suffix) => path.endsWith(suffix))) return false;
@@ -75,7 +113,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerDMG({ format: 'ULFO' }),
-    new MakerZIP({}, ['darwin', 'win32']),
+    new LongPathWindowsMakerZIP({}, ['darwin', 'win32']),
     new MakerSquirrel({
       name: windowsSquirrelPackageId,
       exe: `${windowsExecutableName}.exe`,
