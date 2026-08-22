@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { closeElectronTestApplication } from './electron-cleanup.js';
 import { resolveE2eExecutablePath } from './executable-path.js';
 
 describe('packaged Runtime startup', () => {
@@ -11,7 +12,7 @@ describe('packaged Runtime startup', () => {
   let userData: string | undefined;
 
   afterEach(async () => {
-    await electronApp?.close();
+    await closeElectronTestApplication(electronApp);
     if (userData !== undefined) {
       await rm(userData, { recursive: true, force: true });
     }
