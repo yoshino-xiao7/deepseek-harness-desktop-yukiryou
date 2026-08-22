@@ -122,9 +122,13 @@ describe('previous-version upgrade', () => {
     if (candidateOrigin === undefined) {
       throw new Error('Candidate Harness origin is missing');
     }
-    await expect(readSessionIds(candidateOrigin)).resolves.toEqual(
-      sessionsBeforeUpgrade,
-    );
+    // The rc.8 UI can briefly materialize its reusable blank-session
+    // placeholder while applying the restored selection. Keep the invariant
+    // strict, but allow the normal reuse/cleanup cycle to settle before
+    // deciding that the upgrade persisted an extra Session.
+    await expect
+      .poll(() => readSessionIds(candidateOrigin), { timeout: 15_000 })
+      .toEqual(sessionsBeforeUpgrade);
 
     await electronApp.close();
     electronApp = undefined;
