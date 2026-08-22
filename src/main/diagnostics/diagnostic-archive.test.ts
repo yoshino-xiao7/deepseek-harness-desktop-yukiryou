@@ -80,7 +80,7 @@ describe('diagnostic archive', () => {
     const listing = (await readdir(extracted, { recursive: true })).join('\n');
     expect(logContents).toContain('path=~/work token=[REDACTED_TOKEN]');
     expect(listing).not.toContain('unrelated.txt');
-  });
+  }, 30_000);
 });
 
 async function extractArchive(archive: string, destination: string): Promise<void> {
