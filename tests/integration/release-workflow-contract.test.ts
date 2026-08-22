@@ -86,6 +86,28 @@ describe('macOS release workflow contract', () => {
     );
   });
 
+  it('waits for Squirrel background cleanup before enforcing an empty install root', async () => {
+    const [lifecycleScript, electronCleanup] = await Promise.all([
+      readFile(
+        join(process.cwd(), 'scripts', 'windows-squirrel-lifecycle.ps1'),
+        'utf8',
+      ),
+      readFile(join(process.cwd(), 'tests', 'e2e', 'electron-cleanup.ts'), 'utf8'),
+    ]);
+
+    expect(lifecycleScript).toContain(
+      "Wait-Until -FailureMessage 'Unexpected files remained after Squirrel uninstall'",
+    );
+    expect(lifecycleScript).toContain(
+      '$script:unexpectedEntries = @(Get-UnexpectedInstallEntries)',
+    );
+    expect(lifecycleScript).not.toContain('vk_swiftshader.dll');
+    expect(lifecycleScript).not.toContain('vk_swiftshader_icd.json');
+    expect(electronCleanup).toContain("'taskkill.exe'");
+    expect(electronCleanup).toContain("'/t', '/f'");
+    expect(electronCleanup).toContain('applicationProcess.exitCode !== null');
+  });
+
   it('vendors the bundled runtime before running integration tests', async () => {
     const workflow = parse(
       await readFile(
