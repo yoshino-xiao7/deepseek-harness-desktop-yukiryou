@@ -105,6 +105,7 @@ describe('macOS release workflow contract', () => {
     expect(lifecycleScript).not.toContain('vk_swiftshader_icd.json');
     expect(electronCleanup).toContain("'taskkill.exe'");
     expect(electronCleanup).toContain("'/t', '/f'");
+    expect(electronCleanup).toContain('applicationProcess.exitCode !== null');
   });
 
   it('vendors the bundled runtime before running integration tests', async () => {

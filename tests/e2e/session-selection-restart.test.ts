@@ -18,7 +18,12 @@ describe('Harness session selection across desktop restarts', () => {
   afterEach(async () => {
     await closeElectronTestApplication(electronApp);
     if (userData !== undefined) {
-      await rm(userData, { recursive: true, force: true });
+      await rm(userData, {
+        recursive: true,
+        force: true,
+        maxRetries: process.platform === 'win32' ? 20 : 0,
+        retryDelay: 100,
+      });
     }
   }, 30_000);
 

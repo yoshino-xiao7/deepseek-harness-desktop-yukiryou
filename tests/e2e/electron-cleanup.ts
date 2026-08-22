@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { setTimeout } from 'node:timers/promises';
 import type { ElectronApplication } from 'playwright';
 
 export async function closeElectronTestApplication(
@@ -11,7 +12,11 @@ export async function closeElectronTestApplication(
   }
 
   const applicationProcess = application.process();
-  if (applicationProcess.pid === undefined || applicationProcess.exitCode !== null) {
+  if (
+    applicationProcess.pid === undefined ||
+    applicationProcess.exitCode !== null ||
+    applicationProcess.signalCode !== null
+  ) {
     return;
   }
   const result = spawnSync(
@@ -26,4 +31,14 @@ export async function closeElectronTestApplication(
       `taskkill failed with status ${String(result.status)}: ${result.stderr}`,
     );
   }
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (
+      applicationProcess.exitCode !== null ||
+      applicationProcess.signalCode !== null
+    ) {
+      return;
+    }
+    await setTimeout(100);
+  }
+  throw new Error('Electron process tree did not exit after taskkill');
 }
