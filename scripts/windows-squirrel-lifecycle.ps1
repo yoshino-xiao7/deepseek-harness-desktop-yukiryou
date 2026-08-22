@@ -146,29 +146,36 @@ $process = Start-Process -FilePath $updateExecutable -ArgumentList '--uninstall'
 if ($process.ExitCode -ne 0) {
   throw "Squirrel uninstall failed with exit code $($process.ExitCode)"
 }
-try {
-  Wait-Until -FailureMessage 'Squirrel installation root remained after uninstall' -Condition {
-    return -not (Test-Path -LiteralPath $installRoot)
-  }
-} catch {
-  if (Test-Path -LiteralPath $installRoot) {
-    Write-Warning 'Remaining Squirrel installation entries:'
-    Get-ChildItem -LiteralPath $installRoot -Recurse -Force -ErrorAction SilentlyContinue |
-      Select-Object -ExpandProperty FullName |
-      ForEach-Object { Write-Warning $_ }
-  }
-  $uninstallLogs = Get-ChildItem -LiteralPath $env:TEMP -Filter 'Squirrel*Uninstall*.log' -ErrorAction SilentlyContinue
-  foreach ($log in $uninstallLogs) {
-    Write-Warning "Squirrel uninstall log: $($log.FullName)"
-    Get-Content -LiteralPath $log.FullName -ErrorAction SilentlyContinue |
-      ForEach-Object { Write-Warning $_ }
-  }
-  throw
+Wait-Until -FailureMessage 'Installed application remained runnable after uninstall' -Condition {
+  return -not (Test-Path -LiteralPath ([string]$state.executable))
 }
 foreach ($shortcutPath in @($state.shortcutPaths)) {
   if (Test-Path -LiteralPath ([string]$shortcutPath)) {
     throw "Squirrel shortcut remained after uninstall: $shortcutPath"
   }
+}
+$uninstallEntries = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+  Get-ItemProperty -ErrorAction SilentlyContinue |
+  Where-Object { $_.DisplayName -eq 'DeepSeek YukiRyou' }
+if (@($uninstallEntries).Count -gt 0) {
+  throw 'Programs and Features still contains DeepSeek YukiRyou after uninstall'
+}
+
+if (Test-Path -LiteralPath $installRoot) {
+  $unexpectedEntries = Get-ChildItem -LiteralPath $installRoot -Recurse -Force |
+    ForEach-Object {
+      [System.IO.Path]::GetRelativePath($installRoot, $_.FullName).Replace('\', '/')
+    } |
+    Where-Object {
+      $_ -notmatch '^\.dead$' -and
+      $_ -notmatch '^Update\.exe$' -and
+      $_ -notmatch '^app-[^/]+$' -and
+      $_ -notmatch '^app-[^/]+/(squirrel\.exe|v8_context_snapshot\.bin)$'
+    }
+  if (@($unexpectedEntries).Count -gt 0) {
+    throw "Unexpected files remained after Squirrel uninstall: $($unexpectedEntries -join ', ')"
+  }
+  Write-Warning 'Squirrel left only its known self-cleanup tombstones; no product executable or package remains'
 }
 
 $markerPath = [string]$state.markerPath
@@ -181,4 +188,4 @@ if ([string]$marker.nonce -ne [string]$state.markerNonce) {
 }
 Remove-Item -LiteralPath $markerPath -Force
 Remove-Item -LiteralPath $stateFile -Force
-Write-Output 'Squirrel install, repair, uninstall, shortcut, and data-retention checks passed'
+Write-Output 'Squirrel install, repair, uninstall, registration, shortcut, and data-retention checks passed'

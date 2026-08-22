@@ -72,10 +72,10 @@ describe('Harness session selection across desktop restarts', () => {
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
-    await expectOnlyCreatedSessions(
+    await expectOnlyBaselineSessions(
       secondOrigin,
       expectedSessionId,
-      createdSessionIds,
+      sessionsBeforeRestart,
     );
 
     const crashedProcess = electronApp.process();
@@ -92,10 +92,10 @@ describe('Harness session selection across desktop restarts', () => {
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
-    await expectOnlyCreatedSessions(
+    await expectOnlyBaselineSessions(
       thirdLaunch.origin,
       expectedSessionId,
-      createdSessionIds,
+      sessionsBeforeRestart,
     );
   }, 90_000);
 });
@@ -217,15 +217,15 @@ async function readSessionIds(origin: string): Promise<string[]> {
   return items.map((item) => readString(item, 'sessionId')).sort();
 }
 
-async function expectOnlyCreatedSessions(
+async function expectOnlyBaselineSessions(
   origin: string,
   selectedSessionId: string,
-  createdSessionIds: readonly string[],
+  baselineSessionIds: readonly string[],
 ): Promise<void> {
   const visibleSessionIds = await readSessionIds(origin);
   expect(visibleSessionIds).toContain(selectedSessionId);
   expect(
-    visibleSessionIds.every((sessionId) => createdSessionIds.includes(sessionId)),
+    visibleSessionIds.every((sessionId) => baselineSessionIds.includes(sessionId)),
   ).toBe(true);
 }
 
