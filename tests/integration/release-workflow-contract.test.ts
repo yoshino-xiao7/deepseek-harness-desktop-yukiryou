@@ -127,6 +127,12 @@ describe('macOS release workflow contract', () => {
       'Refusing to remove an unmarked pre-existing Squirrel installation',
     );
     expect(lifecycleScript).toContain(
+      "Where-Object { $_.DisplayName -eq 'DeepSeek YukiRyou' }",
+    );
+    expect(lifecycleScript).toContain(
+      "Write-Output 'Removed unregistered Squirrel self-cleanup tombstones'",
+    );
+    expect(lifecycleScript).toContain(
       '[string]$marker.version -ne [string]$manifest.version',
     );
     expect(lifecycleScript).toContain(

@@ -90,7 +90,24 @@ if ($Action -eq 'Recover') {
     exit 0
   }
   if (-not (Test-Path -LiteralPath $markerPath)) {
-    throw "Refusing to remove an unmarked pre-existing Squirrel installation: $installRoot"
+    $installedExecutable = Get-InstalledExecutable
+    $shortcutPaths = @(Get-ShortcutPaths | Where-Object { Test-Path -LiteralPath $_ })
+    $uninstallEntries = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+      Get-ItemProperty -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -eq 'DeepSeek YukiRyou' }
+    $unexpectedEntries = @(Get-UnexpectedInstallEntries)
+    if (
+      $null -ne $installedExecutable -or
+      $shortcutPaths.Count -gt 0 -or
+      @($uninstallEntries).Count -gt 0 -or
+      $unexpectedEntries.Count -gt 0
+    ) {
+      throw "Refusing to remove an unmarked pre-existing Squirrel installation: $installRoot"
+    }
+
+    Remove-Item -LiteralPath $installRoot -Recurse -Force
+    Write-Output 'Removed unregistered Squirrel self-cleanup tombstones'
+    exit 0
   }
   if (-not (Test-Path -LiteralPath $manifestPath)) {
     throw "Windows candidate manifest is missing: $manifestPath"
