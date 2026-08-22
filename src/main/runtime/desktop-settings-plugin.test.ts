@@ -11,10 +11,10 @@ type ElementNode = {
 
 describe('desktop plugin management tab', () => {
   it('keeps long plugin names inside a shrinkable two-column card header', async () => {
-    const source = await readFile(
+    const source = (await readFile(
       new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),
       'utf8',
-    );
+    )).replaceAll('\r\n', '\n');
 
     expect(source).toContain('grid-template-columns: minmax(0, 1fr) auto');
     expect(source).toContain("className: 'dsh-desktop-plugin-name',\n                              title: entry.displayName");

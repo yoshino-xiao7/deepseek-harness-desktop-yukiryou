@@ -1,3 +1,5 @@
+import { join, sep } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 async function loadStoreFactory() {
@@ -22,17 +24,21 @@ describe('desktop market persistent cache', () => {
 
     await store.save('dshfind', { schemaVersion: 2 }, 42);
 
-    expect(io.mkdir).toHaveBeenCalledWith('/trusted/runtime-home/desktop-market-cache', {
+    const cacheRoot = join('/trusted/runtime-home', 'desktop-market-cache');
+    expect(io.mkdir).toHaveBeenCalledWith(cacheRoot, {
       recursive: true, mode: 0o700,
     });
     expect(io.writeFile).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/trusted\/runtime-home\/desktop-market-cache\/catalog-v2-dshfind\.json\..+\.tmp$/u),
+      expect.stringMatching(new RegExp(
+        `${escapeRegularExpression(cacheRoot + sep)}catalog-v2-dshfind\\.json\\..+\\.tmp$`,
+        'u',
+      )),
       expect.any(String),
       { encoding: 'utf8', mode: 0o600, flag: 'wx' },
     );
     expect(io.rename).toHaveBeenCalledWith(
       expect.stringMatching(/\.tmp$/u),
-      '/trusted/runtime-home/desktop-market-cache/catalog-v2-dshfind.json',
+      join(cacheRoot, 'catalog-v2-dshfind.json'),
     );
   });
 
@@ -95,3 +101,7 @@ describe('desktop market persistent cache', () => {
     expect(unlink.mock.calls[0]?.[0]).not.toBe('/trusted/runtime-home/desktop-market-cache/catalog-v2-dshfind.json');
   });
 });
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}

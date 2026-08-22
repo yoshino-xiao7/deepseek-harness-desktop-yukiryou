@@ -574,7 +574,9 @@ describe('PluginProfileBootstrap', () => {
     });
     await expect(realpath(join(
       runtimeHome, 'profiles', 'node_modules', '@example', 'dsh-tool',
-    ))).resolves.toContain(`/generations/${installedGeneration}/node_modules/@example/dsh-tool`);
+    ))).resolves.toContain(join(
+      'generations', installedGeneration, 'node_modules', '@example', 'dsh-tool',
+    ));
     await expect(bootstrap.inventory()).resolves.toMatchObject({
       currentGeneration: installedGeneration,
       entries: [{ packageName: candidate.packageName }],

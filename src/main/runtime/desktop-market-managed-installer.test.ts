@@ -20,6 +20,11 @@ interface ManagedInstaller {
 async function modules(): Promise<{
   createArtifactVerifier: (options: Record<string, unknown>) => ArtifactVerifier;
   createManagedPluginInstaller: (options: Record<string, unknown>) => ManagedInstaller;
+  resolvePublishedJunctionTarget: (
+    target: string,
+    temporary: string,
+    destination: string,
+  ) => string;
 }> {
   const [verifier, installer] = await Promise.all([
     import(new URL('../../../runtime/desktop-market-plugin/artifact-verifier.js', import.meta.url).href),
@@ -28,10 +33,33 @@ async function modules(): Promise<{
   return {
     createArtifactVerifier: verifier.createArtifactVerifier as (options: Record<string, unknown>) => ArtifactVerifier,
     createManagedPluginInstaller: installer.createManagedPluginInstaller as (options: Record<string, unknown>) => ManagedInstaller,
+    resolvePublishedJunctionTarget: installer.resolvePublishedJunctionTarget as (
+      target: string,
+      temporary: string,
+      destination: string,
+    ) => string,
   };
 }
 
 describe('desktop market managed installer', () => {
+  it('retargets staged package junctions to their atomic publication', async () => {
+    const loaded = await modules();
+    const temporary = join('runtime-home', 'user-plugins', '.staging', 'generation.uuid');
+    const destination = join('runtime-home', 'user-plugins', 'generations', 'generation');
+    const packagePath = join(temporary, 'node_modules', '.store', 'package');
+
+    expect(loaded.resolvePublishedJunctionTarget(
+      packagePath,
+      temporary,
+      destination,
+    )).toBe(join(destination, 'node_modules', '.store', 'package'));
+    expect(loaded.resolvePublishedJunctionTarget(
+      join('runtime', 'node_modules', 'react'),
+      temporary,
+      destination,
+    )).toBe(join('runtime', 'node_modules', 'react'));
+  });
+
   it('assembles a multi-version-safe offline generation and reuses its exact publication', async () => {
     const root = await mkdtemp(join(tmpdir(), 'managed-installer-'));
     const fixture = await verifiedFixture(root);

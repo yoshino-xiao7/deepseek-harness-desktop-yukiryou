@@ -115,7 +115,9 @@ export function createManagedPluginInstaller(options = {}) {
           if (target === undefined) throw installerError('invalid-plan', 'Frozen peer target is missing');
           const linkPath = join(packagePath, 'node_modules', ...peer.name.split('/'));
           await mkdir(dirname(linkPath), { recursive: true, mode: 0o700 });
-          await linkDirectory(target, linkPath);
+          await linkDirectory(target, linkPath, {
+            platform: process.platform, temporary, destination,
+          });
         }
 
         for (const artifact of normalized.artifacts) {
@@ -126,7 +128,9 @@ export function createManagedPluginInstaller(options = {}) {
             if (target === undefined) throw installerError('invalid-plan', 'Frozen dependency target is missing');
             const linkPath = join(packagePath, 'node_modules', ...dependency.name.split('/'));
             await mkdir(dirname(linkPath), { recursive: true, mode: 0o700 });
-            await linkDirectory(target, linkPath);
+            await linkDirectory(target, linkPath, {
+              platform: process.platform, temporary, destination,
+            });
           }
         }
 
@@ -135,7 +139,9 @@ export function createManagedPluginInstaller(options = {}) {
         const rootArtifact = normalized.artifacts.find((artifact) => artifact.id === normalized.root);
         const rootLink = join(temporary, 'node_modules', ...rootArtifact.name.split('/'));
         await mkdir(dirname(rootLink), { recursive: true, mode: 0o700 });
-        await linkDirectory(rootPackage, rootLink);
+        await linkDirectory(rootPackage, rootLink, {
+          platform: process.platform, temporary, destination,
+        });
         const manifest = {
           schemaVersion: 1,
           generation,
@@ -381,11 +387,30 @@ function integrityDigest(integrity) {
   return bytes.length === 64 ? `sha512:${bytes.toString('hex')}` : undefined;
 }
 
-async function defaultLinkDirectory(target, path) {
-  const linkTarget = process.platform === 'win32'
-    ? await realpath(target)
-    : relative(await realpath(dirname(path)), await realpath(target));
-  await symlink(linkTarget, path, process.platform === 'win32' ? 'junction' : 'dir');
+async function defaultLinkDirectory(target, path, context = {}) {
+  const platform = context.platform ?? process.platform;
+  const resolvedTarget = await realpath(target);
+  const linkTarget = platform === 'win32'
+    ? resolvePublishedJunctionTarget(
+        resolvedTarget,
+        context.temporary,
+        context.destination,
+      )
+    : relative(await realpath(dirname(path)), resolvedTarget);
+  await symlink(linkTarget, path, platform === 'win32' ? 'junction' : 'dir');
+}
+
+export function resolvePublishedJunctionTarget(target, temporary, destination) {
+  if (typeof temporary !== 'string' || typeof destination !== 'string') return target;
+  const stagingRelative = relative(temporary, target);
+  if (stagingRelative === '' || (
+    stagingRelative !== '..' &&
+    !stagingRelative.startsWith('../') &&
+    !stagingRelative.startsWith('..\\')
+  )) {
+    return join(destination, stagingRelative);
+  }
+  return target;
 }
 
 function nodeKey(id) {

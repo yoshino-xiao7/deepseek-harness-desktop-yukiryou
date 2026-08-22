@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { posix, win32 } from 'node:path';
 import type { DesktopCarrierMode } from '../window/desktop-carrier-mode.js';
 import { resolveBundledRuntimePlatform } from './runtime-platform.js';
 
@@ -13,6 +13,7 @@ export function createHarnessRuntimeCommand(
   readonly args: readonly string[];
 } {
   const layout = resolveBundledRuntimePlatform(platform, architecture);
+  const join = platform === 'win32' ? win32.join : posix.join;
   return {
     command: join(runtimeRoot, layout.nodeExecutable),
     args: [
