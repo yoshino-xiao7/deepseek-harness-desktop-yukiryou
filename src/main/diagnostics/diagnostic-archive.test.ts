@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -29,7 +29,7 @@ describe('diagnostic archive', () => {
       electronVersion: '43.4.0',
       harnessVersion: '0.1.0-rc.7',
       architecture: 'arm64',
-      macOSVersion: '25.6.0',
+      operatingSystem: 'darwin 25.6.0',
       failureCode: 'spawn-failed',
       failureDetails: 'at /Users/yuki/private Authorization: Bearer secret-value',
       userHome: '/Users/yuki',
@@ -62,23 +62,44 @@ describe('diagnostic archive', () => {
         electronVersion: '43.4.0',
         harnessVersion: '0.1.0-rc.7',
         architecture: 'arm64',
-        macOSVersion: '25.6.0',
+        operatingSystem: `${process.platform} test`,
         failureCode: 'none',
         failureDetails: 'No failure recorded',
         userHome: '/Users/yuki',
       },
     });
 
-    const { stdout: logContents } = await executeFile('/usr/bin/unzip', [
-      '-p',
-      archive,
-      'DeepSeek YukiRyou Diagnostics/logs/desktop.log',
-    ]);
-    const { stdout: listing } = await executeFile('/usr/bin/unzip', [
-      '-Z1',
-      archive,
-    ]);
+    const extracted = join(directory, 'extracted');
+    await extractArchive(archive, extracted);
+    const logContents = await readFile(join(
+      extracted,
+      'DeepSeek YukiRyou Diagnostics',
+      'logs',
+      'desktop.log',
+    ), 'utf8');
+    const listing = (await readdir(extracted, { recursive: true })).join('\n');
     expect(logContents).toContain('path=~/work token=[REDACTED_TOKEN]');
     expect(listing).not.toContain('unrelated.txt');
   });
 });
+
+async function extractArchive(archive: string, destination: string): Promise<void> {
+  await mkdir(destination, { recursive: true });
+  if (process.platform === 'win32') {
+    await executeFile('powershell.exe', [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '[IO.Compression.ZipFile]::ExtractToDirectory($env:DSH_TEST_ARCHIVE,$env:DSH_TEST_DESTINATION)',
+    ], {
+      env: {
+        ...process.env,
+        DSH_TEST_ARCHIVE: archive,
+        DSH_TEST_DESTINATION: destination,
+      },
+    });
+    return;
+  }
+  await executeFile('/usr/bin/unzip', ['-q', archive, '-d', destination]);
+}

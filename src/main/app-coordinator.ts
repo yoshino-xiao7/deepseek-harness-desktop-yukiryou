@@ -811,7 +811,7 @@ export class AppCoordinator {
           electronVersion: process.versions.electron,
           harnessVersion: '0.1.0-rc.8',
           architecture: process.arch,
-          macOSVersion: release(),
+          operatingSystem: `${process.platform} ${release()}`,
           failureCode: failure?.code ?? 'none',
           failureDetails: failure?.message ?? 'No failure recorded',
           userHome: app.getPath('home'),
