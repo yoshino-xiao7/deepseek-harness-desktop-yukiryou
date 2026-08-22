@@ -411,16 +411,17 @@ let timedOut = false;
 const timer = setTimeout(() => {
   timedOut = true;
   child.kill();
+  process.stderr.write(observed);
+  process.exit(1);
 }, 5_000);
 child.onData((data) => { observed += data; });
 child.onExit(({ exitCode }) => {
   clearTimeout(timer);
   if (!timedOut && exitCode === 0 && observed.includes(marker)) {
-    process.stdout.write(marker);
+    process.stdout.write(marker, () => process.exit(0));
     return;
   }
-  process.stderr.write(observed);
-  process.exitCode = 1;
+  process.stderr.write(observed, () => process.exit(1));
 });
 if (${JSON.stringify(shell.input)} !== '') {
   child.write(${JSON.stringify(shell.input)});
