@@ -48,13 +48,13 @@ describe('Harness session selection across desktop restarts', () => {
       workspaceId: readNestedString(workspaceB, 'workspace', 'workspaceId'),
     });
     const expectedSessionId = readString(sessionA, 'sessionId');
-    const expectedRealSessionIds = [
+    const createdSessionIds = [
       expectedSessionId,
       readString(sessionB, 'sessionId'),
     ].sort();
     const sessionsBeforeRestart = await readSessionIds(firstOrigin);
     expect(sessionsBeforeRestart).toEqual(
-      expect.arrayContaining(expectedRealSessionIds),
+      expect.arrayContaining(createdSessionIds),
     );
     await writeHarnessStorage(
       electronApp,
@@ -73,7 +73,7 @@ describe('Harness session selection across desktop restarts', () => {
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
     await expect(readSessionIds(secondOrigin)).resolves.toEqual(
-      expectedRealSessionIds,
+      [expectedSessionId],
     );
 
     const crashedProcess = electronApp.process();
@@ -89,7 +89,7 @@ describe('Harness session selection across desktop restarts', () => {
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
     await expect(readSessionIds(thirdLaunch.origin)).resolves.toEqual(
-      expectedRealSessionIds,
+      [expectedSessionId],
     );
   }, 90_000);
 });
