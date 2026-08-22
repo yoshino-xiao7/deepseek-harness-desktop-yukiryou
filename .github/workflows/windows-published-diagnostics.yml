@@ -1,6 +1,12 @@
 name: Windows published startup diagnostics
 
 on:
+  push:
+    branches:
+      - yukiryou/v0.2.3-beta.2
+    paths:
+      - '.github/workflows/windows-published-diagnostics.yml'
+      - 'tests/e2e/windows-published-startup.test.ts'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -53,7 +59,7 @@ jobs:
       - name: Download and extract the exact published portable ZIP
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || 'v0.2.3-beta.1' }}
         run: |
           $download = Join-Path $env:RUNNER_TEMP 'deepseek-yukiryou-published'
           New-Item -ItemType Directory -Path $download -Force | Out-Null
@@ -81,7 +87,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: windows-published-startup-${{ inputs.release_tag }}
+          name: windows-published-startup-${{ inputs.release_tag || 'v0.2.3-beta.1' }}
           path: out/windows-live-diagnostics/
           if-no-files-found: error
           retention-days: 7
