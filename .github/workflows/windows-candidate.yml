@@ -88,6 +88,27 @@ jobs:
           const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
           if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==3)
           throw new Error('Windows candidate provenance mismatch')"
+      - name: Install the frozen Squirrel candidate
+        shell: pwsh
+        run: |
+          ./scripts/windows-squirrel-lifecycle.ps1 -Action Install
+          $state = Get-Content 'out/windows-lifecycle/state.json' -Raw | ConvertFrom-Json
+          "DSH_E2E_EXECUTABLE_PATH=$($state.executable)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Start the installed application
+        run: >-
+          pnpm exec vitest run
+          tests/e2e/packaged-startup.test.ts
+          tests/e2e/session-selection-restart.test.ts
+          --no-file-parallelism
+      - name: Repair-install the same candidate and restart it
+        shell: pwsh
+        run: |
+          ./scripts/windows-squirrel-lifecycle.ps1 -Action Repair
+          pnpm exec vitest run tests/e2e/packaged-startup.test.ts --no-file-parallelism
+      - name: Uninstall and verify shortcuts and user-data retention
+        if: ${{ always() && hashFiles('out/windows-lifecycle/state.json') != '' }}
+        shell: pwsh
+        run: ./scripts/windows-squirrel-lifecycle.ps1 -Action Uninstall
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64-unsigned-candidate
