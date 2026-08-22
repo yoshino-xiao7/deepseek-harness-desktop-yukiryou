@@ -42,7 +42,10 @@ describe('Windows release identity', () => {
       name: 'dmg',
       platforms: ['darwin', 'mas'],
     });
-    expect(makers).toContainEqual({ name: 'zip', platforms: ['darwin'] });
+    expect(makers).toContainEqual({
+      name: 'zip',
+      platforms: ['darwin', 'win32'],
+    });
     expect(makers).toContainEqual({ name: 'squirrel', platforms: ['win32'] });
   });
 });

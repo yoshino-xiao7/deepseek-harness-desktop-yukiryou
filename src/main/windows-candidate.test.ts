@@ -2,11 +2,27 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createWindowsCandidateManifest,
+  resolveWindowsPortableArtifactName,
   resolveWindowsSquirrelArtifactNames,
   validateWindowsReleases,
 } from './windows-candidate.js';
 
 describe('Windows candidate artifacts', () => {
+  it('requires the exact portable ZIP for the release version', () => {
+    expect(
+      resolveWindowsPortableArtifactName(
+        ['DeepSeek YukiRyou-win32-x64-0.2.3-beta.1.zip'],
+        '0.2.3-beta.1',
+      ),
+    ).toBe('DeepSeek YukiRyou-win32-x64-0.2.3-beta.1.zip');
+    expect(() =>
+      resolveWindowsPortableArtifactName(
+        ['DeepSeek YukiRyou-win32-x64-0.2.2-beta.1.zip'],
+        '0.2.3-beta.1',
+      ),
+    ).toThrow('Expected exactly');
+  });
+
   it('requires one setup executable, one full package, and RELEASES', () => {
     expect(
       resolveWindowsSquirrelArtifactNames([

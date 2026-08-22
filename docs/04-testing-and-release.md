@@ -76,7 +76,7 @@ pnpm test:soak:app:extended # 独立工作流 5 小时扩展 soak
 | 数据 | 全新、上一版本升级、损坏的桌面偏好 |
 | 端口 | 默认空闲、默认占用、竞争失败 |
 
-Windows 候选 CI 会额外运行冻结后的 `Setup.exe`：在干净 runner 上完成静默首装，确认桌面或开始菜单快捷方式与安装目录，启动实际安装路径中的应用并验证会话恢复，再执行同版本修复安装、再次启动和 Squirrel 卸载。卸载必须移除可运行主程序、更新包、快捷方式和“程序与功能”注册项，同时保留应用用户数据。旧 Squirrel 可能保留 `.dead`、`Update.exe`、`squirrel.exe` 和 V8 snapshot 自清理墓碑；门禁只允许这组精确残留，任何产品文件或其他残留仍失败。该门禁不把同版本修复安装表述为“覆盖升级”；真正的跨版本升级、自动更新和 Windows 11 客户端实机验收需要上一份 Windows 公开候选后单独完成。
+Windows 候选 CI 会同时生成并验证未签名 `Setup.exe` 与便携 ZIP：先从解压后的精确 ZIP 启动应用并验证会话恢复，再用冻结的 EXE 在干净 runner 完成静默首装，确认桌面或开始菜单快捷方式与安装目录，启动实际安装路径中的应用，执行同版本修复安装、再次启动和 Squirrel 卸载。卸载必须移除可运行主程序、更新包、快捷方式和“程序与功能”注册项，同时保留应用用户数据。旧 Squirrel 可能保留 `.dead`、`Update.exe`、`squirrel.exe` 和 V8 snapshot 自清理墓碑；门禁只允许这组精确残留，任何产品文件或其他残留仍失败。该门禁不把同版本修复安装表述为“覆盖升级”；跨版本升级、自动更新和 Windows 11 客户端实机验收在首个公开 Windows Beta 后继续补齐。
 
 ## CI 流水线
 
@@ -94,7 +94,8 @@ Windows 候选 CI 会额外运行冻结后的 `Setup.exe`：在干净 runner 上
 2. 第二台全新 runner 下载候选与上一公开版、复制候选到 `/Applications`，执行签名/证书链/架构、包内原生模块验证；随后用同一临时用户目录在上一版创建并完成真实非空 Session、持久化 `dsh.sessions.current`，再启动候选，验证相同 origin、当前 Session ID、精确 Session 集合与 rc.8 回退副本，不得新增空白 Session；最后真实启动精确候选直到 Harness 就绪并产生绑定 SHA-256 与 commit 的回执。
 3. 只有回执与候选完全匹配，第三台 runner 才提交 Apple 一次；Accepted 后检查公证日志、staple 并生成最终 DMG/ZIP。
 4. 第四台全新 runner 分别安装最终 DMG/ZIP，执行 `codesign`、`spctl`、ticket、架构、校验和，并再次启动精确的最终应用直到 Harness 就绪。
-5. 全部通过后创建 Draft；独立发布工作流从 Draft 重新下载并再次安装验收，通过后才发布 prerelease。任何失败都不得创建公开 Release。
+5. 同一提交还必须在 Windows x64 runner 通过 Runtime/ConPTY、安装 EXE、便携 ZIP、会话恢复和 Squirrel 生命周期门禁；只选择版本化 EXE、便携 ZIP 与 Windows SHA-256 清单作为公开资产，内部 NUPKG/RELEASES 不发布。
+6. 全部通过后创建包含 macOS DMG/ZIP 与 Windows EXE/ZIP 的同一 Draft；独立发布工作流从 Draft 重新下载并再次安装 macOS 产物，通过后才发布 prerelease。任何失败都不得创建公开 Release。
 
 正式发布必须从干净 commit 构建。CI 不允许在签名后修改 `.app` 内容，也不允许覆盖已经存在的版本或 tag。
 

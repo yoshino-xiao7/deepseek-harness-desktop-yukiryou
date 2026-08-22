@@ -13,6 +13,7 @@ import { basename, join, resolve } from 'node:path';
 
 import {
   createWindowsCandidateManifest,
+  resolveWindowsPortableArtifactName,
   resolveWindowsSquirrelArtifactNames,
   validateWindowsReleases,
   type WindowsCandidateArtifact,
@@ -28,6 +29,9 @@ const sourceDirectory = resolve(
 const outputDirectory = resolve(
   readArgument('--output') ?? join('out', 'windows-candidate'),
 );
+const portableSourceDirectory = resolve(
+  readArgument('--portable-source') ?? join('out', 'make', 'zip', 'win32', 'x64'),
+);
 const packageMetadata = JSON.parse(
   await readFile(resolve('package.json'), 'utf8'),
 ) as { readonly version?: string };
@@ -37,6 +41,10 @@ if (version === undefined || version === '') {
 }
 
 const names = resolveWindowsSquirrelArtifactNames(await readdir(sourceDirectory));
+const portableSourceName = resolveWindowsPortableArtifactName(
+  await readdir(portableSourceDirectory),
+  version,
+);
 const packagePath = join(sourceDirectory, names.package);
 const packageBytes = (await stat(packagePath)).size;
 validateWindowsReleases(
@@ -58,6 +66,17 @@ for (const file of [names.setup, names.package, names.releases]) {
     sha256: await sha256(destination),
   });
 }
+const portableName = `DeepSeek.YukiRyou-win32-x64-${version}-portable.zip`;
+const portableDestination = join(outputDirectory, portableName);
+await copyFile(
+  join(portableSourceDirectory, portableSourceName),
+  portableDestination,
+);
+artifacts.push({
+  file: portableName,
+  bytes: (await stat(portableDestination)).size,
+  sha256: await sha256(portableDestination),
+});
 
 const gitCommit =
   process.env.GITHUB_SHA?.trim() ||
@@ -77,7 +96,7 @@ await writeFile(
 );
 
 console.log(
-  `Prepared Windows ${version} candidate with ${artifacts.length} Squirrel artifacts`,
+  `Prepared Windows ${version} candidate with ${artifacts.length} installer and portable artifacts`,
 );
 
 function readArgument(name: string): string | undefined {

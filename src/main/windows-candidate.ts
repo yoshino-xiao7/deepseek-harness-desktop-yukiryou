@@ -18,6 +18,20 @@ export interface WindowsCandidateManifest {
   readonly artifacts: readonly WindowsCandidateArtifact[];
 }
 
+export function resolveWindowsPortableArtifactName(
+  files: readonly string[],
+  version: string,
+): string {
+  const expected = `DeepSeek YukiRyou-win32-x64-${version}.zip`;
+  const archives = files.filter((file) => file.endsWith('.zip'));
+  if (archives.length !== 1 || archives[0] !== expected) {
+    throw new Error(
+      `Expected exactly ${expected} in Windows ZIP output, found ${archives.join(', ') || 'none'}`,
+    );
+  }
+  return expected;
+}
+
 export function resolveWindowsSquirrelArtifactNames(
   files: readonly string[],
 ): WindowsSquirrelArtifactNames {

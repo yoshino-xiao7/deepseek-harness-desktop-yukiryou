@@ -47,6 +47,25 @@ describe('macOS release workflow contract', () => {
     expect(releaseNotes).not.toMatch(/^# /m);
   });
 
+  it('publishes the verified Windows installer and portable ZIP beside macOS assets', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const release = workflow.jobs?.release;
+    const commands = (release?.steps ?? [])
+      .map((step) => step.run?.trim() ?? '')
+      .join('\n');
+
+    expect(release?.needs).toEqual(['verify_final', 'windows']);
+    expect(commands).toContain('Windows candidate does not match this release');
+    expect(commands).toContain('-win32-x64-Setup.exe');
+    expect(commands).toContain('-portable.zip');
+    expect(commands).toContain('SHA256SUMS-Windows.txt');
+  });
+
   it('vendors the bundled runtime before running integration tests', async () => {
     const workflow = parse(
       await readFile(

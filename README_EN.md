@@ -13,7 +13,7 @@
   <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
-  <img alt="Windows 11 x64 candidate" src="https://img.shields.io/badge/Windows%2011-x64%20candidate-3157a4?style=flat-square&logo=windows11">
+  <img alt="Windows 11 x64 beta" src="https://img.shields.io/badge/Windows%2011-x64%20beta-3157a4?style=flat-square&logo=windows11">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
 </p>
 
@@ -43,7 +43,7 @@ DeepSeek Harness provides a local Web UI, but routine use still involves prepari
 
 This is not a rewrite of Harness and does not change how the agent works. Its job is to deliver Harness to the desktop with predictable startup, recovery, isolation, and updates, while adding desktop capabilities for account status, workspace files, and change review.
 
-> The product now supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS has a public signed and notarized beta. Windows has passed a real Squirrel install-lifecycle candidate gate, but unsigned installers are not published until code signing, cross-version updates, and independent client acceptance are complete.
+> The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS ships signed and notarized DMG and ZIP assets. The Windows beta ships an unsigned installer EXE and portable ZIP with explicit provenance, SHA-256 checksums, and SmartScreen disclosure.
 
 | Ready to open | Native desktop | Inspectable | Trusted releases |
 | --- | --- | --- | --- |
@@ -70,7 +70,14 @@ Every public release includes SHA-256 checksums. The app and update artifacts ar
 
 ### Windows
 
-Windows 11 x64 support is at release-candidate stage. A real Windows runner verifies the pinned Runtime, ConPTY, Squirrel install/repair/uninstall, session restoration, shortcuts, registry cleanup, and user-data retention. Public distribution still requires Authenticode signing, a real previous-version upgrade, the automatic-update loop, and independent Windows 11 client acceptance. Until then, unsigned CI candidates are not presented as public downloads.
+Each Windows 11 x64 release provides two public assets:
+
+~~~text
+DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe
+DeepSeek.YukiRyou-win32-x64-<version>-portable.zip
+~~~
+
+The EXE is the Squirrel installer; the ZIP runs after extraction without registering an installation. Both contain the same pinned Runtime and are verified on a real Windows runner for packaged startup, session restoration, EXE install/repair/uninstall, and portable ZIP startup. Early Windows betas are intentionally not Authenticode-signed, so Windows may show a SmartScreen warning. Download only from this repository's Releases and verify `SHA256SUMS-Windows.txt`; an unsigned artifact does not carry Windows trust endorsement.
 
 ## Available today
 
@@ -115,7 +122,7 @@ Windows 11 x64 support is at release-candidate stage. A real Windows runner veri
 | --- | --- | --- |
 | Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
 | Plugin ecosystem | **Ongoing** | Extend the existing discovery, inspection, and managed lifecycle with stronger publisher signals, clearer permissions, and richer compatibility information. |
-| Public Windows x64 release | **Release hardening** | Product support and the unsigned candidate gate are complete; Authenticode, real cross-version upgrades, automatic updates, and independent Windows 11 client acceptance remain. |
+| Windows x64 distribution | **Beta** | The same Release ships an unsigned installer EXE and portable ZIP. Real cross-version upgrades, automatic updates, and independent Windows 11 acceptance continue; Authenticode can be added when distribution scale warrants it. |
 
 The roadmap describes direction, not committed dates. If the security model, upstream Harness contracts, or required assets are not ready, the feature remains unavailable instead of shipping through brittle DOM injection or weakened system protections.
 
@@ -168,7 +175,7 @@ pnpm test:e2e
 pnpm package:mac -- --arch=arm64
 ~~~
 
-macOS signing, notarization, and public distribution run only through the GitHub Actions **Release macOS** workflow. Local packaging is for development verification and is not a public release artifact.
+macOS signing, notarization, and public distribution run only through the GitHub Actions **Release desktop (macOS + Windows)** workflow. Local packaging is for development verification and is not a public release artifact.
 
 Windows development and candidate verification must run on a Windows x64 host:
 
@@ -180,7 +187,7 @@ pnpm runtime:verify
 pnpm make:win
 ~~~
 
-The **Windows x64 candidate** workflow also installs, launches, repair-installs, and uninstalls the Squirrel candidate. It uploads only a short-lived unsigned CI artifact and does not create a public Release.
+The **Windows x64 candidate** workflow verifies both the installer EXE and portable ZIP, and installs, launches, repair-installs, and uninstalls the Squirrel candidate. The desktop release workflow adds only the versioned EXE, portable ZIP, and Windows SHA-256 list to the same GitHub Release as macOS; internal NUPKG and `RELEASES` files stay private to CI.
 
 ## Pinned runtime
 
@@ -205,7 +212,7 @@ No. This is an independently developed cross-platform community project and is n
 <details>
 <summary><strong>Which platforms are supported?</strong></summary>
 
-The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS has a public signed and notarized beta. Windows product support and candidate gates are complete, but no installer is published until signing and upgrade acceptance are finished. Intel Macs, Windows on Arm, and Linux are not currently supported.
+The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS ships signed and notarized DMG and ZIP assets; Windows ships an unsigned installer EXE and portable ZIP with SHA-256 checksums. Intel Macs, Windows on Arm, and Linux are not currently supported.
 
 </details>
 

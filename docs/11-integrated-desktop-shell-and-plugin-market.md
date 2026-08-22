@@ -601,7 +601,7 @@ Windows
 
 进程关闭同样按平台实现：macOS 使用已拥有的进程组语义；Windows 使用受所有权记录约束的 process tree/job object Adapter。禁止按进程名进行全局清理。
 
-## 双平台打包、签名与更新
+## 双平台打包与发行
 
 ### macOS 发行
 
@@ -612,19 +612,19 @@ Windows
 
 ### Windows 发行
 
-- 产物：首发固定使用 Electron Forge `@electron-forge/maker-squirrel`，发布 `Setup.exe`、`-full.nupkg` 和 `RELEASES`；便携 ZIP 仅供诊断，不进入自动更新 feed。
+- 产物：同一 GitHub Release 公开版本化的 Squirrel `Setup.exe` 与便携 ZIP；`-full.nupkg` 和 `RELEASES` 只留给 CI 安装生命周期验证，不作为用户下载入口。
 - 生命周期：main 入口在 `app.ready` 前处理 Squirrel install/update/uninstall/obsolete 事件，事件处理期间不启动 Harness Runtime。
-- 签名：使用组织持有的 Windows Authenticode 代码签名证书；私钥只存在于 CI Secret 或受管签名服务。
-- 安装验证：全新 Windows 11 VM 验证安装、覆盖升级、卸载、用户数据保留、开始菜单入口和实际启动。
-- 安全验证：检查 Authenticode、SmartScreen 下载链路、安装包 hash、可执行文件和原生 `.node` 架构。
-- 更新 feed 与资产名显式包含 `win32-x64`，不得与 macOS 共用模糊资产名。
+- 签名：早期 Beta 不接入 Authenticode；Release Notes 必须明确未签名和 SmartScreen 风险，并提供独立 SHA-256。用户规模需要时再把签名作为附加发行门，不追溯覆盖旧资产。
+- 安装验证：全新 Windows runner 验证 EXE 首装、同版本修复、卸载、用户数据保留、开始菜单入口和实际启动；便携 ZIP 解压后也必须从精确产物启动并恢复会话。
+- 安全验证：检查来源 commit、安装包/ZIP hash、可执行文件和原生 `.node` 架构；未签名状态不得被描述为 Windows 信任背书。
+- 自动更新不作为首个未签名 Beta 的承诺；资产名显式包含 `win32-x64`，不得与 macOS 共用模糊名称。
 
 推荐发布拓扑：
 
 ```text
 version tag
 ├── macOS build -> sign -> remote verify -> notarize -> final verify
-├── Windows build -> sign -> clean-VM install/upgrade/launch verify
+├── Windows build -> EXE + portable ZIP -> clean-runner lifecycle/launch verify
 └── release manifest
     ├── commit
     ├── App/Runtime version
@@ -722,19 +722,19 @@ Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独�
 ### Phase 6：移除 legacy 模式
 
 - 完成升级、长期运行、renderer crash、Runtime crash 和恶意插件 fixture 验证。
-- 完成 Windows 11 x64 的安装、签名、升级、卸载、自动更新和 packaged soak 流水线。
+- 完成 Windows 11 x64 的安装 EXE、便携 ZIP、卸载和 packaged smoke 流水线；跨版本升级与自动更新作为后续门禁，Authenticode 按实际分发规模接入。
 - 将 `isUpdaterSupported()` 扩展为显式支持 `darwin-arm64 | win32-x64`，并分别验证 feed URL 与资产选择。
 - Forge 配置按平台选择 `.icns`/`.ico`、DMG/ZIP/Squirrel maker 和签名参数，macOS 专用 `extendInfo` 不进入 Windows 包。
 - 删除 `LegacyDesktopProductCarrier`、其 `WebContentsView` 产品路径和环境开关。
 - 同步架构、安全、开发、测试、当前状态和发布说明。
 
-当前增量：发行壳的首个 Windows seam 已建立。Forge 的图标基址不带扩展名，由 Electron Packager 针对 macOS/Windows 分别解析 `.icns`/`.ico`；Squirrel.Windows Maker 只声明 `win32`，DMG/ZIP 继续只声明 macOS，互不污染。Windows 使用固定的 `DeepSeekYukiRyou` Squirrel package ID、`DeepSeek YukiRyou.exe` 与匹配的 AppUserModelID，主进程在正常启动前消费 Squirrel 生命周期事件。更新器目标白名单已从单一 `darwin-arm64` 扩展为 `darwin-arm64 | win32-x64`，Linux、macOS x64、Windows arm64 和开发态仍关闭。七尺寸 Windows ICO 由现有品牌 PNG 通过仓库脚本生成；Packager 对目标目录使用覆盖语义，加入上述跨平台配置后已真实完成 macOS arm64 package 回归。此增量不等于 Windows 可发行：下一门禁是把 Runtime manifest/vendor/verify 从 Darwin 单平台合同扩展为 Windows x64，并在 Windows runner 完成签名、安装、升级、卸载和 packaged soak。
+当前增量：发行壳的首个 Windows seam 已建立。Forge 的图标基址不带扩展名，由 Electron Packager 针对 macOS/Windows 分别解析 `.icns`/`.ico`；Squirrel.Windows Maker 与 Windows ZIP Maker 都只在 `win32` 生成对应产物，DMG 继续只属于 macOS。Windows 使用固定的 `DeepSeekYukiRyou` Squirrel package ID、`DeepSeek YukiRyou.exe` 与匹配的 AppUserModelID，主进程在正常启动前消费 Squirrel 生命周期事件。更新器目标白名单已从单一 `darwin-arm64` 扩展为 `darwin-arm64 | win32-x64`，Linux、macOS x64、Windows arm64 和开发态仍关闭。七尺寸 Windows ICO 由现有品牌 PNG 通过仓库脚本生成；Packager 对目标目录使用覆盖语义。
 
-Runtime 门禁现已完成代码侧扩展。schema 2 manifest 用 `darwin-arm64 | darwin-x64 | win32-x64` 完整 target 绑定 Node 归档和 SHA-256，不再让同一个 `x64` 键含糊代表宿主平台。`RuntimePlatformLayout` 统一提供 Node executable、npm CLI、PATH 根、node-pty prebuild/native files 和 PTY smoke command；应用启动也从该合同解析 Windows 的 `node/node.exe`。vendor 强制目标平台等于执行主机，Windows runner 使用锁定 Node ZIP、`npm_config_os=win32` 与 `npm_config_cpu=x64` 进行真实原生依赖装配，保留 ConPTY 所需的两个 `.node`、DLL 与 OpenConsole，裁剪其他平台及 PDB。verify 在 Windows 读取 PE header 确认 x64，并用目标 Node 实际加载 DSH、pnpm、node-pty、Sharp 和 Koffi；Darwin 的 lipo、spawn-helper execute bit 和 zsh smoke 保持原样。macOS arm64 已用新链重新 vendor/verify 通过，跨主机装配会在网络和写盘前失败关闭。下一门禁收敛为 Windows CI runner 上的真实 vendor/verify、Squirrel make、签名和安装生命周期验收。
+Runtime 门禁现已完成代码侧扩展。schema 2 manifest 用 `darwin-arm64 | darwin-x64 | win32-x64` 完整 target 绑定 Node 归档和 SHA-256，不再让同一个 `x64` 键含糊代表宿主平台。`RuntimePlatformLayout` 统一提供 Node executable、npm CLI、PATH 根、node-pty prebuild/native files 和 PTY smoke command；应用启动也从该合同解析 Windows 的 `node/node.exe`。vendor 强制目标平台等于执行主机，Windows runner 使用锁定 Node ZIP、`npm_config_os=win32` 与 `npm_config_cpu=x64` 进行真实原生依赖装配，保留 ConPTY 所需的两个 `.node`、DLL 与 OpenConsole，裁剪其他平台及 PDB。verify 在 Windows 读取 PE header 确认 x64，并用目标 Node 实际加载 DSH、pnpm、node-pty、Sharp 和 Koffi；Darwin 的 lipo、spawn-helper execute bit 和 zsh smoke 保持原样。macOS arm64 与 Windows x64 都由各自宿主验证，跨主机装配会在网络和写盘前失败关闭。
 
-Windows CI 候选门禁现已落地为独立工作流。它在 `windows-latest` x64 runner 上先执行 lint、typecheck、完整单元与集成测试，再由全新的干净 job 执行 host-native Runtime vendor/verify 和 Squirrel make；随后直接启动/重启 `out/DeepSeek YukiRyou-win32-x64/DeepSeek YukiRyou.exe`，避免只验证封装命令返回码。候选冻结器要求输出目录中恰好存在品牌 `Setup.exe`、一个 `-full.nupkg` 和 `RELEASES`，并验证 `RELEASES` 对完整包文件名、SHA-1 格式与字节数的绑定，最后生成带 package version、`win32-x64` target、Git commit、逐文件字节数和 SHA-256 的 manifest 与 `SHA256SUMS`。工作流仅上传保留七天的 unsigned candidate，不创建 tag、GitHub Release 或更新 feed。下一门禁因此缩小为 Windows 代码签名，以及在干净 Windows 11 VM 中对安装、覆盖升级、卸载、快捷方式和自动更新的真实生命周期验收。
+Windows CI 候选门禁现已落地为可复用工作流。它在 `windows-latest` x64 runner 上先执行 lint、typecheck、完整单元与集成测试，再由全新的干净 job 执行 host-native Runtime vendor/verify，并同时生成 Squirrel EXE 与便携 ZIP；随后分别从打包目录和解压后的精确 ZIP 启动/重启应用。候选冻结器要求品牌 `Setup.exe`、一个 `-full.nupkg`、`RELEASES` 和精确版本 portable ZIP，验证 `RELEASES` 绑定后生成带 package version、`win32-x64` target、Git commit、逐文件字节数和 SHA-256 的 manifest。普通 PR 只上传短期候选；桌面发行工作流复用同一门禁，只选择版本化 EXE、便携 ZIP 和独立 SHA-256 清单加入与 macOS 相同的 Draft Release。
 
-冻结候选之后，CI 现在还会运行真实 Squirrel 生命周期门禁：执行 `Setup.exe --silent`，等待安装目录和快捷方式出现，从实际安装路径启动应用并复跑会话恢复测试，然后执行同版本修复安装、再次启动和 `Update.exe --uninstall --silent`。卸载必须移除可运行主程序、更新包、快捷方式和“程序与功能”注册项，同时保留带随机 nonce 的应用用户数据标记。旧 Squirrel 会在部分 Windows 环境留下 `.dead`、`Update.exe`、`squirrel.exe` 和 V8 snapshot 自清理墓碑；门禁只接受这组精确残留，任何产品文件或额外条目均失败。这个门禁刻意把当前能力称为“修复安装”而非“覆盖升级”；只有存在上一份 Windows 候选并验证旧版 Session、Runtime Home、自动更新和新版本落盘后，才算跨版本升级闭环。Windows 11 客户端实机与代码签名仍然是公开发行前置条件。
+冻结候选之后，CI 还会运行真实 Squirrel 生命周期门禁：执行 `Setup.exe --silent`，等待安装目录和快捷方式出现，从实际安装路径启动应用并复跑会话恢复测试，然后执行同版本修复安装、再次启动和 `Update.exe --uninstall --silent`。卸载必须移除可运行主程序、更新包、快捷方式和“程序与功能”注册项，同时保留带随机 nonce 的应用用户数据标记。旧 Squirrel 会在部分 Windows 环境留下 `.dead`、`Update.exe`、`squirrel.exe` 和 V8 snapshot 自清理墓碑；门禁只接受这组精确残留，任何产品文件或额外条目均失败。这个门禁刻意把当前能力称为“修复安装”而非“覆盖升级”；跨版本升级、自动更新和独立 Windows 11 客户端验收继续作为后续质量工作，不阻塞明确标注未签名的早期 Beta。
 
 ## 测试与验收
 
@@ -767,10 +767,10 @@ Windows CI 候选门禁现已落地为独立工作流。它在 `windows-latest` 
 | --- | --- | --- |
 | 首发架构 | arm64 | x64 |
 | 最低系统 | macOS 14 | Windows 11 |
-| 安装 | DMG、ZIP | Squirrel Setup.exe、诊断 ZIP |
+| 安装 | DMG、ZIP | Squirrel Setup.exe、便携 ZIP |
 | 原生 chrome | hiddenInset、traffic lights、vibrancy | titleBarOverlay、caption buttons、Mica/opaque |
-| 签名 | Developer ID + notarization | Authenticode |
-| 必测升级 | 上一公开版本覆盖安装 | 上一公开版本安装包升级 |
+| 签名 | Developer ID + notarization | 早期 Beta 未签名并披露；后续可选 Authenticode |
+| 必测升级 | 上一公开版本覆盖安装 | 首版验证同版本修复；跨版本升级后续补齐 |
 | 必测显示 | Retina、外接屏、全屏 | 100–200% DPI、多显示器、最大化 |
 | Runtime | darwin-arm64 独立闭包 | win32-x64 独立闭包 |
 
@@ -787,7 +787,7 @@ Windows CI 候选门禁现已落地为独立工作流。它在 `windows-latest` 
 7. 用户插件永不修改 bundled Runtime，安装和首次启动失败存在有界恢复路径。
 8. legacy 路径删除前，集成模式至少经过一个完整 beta 周期和 packaged soak 验证。
 9. 同一 Desktop Frame 与市场 Client 在 macOS、Windows 不分叉；平台差异只存在于已列出的 Adapter。
-10. macOS 与 Windows 都具备签名、干净机器安装、升级、启动和更新验证回执。
+10. macOS 具备签名、公证、升级、启动和更新验证回执；Windows 未签名 Beta 具备来源/hash、EXE 生命周期和便携 ZIP 启动回执，并明确披露尚未完成的跨版本更新边界。
 11. `DesktopProductCarrier` 是唯一理解 Electron 载体切换的 main Module，`DesktopFramePlugin` 是唯一理解 Integrated 加法型装配的 Runtime Module；固定 rc.8 的 root 始终归官方 `AppFrame` 所有。
 12. 运行时代码不新增 DOM selector、页面 MutationObserver 或编译 bundle 字符串补丁。
 

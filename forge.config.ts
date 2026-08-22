@@ -75,7 +75,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerDMG({ format: 'ULFO' }),
-    new MakerZIP({}, ['darwin']),
+    new MakerZIP({}, ['darwin', 'win32']),
     new MakerSquirrel({
       name: windowsSquirrelPackageId,
       exe: `${windowsExecutableName}.exe`,

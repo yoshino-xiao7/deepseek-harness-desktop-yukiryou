@@ -25,7 +25,7 @@
 ### 发行状态
 
 - macOS 14+ Apple Silicon 继续提供 Developer ID 签名和 Apple 公证发行。
-- Windows 11 x64 产品支持与未签名候选门禁已经落地；代码签名、真实上一版覆盖升级、自动更新闭环和独立 Windows 11 客户端验收完成前，不公开 Windows 安装包。
+- Windows 11 x64 随同一 GitHub Release 提供未签名安装 EXE 与便携 ZIP，并附独立 SHA-256 清单；Squirrel NUPKG/RELEASES 只用于 CI 生命周期验证。真实上一版覆盖升级、自动更新闭环和独立 Windows 11 客户端验收继续完善，用户规模需要时再接入 Authenticode。
 
 ## [0.2.2-beta.1] - 2026-08-21
 

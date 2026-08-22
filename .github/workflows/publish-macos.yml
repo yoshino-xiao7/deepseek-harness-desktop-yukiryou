@@ -1,4 +1,4 @@
-name: Publish verified macOS draft
+name: Publish verified desktop draft
 
 on:
   workflow_dispatch:
@@ -60,7 +60,9 @@ jobs:
           node -e "const fs=require('node:fs'); const m=JSON.parse(fs.readFileSync('release-assets/release-manifest.json','utf8')); if (m.schemaVersion !== 1 || m.version !== process.env.RELEASE_VERSION || m.architecture !== 'arm64' || m.gitCommit !== process.env.TARGET_COMMIT || m.dirtyWorktree !== false || typeof m.notarizationSubmissionId !== 'string') throw new Error('Draft assets do not match release provenance')"
       - name: Verify checksums
         working-directory: release-assets
-        run: shasum -a 256 -c SHA256SUMS.txt
+        run: |
+          shasum -a 256 -c SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS-Windows.txt
       - name: Reinstall and verify ZIP
         run: |
           pnpm verify:distribution -- \

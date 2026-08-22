@@ -13,7 +13,7 @@
   <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
-  <img alt="Windows 11 x64 candidate" src="https://img.shields.io/badge/Windows%2011-x64%20candidate-3157a4?style=flat-square&logo=windows11">
+  <img alt="Windows 11 x64 beta" src="https://img.shields.io/badge/Windows%2011-x64%20beta-3157a4?style=flat-square&logo=windows11">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
 </p>
 
@@ -43,7 +43,7 @@
 
 它不是 Harness 的重写版本，也不会改变 Agent 的工作方式。它专注于把 Harness 稳定、安全、可恢复地交付到桌面，并在官方界面之外补足账户状态、工作区文件和变更审核等桌面能力。
 
-> 当前产品代码支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 已有签名、公证的公开 Beta；Windows 已通过真实 Squirrel 安装生命周期候选门禁，但在代码签名、跨版本更新和独立客户端验收完成前不公开未签名安装包。
+> 当前产品支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 提供签名、公证的 DMG 与 ZIP；Windows Beta 提供未签名安装 EXE 与便携 ZIP，并在下载说明中明确展示来源、SHA-256 与 SmartScreen 风险。
 
 | 打开即用 | 原生体验 | 可诊断 | 安全更新 |
 | --- | --- | --- | --- |
@@ -70,7 +70,14 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 
 ### Windows
 
-Windows 11 x64 支持已经进入发行候选阶段：固定 Runtime、ConPTY、Squirrel 安装/修复/卸载、会话恢复、快捷方式与注册项清理均已在真实 Windows runner 验证。公开安装包仍需完成 Authenticode 签名、真实上一版覆盖升级、自动更新闭环和独立 Windows 11 客户端验收；在此之前不会把未签名 CI 候选当作正式下载提供。
+Windows 11 x64 每个版本提供两份公开产物：
+
+```text
+DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe
+DeepSeek.YukiRyou-win32-x64-<version>-portable.zip
+```
+
+EXE 是 Squirrel 安装版；ZIP 解压后可直接运行，不写入安装注册项。两份产物使用同一固定 Runtime，并在真实 Windows runner 验证打包启动、会话恢复、EXE 首装/修复/卸载和便携 ZIP 启动。当前早期 Windows Beta 暂不做 Authenticode 签名，系统可能显示 SmartScreen 警告；请只从本仓库 Release 下载并核对 `SHA256SUMS-Windows.txt`，不要把未签名产物当作已获得 Windows 信任背书。
 
 ## 当前可用功能
 
@@ -115,7 +122,7 @@ Windows 11 x64 支持已经进入发行候选阶段：固定 Runtime、ConPTY、
 | --- | --- | --- |
 | 手机远程控制 | **规划中** | 通过明确配对和权限边界，在手机端查看任务状态、接收必要提醒，并在用户确认后继续任务；不会直接暴露本机 Harness 端口。 |
 | 插件生态完善 | **持续开发** | 在现有发现、预检和受管生命周期上继续补齐可信发布者信号、权限可见性和更完整的兼容性信息。 |
-| Windows x64 公开发行 | **发行收口中** | 产品与未签名候选门禁已完成；剩余 Authenticode、真实跨版本升级、自动更新和独立 Windows 11 客户端验收。 |
+| Windows x64 发行 | **Beta** | 同一 Release 提供未签名安装 EXE 与便携 ZIP；继续补齐真实跨版本升级、自动更新和独立 Windows 11 客户端验收，用户规模需要时再接入 Authenticode。 |
 
 路线图表示产品方向，不承诺具体发布日期。安全模型、上游 Harness 接口或素材准备不足时，相关功能会继续保持不可用，而不是通过不稳定的 DOM 注入或降低系统安全要求提前上线。
 
@@ -168,7 +175,7 @@ pnpm test:e2e
 pnpm package:mac -- --arch=arm64
 ```
 
-macOS 正式签名、公证和发行只通过 GitHub Actions 的 **Release macOS** 工作流执行。本机只能生成不可发布的签名候选：
+macOS 正式签名、公证和发行只通过 GitHub Actions 的 **Release desktop (macOS + Windows)** 工作流执行。本机只能生成不可发布的签名候选：
 
 ```bash
 export MACOS_SIGN_IDENTITY="Developer ID Application: ... (...)"
@@ -187,7 +194,7 @@ pnpm runtime:verify
 pnpm make:win
 ```
 
-仓库的 **Windows x64 candidate** 工作流还会真实安装、启动、修复安装并卸载 Squirrel 候选。该工作流只上传短期未签名 CI artifact，不创建公开 Release。
+仓库的 **Windows x64 candidate** 工作流会验证安装 EXE 与便携 ZIP，真实安装、启动、修复安装并卸载 Squirrel 候选。正式桌面发行工作流只把版本化 EXE、便携 ZIP 和 Windows SHA-256 清单加入与 macOS 相同的 GitHub Release；内部 NUPKG 与 `RELEASES` 不公开。
 
 ## 固定运行时
 
@@ -212,7 +219,7 @@ pnpm make:win
 <details>
 <summary><strong>支持哪些平台？</strong></summary>
 
-产品当前支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 提供公开签名、公证 Beta；Windows 产品和候选门禁已完成，但签名与升级验收收口前不公开安装包。Intel Mac、Windows on Arm 和 Linux 暂不支持。
+产品当前支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 提供签名、公证的 DMG 与 ZIP；Windows 提供未签名安装 EXE 与便携 ZIP，并附 SHA-256。Intel Mac、Windows on Arm 和 Linux 暂不支持。
 
 </details>
 
