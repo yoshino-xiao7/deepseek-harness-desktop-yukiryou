@@ -27,6 +27,7 @@ concurrency:
 env:
   NODE_VERSION: '24'
   PNPM_VERSION: '10.34.5'
+  RUNNER_PWSH_PATH: 'C:\r\y\pwsh-7.6.4'
 
 jobs:
   quality:
@@ -35,6 +36,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+      - name: Enable runner-local PowerShell 7
+        shell: powershell
+        run: |
+          if (-not (Test-Path "$env:RUNNER_PWSH_PATH\pwsh.exe")) {
+            throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
+          }
+          $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -54,6 +62,13 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
+      - name: Enable runner-local PowerShell 7
+        shell: powershell
+        run: |
+          if (-not (Test-Path "$env:RUNNER_PWSH_PATH\pwsh.exe")) {
+            throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
+          }
+          $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
