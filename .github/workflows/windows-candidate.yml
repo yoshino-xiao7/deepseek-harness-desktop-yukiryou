@@ -31,7 +31,7 @@ env:
 jobs:
   quality:
     name: Windows quality gate
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, yukiryou-local]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
@@ -50,7 +50,7 @@ jobs:
   build_candidate:
     name: Vendor Runtime, make EXE + portable ZIP, and smoke
     needs: quality
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, yukiryou-local]
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
