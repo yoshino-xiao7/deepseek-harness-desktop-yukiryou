@@ -66,6 +66,26 @@ describe('macOS release workflow contract', () => {
     expect(commands).toContain('SHA256SUMS-Windows.txt');
   });
 
+  it('smoke-tests the executable extracted from the portable ZIP', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const portableStep = workflow.jobs?.build_candidate?.steps?.find(
+      (step) => step.name === 'Start and restart the exact portable ZIP application',
+    );
+    const command = portableStep?.run ?? '';
+
+    expect(command).toContain(
+      '$env:DSH_E2E_EXECUTABLE_PATH = $executables[0].FullName',
+    );
+    expect(command.indexOf('$env:DSH_E2E_EXECUTABLE_PATH')).toBeLessThan(
+      command.indexOf('pnpm exec vitest run'),
+    );
+  });
+
   it('vendors the bundled runtime before running integration tests', async () => {
     const workflow = parse(
       await readFile(

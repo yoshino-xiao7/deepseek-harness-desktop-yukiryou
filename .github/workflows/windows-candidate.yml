@@ -86,6 +86,7 @@ jobs:
           Expand-Archive -LiteralPath $archive.FullName -DestinationPath 'out/windows-portable-smoke'
           $executables = @(Get-ChildItem 'out/windows-portable-smoke' -Recurse -Filter 'DeepSeek YukiRyou.exe')
           if ($executables.Count -ne 1) { throw "Expected one portable executable, found $($executables.Count)" }
+          $env:DSH_E2E_EXECUTABLE_PATH = $executables[0].FullName
           "DSH_E2E_EXECUTABLE_PATH=$($executables[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts --no-file-parallelism
       - name: Validate and freeze Squirrel artifacts
