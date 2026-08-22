@@ -25,7 +25,8 @@
     "@deepseek-ai/dsh-workflow": "0.1.0-rc.8",
     "pnpm": "10.34.5",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "semver": "7.8.5"
   },
   "allowScripts": {
     "@deepseek-ai/dsh-subprocess-local@0.1.0-rc.8": true,

@@ -1,8 +1,14 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerDMG } from '@electron-forge/maker-dmg';
+import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { closeSync, openSync, readSync } from 'node:fs';
+
+import {
+  windowsExecutableName,
+  windowsSquirrelPackageId,
+} from './src/main/windows-release.js';
 
 const signingIdentity = process.env.MACOS_SIGN_IDENTITY?.trim();
 const machOMagicNumbers = new Set([
@@ -49,9 +55,11 @@ export function createMacOsSignOptions(identity: string) {
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    overwrite: true,
     extraResource: ['resources/runtime'],
     executableName: 'DeepSeek YukiRyou',
-    icon: 'resources/icons/deepseek-yukiryou.icns',
+    // Electron Packager appends .icns or .ico for the target platform.
+    icon: 'resources/icons/deepseek-yukiryou',
     appBundleId:
       process.env.DEEPSEEK_YUKIRYOU_BUNDLE_ID ??
       'com.yukiryou.deepseek.yukiryou',
@@ -68,6 +76,13 @@ const config: ForgeConfig = {
   makers: [
     new MakerDMG({ format: 'ULFO' }),
     new MakerZIP({}, ['darwin']),
+    new MakerSquirrel({
+      name: windowsSquirrelPackageId,
+      exe: `${windowsExecutableName}.exe`,
+      setupExe: 'DeepSeek-YukiRyou-Setup.exe',
+      setupIcon: 'resources/icons/deepseek-yukiryou.ico',
+      noMsi: true,
+    }, ['win32']),
   ],
   plugins: [
     new VitePlugin({

@@ -24,7 +24,7 @@ export function isUpdaterSupported(options: {
 }): boolean {
   return (
     options.isPackaged &&
-    options.platform === 'darwin' &&
-    options.architecture === 'arm64'
+    ((options.platform === 'darwin' && options.architecture === 'arm64') ||
+      (options.platform === 'win32' && options.architecture === 'x64'))
   );
 }

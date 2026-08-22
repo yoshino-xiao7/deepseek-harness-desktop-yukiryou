@@ -31,6 +31,7 @@ export type RuntimeState =
 export interface RuntimeSupervisor {
   start(): Promise<Extract<RuntimeState, { kind: 'ready' }>>;
   stop(reason: 'quit' | 'restart' | 'update'): Promise<void>;
+  configureLaunch(command: string, args: readonly string[]): void;
   subscribe(listener: (state: RuntimeState) => void): () => void;
   getState(): RuntimeState;
 }
@@ -45,6 +46,7 @@ export interface RuntimeSupervisorOptions {
   readonly startupTimeoutMs: number;
   readonly shutdownTimeoutMs: number;
   readonly port?: number;
+  readonly developmentPluginFixture?: boolean;
   readonly createCompanionToken?: () => string;
   readonly onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }
@@ -53,6 +55,8 @@ const COMPANION_RPC_ROUTE = '/plugins/@dsh-desktop/companion/rpc';
 
 class OwnedRuntimeSupervisor implements RuntimeSupervisor {
   readonly #options: RuntimeSupervisorOptions;
+  #command: string;
+  #args: readonly string[];
   readonly #listeners = new Set<(state: RuntimeState) => void>();
   #state: RuntimeState = { kind: 'stopped' };
   #child: ChildProcess | undefined;
@@ -63,6 +67,8 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
 
   constructor(options: RuntimeSupervisorOptions) {
     this.#options = options;
+    this.#command = options.command;
+    this.#args = options.args;
   }
 
   getState(): RuntimeState {
@@ -73,6 +79,14 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     this.#listeners.add(listener);
     listener(this.#state);
     return () => this.#listeners.delete(listener);
+  }
+
+  configureLaunch(command: string, args: readonly string[]): void {
+    if (this.#state.kind !== 'stopped' || this.#child !== undefined || this.#startPromise !== undefined) {
+      throw new Error('Runtime launch can only be configured while stopped');
+    }
+    this.#command = command;
+    this.#args = Object.freeze([...args]);
   }
 
   start(): Promise<Extract<RuntimeState, { kind: 'ready' }>> {
@@ -113,9 +127,9 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     const companionToken = this.#options.createCompanionToken?.();
 
     const child = spawn(
-      this.#options.command,
+      this.#command,
       [
-        ...this.#options.args,
+        ...this.#args,
         '--host',
         '127.0.0.1',
         '--port',
@@ -128,6 +142,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
           this.#options.runtimeHome,
           this.#options.runtimeBinDirectories ?? [],
           companionToken,
+          this.#options.developmentPluginFixture === true,
         ),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
@@ -250,11 +265,15 @@ function buildRuntimeEnvironment(
   runtimeHome: string,
   runtimeBinDirectories: readonly string[],
   companionToken?: string,
+  developmentPluginFixture = false,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { DSH_HOME: runtimeHome };
   environment.DSH_DESKTOP_OWNER_PID = String(process.pid);
   if (companionToken !== undefined) {
     environment.DSH_DESKTOP_COMPANION_TOKEN = companionToken;
+  }
+  if (developmentPluginFixture) {
+    environment.DSH_DESKTOP_DEVELOPMENT_PLUGIN_FIXTURE = '1';
   }
   for (const name of ['TMPDIR', 'LANG', 'LC_ALL'] as const) {
     const value = process.env[name];

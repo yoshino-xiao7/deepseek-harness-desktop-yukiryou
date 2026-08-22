@@ -51,6 +51,11 @@ import {
   type TrustedHarnessOrigin,
 } from './trusted-navigation.js';
 import { createProductWindowReadiness } from './product-window-readiness.js';
+import {
+  loadProductDocument,
+  navigateProductDocument,
+  resetProductDocument,
+} from './product-document-navigation.js';
 import { createProductWebPreferences } from './product-web-preferences.js';
 import {
   createHarnessProductBridge,
@@ -72,6 +77,24 @@ import {
   validatedWorkspaceConversationReference,
   workspaceConversationInsertion,
 } from '../../shared/workspace-conversation-reference.js';
+import type {
+  ManagedPluginPreviewRequest,
+  ManagedPluginPreviewResult,
+  ManagedPluginExecuteRequest,
+  ManagedPluginExecuteResult,
+} from '../../shared/managed-plugin-preview.js';
+import type {
+  ManagedPluginInventoryRequest,
+  ManagedPluginInventoryResult,
+  ManagedPluginRemoveRequest,
+  ManagedPluginRemoveResult,
+  ManagedPluginSetEnabledRequest,
+  ManagedPluginSetEnabledResult,
+  ManagedPluginRollbackRequest,
+  ManagedPluginRollbackResult,
+} from '../../shared/managed-plugin-inventory.js';
+
+const PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS = 15_000;
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
@@ -103,6 +126,24 @@ export interface DesktopWindowOptions {
   ) => Promise<WorkspaceReviewResponse>;
   readonly onHarnessReviewIntent: (intent: ChangedFileReviewIntent) => Promise<WorkspaceReviewResponse>;
   readonly onRendererCrash: (target: RendererTarget, reason: string) => void;
+  readonly onManagedPluginPreview: (
+    request: ManagedPluginPreviewRequest,
+  ) => Promise<ManagedPluginPreviewResult>;
+  readonly onManagedPluginExecute: (
+    request: ManagedPluginExecuteRequest,
+  ) => Promise<ManagedPluginExecuteResult>;
+  readonly onManagedPluginInventory: (
+    request: ManagedPluginInventoryRequest,
+  ) => Promise<ManagedPluginInventoryResult>;
+  readonly onManagedPluginRemove: (
+    request: ManagedPluginRemoveRequest,
+  ) => Promise<ManagedPluginRemoveResult>;
+  readonly onManagedPluginSetEnabled: (
+    request: ManagedPluginSetEnabledRequest,
+  ) => Promise<ManagedPluginSetEnabledResult>;
+  readonly onManagedPluginRollback: (
+    request: ManagedPluginRollbackRequest,
+  ) => Promise<ManagedPluginRollbackResult>;
 }
 
 export function createDesktopWindow(
@@ -170,6 +211,12 @@ class ElectronDesktopWindow implements DesktopWindow {
       onFrameHealth: (health) => {
         this.#productReadiness.acceptFrameHealth(health);
       },
+      onManagedPluginPreview: options.onManagedPluginPreview,
+      onManagedPluginExecute: options.onManagedPluginExecute,
+      onManagedPluginInventory: options.onManagedPluginInventory,
+      onManagedPluginRemove: options.onManagedPluginRemove,
+      onManagedPluginSetEnabled: options.onManagedPluginSetEnabled,
+      onManagedPluginRollback: options.onManagedPluginRollback,
     });
     this.#window.contentView.addChildView(this.#harnessView);
     this.#harnessView.setVisible(false);
@@ -191,7 +238,9 @@ class ElectronDesktopWindow implements DesktopWindow {
     });
     this.#harnessView.webContents.on(
       'did-finish-load',
-      () => this.#productBridge.restoreAfterLoad(),
+      () => {
+        this.#productBridge.restoreAfterLoad();
+      },
     );
     this.#harnessView.webContents.on(
       'render-process-gone',
@@ -219,11 +268,17 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   async showHarness(origin: string): Promise<void> {
     const trustedOrigin = createTrustedHarnessOrigin(origin);
+    const currentProductUrl = this.#harnessView.webContents.getURL();
     this.#trustedOrigin = trustedOrigin;
     this.#productBridge.setTrustedOrigin(trustedOrigin);
     this.#productReadiness.begin(trustedOrigin);
     this.#rendererRecovery.reset('harness');
-    await this.#harnessView.webContents.loadURL(trustedOrigin);
+    await loadProductDocument(
+      () => navigateProductDocument(this.#harnessView.webContents, trustedOrigin),
+      PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS,
+      () => resetProductDocument(this.#harnessView.webContents),
+      currentProductUrl !== '' && currentProductUrl !== 'about:blank',
+    );
     const productState = this.#productReadiness.documentLoaded();
     if (productState.kind !== 'ready') {
       throw new Error('Legacy product window did not reach document readiness');

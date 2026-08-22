@@ -43,6 +43,41 @@ import {
   validatedWorkspaceConversationId,
   validatedWorkspaceConversationInsertion,
 } from '../shared/workspace-conversation-reference.js';
+import {
+  MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_PREVIEW_RESULT_CHANNEL,
+  MANAGED_PLUGIN_EXECUTE_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_EXECUTE_RESULT_CHANNEL,
+  type ManagedPluginExecuteResult,
+  type ManagedPluginPreviewResult,
+  validatedManagedPluginExecuteRequest,
+  validatedManagedPluginExecuteResult,
+  validatedManagedPluginPreviewRequest,
+  validatedManagedPluginPreviewResult,
+} from '../shared/managed-plugin-preview.js';
+import {
+  MANAGED_PLUGIN_INVENTORY_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_INVENTORY_RESULT_CHANNEL,
+  MANAGED_PLUGIN_REMOVE_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_REMOVE_RESULT_CHANNEL,
+  MANAGED_PLUGIN_SET_ENABLED_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_SET_ENABLED_RESULT_CHANNEL,
+  MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL,
+  type ManagedPluginInventoryResult,
+  type ManagedPluginRemoveResult,
+  type ManagedPluginSetEnabledResult,
+  type ManagedPluginRollbackResult,
+  validatedManagedPluginInventoryResult,
+  validatedManagedPluginRemoveRequest,
+  validatedManagedPluginRemoveResult,
+  validatedManagedPluginSetEnabledRequest,
+  validatedManagedPluginSetEnabledResult,
+  validatedManagedPluginRollbackRequest,
+  validatedManagedPluginRollbackResult,
+} from '../shared/managed-plugin-inventory.js';
+import { runWhenDocumentReady } from './document-readiness.js';
+import { resolvedHarnessAppearance } from './harness-appearance.js';
 
 let updateState: DesktopUpdateState = {
   status: 'disabled',
@@ -56,6 +91,211 @@ const workspaceReferenceListeners = new Map<
   Set<(reference: WorkspaceConversationInsertion) => void>
 >();
 const pendingWorkspaceReferences = new Map<string, WorkspaceConversationInsertion[]>();
+const pendingManagedPluginPreviews = new Map<
+  string,
+  { readonly resolve: (result: ManagedPluginPreviewResult) => void; readonly timer: ReturnType<typeof setTimeout> }
+>();
+const pendingManagedPluginExecutions = new Map<
+  string,
+  { readonly resolve: (result: ManagedPluginExecuteResult) => void; readonly timer: ReturnType<typeof setTimeout> }
+>();
+const pendingManagedPluginInventories = new Map<
+  string,
+  { readonly resolve: (result: ManagedPluginInventoryResult) => void; readonly timer: ReturnType<typeof setTimeout> }
+>();
+const pendingManagedPluginRemovals = new Map<
+  string,
+  { readonly resolve: (result: ManagedPluginRemoveResult) => void; readonly timer: ReturnType<typeof setTimeout> }
+>();
+const pendingManagedPluginEnabledChanges = new Map<
+  string,
+  { readonly resolve: (result: ManagedPluginSetEnabledResult) => void; readonly timer: ReturnType<typeof setTimeout> }
+>();
+const pendingManagedPluginRollbacks = new Map<
+  string,
+  { readonly resolve: (result: ManagedPluginRollbackResult) => void; readonly timer: ReturnType<typeof setTimeout> }
+>();
+
+ipcRenderer.on(MANAGED_PLUGIN_PREVIEW_RESULT_CHANNEL, (_event, value: unknown) => {
+  const result = validatedManagedPluginPreviewResult(value);
+  if (result === undefined) return;
+  const pending = pendingManagedPluginPreviews.get(result.requestId);
+  if (pending === undefined) return;
+  pendingManagedPluginPreviews.delete(result.requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(result);
+});
+
+ipcRenderer.on(MANAGED_PLUGIN_EXECUTE_RESULT_CHANNEL, (_event, value: unknown) => {
+  const result = validatedManagedPluginExecuteResult(value);
+  if (result === undefined) return;
+  const pending = pendingManagedPluginExecutions.get(result.requestId);
+  if (pending === undefined) return;
+  pendingManagedPluginExecutions.delete(result.requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(result);
+});
+
+ipcRenderer.on(MANAGED_PLUGIN_INVENTORY_RESULT_CHANNEL, (_event, value: unknown) => {
+  const result = validatedManagedPluginInventoryResult(value);
+  if (result === undefined) return;
+  const pending = pendingManagedPluginInventories.get(result.requestId);
+  if (pending === undefined) return;
+  pendingManagedPluginInventories.delete(result.requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(result);
+});
+
+ipcRenderer.on(MANAGED_PLUGIN_REMOVE_RESULT_CHANNEL, (_event, value: unknown) => {
+  const result = validatedManagedPluginRemoveResult(value);
+  if (result === undefined) return;
+  const pending = pendingManagedPluginRemovals.get(result.requestId);
+  if (pending === undefined) return;
+  pendingManagedPluginRemovals.delete(result.requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(result);
+});
+
+ipcRenderer.on(MANAGED_PLUGIN_SET_ENABLED_RESULT_CHANNEL, (_event, value: unknown) => {
+  const result = validatedManagedPluginSetEnabledResult(value);
+  if (result === undefined) return;
+  const pending = pendingManagedPluginEnabledChanges.get(result.requestId);
+  if (pending === undefined) return;
+  pendingManagedPluginEnabledChanges.delete(result.requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(result);
+});
+
+ipcRenderer.on(MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL, (_event, value: unknown) => {
+  const result = validatedManagedPluginRollbackResult(value);
+  if (result === undefined) return;
+  const pending = pendingManagedPluginRollbacks.get(result.requestId);
+  if (pending === undefined) return;
+  pendingManagedPluginRollbacks.delete(result.requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(result);
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouPlugins', {
+  inventory: (): Promise<ManagedPluginInventoryResult> => {
+    const requestId = `request-${globalThis.crypto.randomUUID()}`;
+    if (pendingManagedPluginInventories.size >= 1) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'invalid-response' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingManagedPluginInventories.delete(requestId);
+        resolve({ requestId, status: 'unavailable', reason: 'runtime-unavailable' });
+      }, 10_000);
+      pendingManagedPluginInventories.set(requestId, { resolve, timer });
+      ipcRenderer.send(MANAGED_PLUGIN_INVENTORY_REQUEST_CHANNEL, { requestId });
+    });
+  },
+  remove: (value: unknown): Promise<ManagedPluginRemoveResult> => {
+    const requestId = `request-${globalThis.crypto.randomUUID()}`;
+    const request = validatedManagedPluginRemoveRequest(
+      typeof value === 'object' && value !== null ? { ...value, requestId } : value,
+    );
+    if (request === undefined) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'receipt-mismatch' });
+    }
+    if (pendingManagedPluginRemovals.size >= 1) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'busy' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingManagedPluginRemovals.delete(requestId);
+        resolve({ requestId, status: 'unavailable', reason: 'runtime-unavailable' });
+      }, 6 * 60 * 1_000);
+      pendingManagedPluginRemovals.set(requestId, { resolve, timer });
+      ipcRenderer.send(MANAGED_PLUGIN_REMOVE_REQUEST_CHANNEL, request);
+    });
+  },
+  setEnabled: (value: unknown): Promise<ManagedPluginSetEnabledResult> => {
+    const requestId = `request-${globalThis.crypto.randomUUID()}`;
+    const request = validatedManagedPluginSetEnabledRequest(
+      typeof value === 'object' && value !== null ? { ...value, requestId } : value,
+    );
+    if (request === undefined) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'receipt-mismatch' });
+    }
+    if (pendingManagedPluginEnabledChanges.size >= 1) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'busy' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingManagedPluginEnabledChanges.delete(requestId);
+        resolve({ requestId, status: 'unavailable', reason: 'runtime-unavailable' });
+      }, 6 * 60 * 1_000);
+      pendingManagedPluginEnabledChanges.set(requestId, { resolve, timer });
+      ipcRenderer.send(MANAGED_PLUGIN_SET_ENABLED_REQUEST_CHANNEL, request);
+    });
+  },
+  rollback: (value: unknown): Promise<ManagedPluginRollbackResult> => {
+    const requestId = `request-${globalThis.crypto.randomUUID()}`;
+    const request = validatedManagedPluginRollbackRequest(
+      typeof value === 'object' && value !== null ? { ...value, requestId } : value,
+    );
+    if (request === undefined) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'receipt-mismatch' });
+    }
+    if (pendingManagedPluginRollbacks.size >= 1) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'busy' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingManagedPluginRollbacks.delete(requestId);
+        resolve({ requestId, status: 'unavailable', reason: 'runtime-unavailable' });
+      }, 6 * 60 * 1_000);
+      pendingManagedPluginRollbacks.set(requestId, { resolve, timer });
+      ipcRenderer.send(MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL, request);
+    });
+  },
+  preview: (value: unknown): Promise<ManagedPluginPreviewResult> => {
+    const requestId = `request-${globalThis.crypto.randomUUID()}`;
+    const request = validatedManagedPluginPreviewRequest(
+      typeof value === 'object' && value !== null
+        ? { ...value, requestId }
+        : value,
+    );
+    if (request === undefined) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'invalid-response' });
+    }
+    if (pendingManagedPluginPreviews.size >= 4) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'busy' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingManagedPluginPreviews.delete(requestId);
+        resolve({ requestId, status: 'unavailable', reason: 'runtime-unavailable' });
+      }, 35_000);
+      pendingManagedPluginPreviews.set(requestId, { resolve, timer });
+      ipcRenderer.send(MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL, request);
+    });
+  },
+  execute: (value: unknown): Promise<ManagedPluginExecuteResult> => {
+    const requestId = `request-${globalThis.crypto.randomUUID()}`;
+    const request = validatedManagedPluginExecuteRequest(
+      typeof value === 'object' && value !== null
+        ? { ...value, requestId }
+        : value,
+    );
+    if (request === undefined) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'preview-unavailable' });
+    }
+    if (pendingManagedPluginExecutions.size >= 1) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'busy' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingManagedPluginExecutions.delete(requestId);
+        resolve({ requestId, status: 'unavailable', reason: 'runtime-unavailable' });
+      }, 6 * 60 * 1_000);
+      pendingManagedPluginExecutions.set(requestId, { resolve, timer });
+      ipcRenderer.send(MANAGED_PLUGIN_EXECUTE_REQUEST_CHANNEL, request);
+    });
+  },
+});
 
 ipcRenderer.on(ACCOUNT_BALANCE_STATE_CHANNEL, (_event, value: unknown) => {
   const snapshot = validatedAccountBalanceSnapshot(value);
@@ -259,19 +499,18 @@ function readHarnessAppearance(): DesktopAppearanceSnapshot | undefined {
     explicitChromeColor(DESKTOP_CHROME_CONTENT_TOKEN) ??
     opaqueBackground(content) ??
     opaqueBackground(document.body);
-  if (sidebarBackground === undefined || contentBackground === undefined) {
-    return undefined;
-  }
   const rootScheme = window.getComputedStyle(document.documentElement).colorScheme;
-  return {
-    colorScheme:
+  const colorScheme =
       document.body.hasAttribute('data-ds-dark-theme') ||
       rootScheme.startsWith('dark')
         ? 'dark'
-        : 'light',
+        : 'light';
+  return resolvedHarnessAppearance({
+    colorScheme,
     sidebarBackground,
     contentBackground,
-  };
+    bodyBackground: opaqueBackground(document.body),
+  });
 }
 
 function installHarnessAppearanceObserver(): void {
@@ -455,8 +694,8 @@ function installHarnessUpdateButton(): void {
   schedule();
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  installHarnessSidebarObserver();
+runWhenDocumentReady(document, () => {
   installHarnessAppearanceObserver();
+  installHarnessSidebarObserver();
   installHarnessUpdateButton();
 });

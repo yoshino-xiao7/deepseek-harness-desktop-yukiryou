@@ -1,0 +1,95 @@
+name: Windows x64 candidate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/windows-candidate.yml'
+      - 'forge.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'resources/icons/**'
+      - 'runtime/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-candidate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.34.5'
+
+jobs:
+  quality:
+    name: Windows quality gate
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${env:PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:integration
+
+  build_candidate:
+    name: Vendor Runtime, make Squirrel, and smoke
+    needs: quality
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${env:PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Assemble and verify the host-native Runtime
+        run: |
+          pnpm runtime:vendor:win
+          pnpm runtime:verify
+      - name: Build unsigned Squirrel candidate
+        run: pnpm make:win
+      - name: Start and restart the exact packaged application
+        env:
+          DSH_E2E_EXECUTABLE_PATH: ${{ github.workspace }}\out\DeepSeek YukiRyou-win32-x64\DeepSeek YukiRyou.exe
+        run: >-
+          pnpm exec vitest run
+          tests/e2e/packaged-startup.test.ts
+          tests/e2e/session-selection-restart.test.ts
+          --no-file-parallelism
+      - name: Validate and freeze Squirrel artifacts
+        run: pnpm release:win:candidate
+      - name: Verify candidate provenance
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: >-
+          node -e "const fs=require('node:fs');
+          const p=require('./package.json');
+          const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
+          if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==3)
+          throw new Error('Windows candidate provenance mismatch')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-unsigned-candidate
+          path: out/windows-candidate/
+          if-no-files-found: error
+          retention-days: 7

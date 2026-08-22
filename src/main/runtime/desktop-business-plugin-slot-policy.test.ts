@@ -8,6 +8,7 @@ import { runtimeSlotContract } from './runtime-slot-contract.js';
 const pluginSources = [
   '../../../runtime/desktop-settings-plugin/client.js',
   '../../../runtime/desktop-companion-plugin/client.js',
+  '../../../runtime/desktop-market-plugin/client.js',
 ] as const;
 
 describe('desktop business plugin slot policy', () => {

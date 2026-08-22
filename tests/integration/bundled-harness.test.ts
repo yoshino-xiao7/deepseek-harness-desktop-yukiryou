@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -11,6 +11,7 @@ import {
 } from '../../src/main/runtime/runtime-supervisor.js';
 import { createHarnessRuntimeCommand } from '../../src/main/runtime/runtime-command.js';
 import { ensureDesktopSettingsExtension } from '../../src/main/runtime/runtime-extension.js';
+import { createPluginProfileBootstrap } from '../../src/main/runtime/plugin-profile-bootstrap.js';
 
 const projectRoot = process.cwd();
 const execFileAsync = promisify(execFile);
@@ -55,7 +56,13 @@ describe('bundled Harness runtime', () => {
       const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-real-workspace-'));
       const runtimeRoot = join(projectRoot, 'resources', 'runtime');
       await ensureDesktopSettingsExtension(runtimeHome, runtimeRoot);
-      const runtimeCommand = createHarnessRuntimeCommand(runtimeRoot);
+      const managedPatch = join(runtimeHome, 'managed-profile.patch.yml');
+      await writeFile(managedPatch, '[]\n');
+      const runtimeCommand = createHarnessRuntimeCommand(
+        runtimeRoot,
+        'legacy',
+        [managedPatch],
+      );
       const dshVersion = await execFileAsync(runtimeCommand.command, [
         join(
           runtimeRoot,
@@ -117,6 +124,23 @@ describe('bundled Harness runtime', () => {
         { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"kind":"account.balance"}' },
       );
       expect(unauthorized.status).toBe(403);
+      const unauthorizedMarket = await fetch(
+        `${ready.origin}/plugins/@dsh-desktop/market/managed-rpc`,
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"kind":"stage","previewId":"invalid"}' },
+      );
+      expect(unauthorizedMarket.status).toBe(403);
+      const authenticatedMarket = await fetch(
+        `${ready.origin}/plugins/@dsh-desktop/market/managed-rpc`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-dsh-desktop-companion-token': 'integration-token-that-is-long-enough-123456789',
+          },
+          body: '{"kind":"unsupported"}',
+        },
+      );
+      expect(authenticatedMarket.status).toBe(400);
       const balance = await fetch(
         `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
         {
@@ -133,6 +157,83 @@ describe('bundled Harness runtime', () => {
         status: 'unavailable',
         reason: 'credential-unconfigured',
       });
+    },
+    30_000,
+  );
+
+  it(
+    'loads the managed development fixture from its staged generation',
+    async () => {
+      const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-fixture-home-'));
+      const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-fixture-workspace-'));
+      const runtimeRoot = join(projectRoot, 'resources', 'runtime');
+      await ensureDesktopSettingsExtension(runtimeHome, runtimeRoot);
+      const marketRoot = new URL(
+        '../../resources/runtime/dsh/node_modules/@dsh-desktop/market/',
+        import.meta.url,
+      );
+      const [{ createArtifactCache }, { createManagedPluginInstaller }, { createManagedPreviewVault }, { createDevelopmentFixture }] =
+        await Promise.all([
+          import(new URL('artifact-cache.js', marketRoot).href),
+          import(new URL('managed-installer.js', marketRoot).href),
+          import(new URL('managed-preview-vault.js', marketRoot).href),
+          import(new URL('development-fixture.js', marketRoot).href),
+        ]);
+      const artifactCache = createArtifactCache({ root: runtimeHome });
+      const fixture = createDevelopmentFixture({ enabled: true, artifactStore: artifactCache });
+      if (fixture === undefined) throw new Error('Development fixture is unavailable');
+      const vault = createManagedPreviewVault({
+        inspector: fixture,
+        installer: createManagedPluginInstaller({ root: runtimeHome, artifactStore: artifactCache }),
+        artifactCache,
+        randomId: () => '00000000-0000-4000-8000-000000000002',
+        schedule: () => undefined,
+        cancel: () => undefined,
+      });
+      const preview = await vault.issue({
+        sourceRecordId: fixture.sourceId,
+        itemId: fixture.itemId,
+      });
+      const staged = await vault.stage(preview.previewId);
+      const bootstrap = createPluginProfileBootstrap(runtimeHome);
+      await bootstrap.prepare(
+        staged.profileGeneration,
+        staged.candidate,
+        staged.cacheDigests,
+      );
+      const launchPlan = await bootstrap.prepareRuntimeLaunch();
+      const runtimeCommand = createHarnessRuntimeCommand(
+        runtimeRoot,
+        'legacy',
+        launchPlan.patchPaths,
+      );
+      const runtimeOutput: string[] = [];
+      supervisor = createRuntimeSupervisor({
+        command: runtimeCommand.command,
+        args: runtimeCommand.args,
+        runtimeHome,
+        runtimeBinDirectories: [
+          join(runtimeRoot, 'dsh', 'node_modules', '.bin'),
+          join(runtimeRoot, 'node', 'bin'),
+        ],
+        workspaceRoot,
+        version: '0.1.0-rc.8',
+        startupTimeoutMs: 20_000,
+        shutdownTimeoutMs: 5_000,
+        createCompanionToken: () => 'fixture-token-that-is-long-enough-1234567890',
+        onOutput: (stream, chunk) => runtimeOutput.push(`[${stream}] ${chunk}`),
+      });
+
+      const ready = await supervisor.start().catch((error: unknown) => {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)}\n${runtimeOutput.join('')}`,
+        );
+      });
+      expect(ready).toMatchObject({
+        kind: 'ready',
+        version: '0.1.0-rc.8',
+      });
+      await bootstrap.commit(staged.profileGeneration);
     },
     30_000,
   );

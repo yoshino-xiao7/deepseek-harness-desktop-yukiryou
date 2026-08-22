@@ -41,6 +41,46 @@ import {
   classifyNavigation,
   type TrustedHarnessOrigin,
 } from './trusted-navigation.js';
+import {
+  MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_PREVIEW_RESULT_CHANNEL,
+  MANAGED_PLUGIN_EXECUTE_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_EXECUTE_RESULT_CHANNEL,
+  type ManagedPluginExecuteRequest,
+  type ManagedPluginExecuteResult,
+  type ManagedPluginPreviewRequest,
+  type ManagedPluginPreviewResult,
+  validatedManagedPluginPreviewRequest,
+  validatedManagedPluginPreviewResult,
+  validatedManagedPluginExecuteRequest,
+  validatedManagedPluginExecuteResult,
+} from '../../shared/managed-plugin-preview.js';
+import {
+  MANAGED_PLUGIN_INVENTORY_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_INVENTORY_RESULT_CHANNEL,
+  MANAGED_PLUGIN_REMOVE_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_REMOVE_RESULT_CHANNEL,
+  MANAGED_PLUGIN_SET_ENABLED_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_SET_ENABLED_RESULT_CHANNEL,
+  MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL,
+  MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL,
+  type ManagedPluginInventoryRequest,
+  type ManagedPluginInventoryResult,
+  type ManagedPluginRemoveRequest,
+  type ManagedPluginRemoveResult,
+  type ManagedPluginSetEnabledRequest,
+  type ManagedPluginSetEnabledResult,
+  type ManagedPluginRollbackRequest,
+  type ManagedPluginRollbackResult,
+  validatedManagedPluginInventoryRequest,
+  validatedManagedPluginInventoryResult,
+  validatedManagedPluginRemoveRequest,
+  validatedManagedPluginRemoveResult,
+  validatedManagedPluginSetEnabledRequest,
+  validatedManagedPluginSetEnabledResult,
+  validatedManagedPluginRollbackRequest,
+  validatedManagedPluginRollbackResult,
+} from '../../shared/managed-plugin-inventory.js';
 
 export interface HarnessProductBridgeOptions {
   readonly webContents: WebContents;
@@ -58,6 +98,24 @@ export interface HarnessProductBridgeOptions {
   ) => Promise<WorkspaceReviewResponse>;
   readonly onHarnessReviewResponse: (response: WorkspaceReviewResponse) => void;
   readonly onFrameHealth: (health: DesktopFrameHealth) => void;
+  readonly onManagedPluginPreview: (
+    request: ManagedPluginPreviewRequest,
+  ) => Promise<ManagedPluginPreviewResult>;
+  readonly onManagedPluginExecute: (
+    request: ManagedPluginExecuteRequest,
+  ) => Promise<ManagedPluginExecuteResult>;
+  readonly onManagedPluginInventory: (
+    request: ManagedPluginInventoryRequest,
+  ) => Promise<ManagedPluginInventoryResult>;
+  readonly onManagedPluginRemove: (
+    request: ManagedPluginRemoveRequest,
+  ) => Promise<ManagedPluginRemoveResult>;
+  readonly onManagedPluginSetEnabled: (
+    request: ManagedPluginSetEnabledRequest,
+  ) => Promise<ManagedPluginSetEnabledResult>;
+  readonly onManagedPluginRollback: (
+    request: ManagedPluginRollbackRequest,
+  ) => Promise<ManagedPluginRollbackResult>;
 }
 
 export interface HarnessProductBridge {
@@ -72,12 +130,20 @@ export function createHarnessProductBridge(
 ): HarnessProductBridge {
   const { webContents } = options;
   let trustedOrigin: TrustedHarnessOrigin | undefined;
+  let trustedOriginRevision = 0;
   let updateState: DesktopUpdateState | undefined;
   let balanceRequestRevision = 0;
   let lastHarnessContextRevision = -1;
   let contextRateWindowStartedAt = 0;
   let contextRateCount = 0;
   let disposed = false;
+  const managedPreviewRequests = new Set<string>();
+  let managedPreviewRateWindowStartedAt = 0;
+  let managedPreviewRateCount = 0;
+  let managedMutationActive = false;
+  let managedExecuteRateWindowStartedAt = 0;
+  let managedExecuteRateCount = 0;
+  const managedInventoryRequests = new Set<string>();
 
   const acceptContextEvent = (): boolean => {
     const now = Date.now();
@@ -93,6 +159,68 @@ export function createHarnessProductBridge(
     trustedOrigin === undefined
       ? 'deny' as const
       : classifyNavigation(trustedOrigin, target);
+
+  const acceptManagedPreview = (): boolean => {
+    const now = Date.now();
+    if (now - managedPreviewRateWindowStartedAt >= 60_000) {
+      managedPreviewRateWindowStartedAt = now;
+      managedPreviewRateCount = 0;
+    }
+    managedPreviewRateCount += 1;
+    return managedPreviewRateCount <= 4;
+  };
+
+  const sendManagedPreviewResult = (result: ManagedPluginPreviewResult): void => {
+    const validated = validatedManagedPluginPreviewResult(result);
+    if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
+      webContents.send(MANAGED_PLUGIN_PREVIEW_RESULT_CHANNEL, validated);
+    }
+  };
+
+  const acceptManagedExecute = (): boolean => {
+    const now = Date.now();
+    if (now - managedExecuteRateWindowStartedAt >= 60_000) {
+      managedExecuteRateWindowStartedAt = now;
+      managedExecuteRateCount = 0;
+    }
+    managedExecuteRateCount += 1;
+    return managedExecuteRateCount <= 3;
+  };
+
+  const sendManagedExecuteResult = (result: ManagedPluginExecuteResult): void => {
+    const validated = validatedManagedPluginExecuteResult(result);
+    if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
+      webContents.send(MANAGED_PLUGIN_EXECUTE_RESULT_CHANNEL, validated);
+    }
+  };
+
+  const sendManagedInventoryResult = (result: ManagedPluginInventoryResult): void => {
+    const validated = validatedManagedPluginInventoryResult(result);
+    if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
+      webContents.send(MANAGED_PLUGIN_INVENTORY_RESULT_CHANNEL, validated);
+    }
+  };
+
+  const sendManagedRemoveResult = (result: ManagedPluginRemoveResult): void => {
+    const validated = validatedManagedPluginRemoveResult(result);
+    if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
+      webContents.send(MANAGED_PLUGIN_REMOVE_RESULT_CHANNEL, validated);
+    }
+  };
+
+  const sendManagedSetEnabledResult = (result: ManagedPluginSetEnabledResult): void => {
+    const validated = validatedManagedPluginSetEnabledResult(result);
+    if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
+      webContents.send(MANAGED_PLUGIN_SET_ENABLED_RESULT_CHANNEL, validated);
+    }
+  };
+
+  const sendManagedRollbackResult = (result: ManagedPluginRollbackResult): void => {
+    const validated = validatedManagedPluginRollbackResult(result);
+    if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
+      webContents.send(MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL, validated);
+    }
+  };
 
   const onNavigate = (event: Electron.Event, target: string): void => {
     const decision = navigationDecision(target);
@@ -146,6 +274,246 @@ export function createHarnessProductBridge(
       if (health !== undefined) options.onFrameHealth(health);
       return;
     }
+    if (channel === MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL) {
+      const request = validatedManagedPluginPreviewRequest(value);
+      if (request === undefined) return;
+      if (trustedOrigin === undefined) {
+        sendManagedPreviewResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'runtime-unavailable',
+        });
+        return;
+      }
+      if (!acceptManagedPreview() || managedPreviewRequests.size >= 1 ||
+        managedPreviewRequests.has(request.requestId)) {
+        sendManagedPreviewResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'busy',
+        });
+        return;
+      }
+      const originRevision = trustedOriginRevision;
+      managedPreviewRequests.add(request.requestId);
+      void options.onManagedPluginPreview(request)
+        .then((result) => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedPreviewResult(
+            result.requestId === request.requestId
+              ? result
+              : { requestId: request.requestId, status: 'unavailable', reason: 'invalid-response' },
+          );
+        })
+        .catch(() => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedPreviewResult({
+            requestId: request.requestId,
+            status: 'unavailable',
+            reason: 'invalid-response',
+          });
+        })
+        .finally(() => managedPreviewRequests.delete(request.requestId));
+      return;
+    }
+    if (channel === MANAGED_PLUGIN_EXECUTE_REQUEST_CHANNEL) {
+      const request = validatedManagedPluginExecuteRequest(value);
+      if (request === undefined) return;
+      if (trustedOrigin === undefined) {
+        sendManagedExecuteResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'runtime-unavailable',
+        });
+        return;
+      }
+      if (!acceptManagedExecute() || managedMutationActive) {
+        sendManagedExecuteResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'busy',
+        });
+        return;
+      }
+      const originRevision = trustedOriginRevision;
+      managedMutationActive = true;
+      void options.onManagedPluginExecute(request)
+        .then((result) => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedExecuteResult(
+            result.requestId === request.requestId
+              ? result
+              : { requestId: request.requestId, status: 'unavailable', reason: 'failed' },
+          );
+        })
+        .catch(() => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedExecuteResult({
+            requestId: request.requestId,
+            status: 'unavailable',
+            reason: 'failed',
+          });
+        })
+        .finally(() => { managedMutationActive = false; });
+      return;
+    }
+    if (channel === MANAGED_PLUGIN_INVENTORY_REQUEST_CHANNEL) {
+      const request = validatedManagedPluginInventoryRequest(value);
+      if (request === undefined) return;
+      if (trustedOrigin === undefined || managedInventoryRequests.size >= 1 ||
+        managedInventoryRequests.has(request.requestId)) {
+        sendManagedInventoryResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: trustedOrigin === undefined ? 'runtime-unavailable' : 'invalid-response',
+        });
+        return;
+      }
+      const originRevision = trustedOriginRevision;
+      managedInventoryRequests.add(request.requestId);
+      void options.onManagedPluginInventory(request)
+        .then((result) => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedInventoryResult(
+            result.requestId === request.requestId
+              ? result
+              : { requestId: request.requestId, status: 'unavailable', reason: 'invalid-response' },
+          );
+        })
+        .catch(() => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedInventoryResult({
+            requestId: request.requestId,
+            status: 'unavailable',
+            reason: 'invalid-response',
+          });
+        })
+        .finally(() => managedInventoryRequests.delete(request.requestId));
+      return;
+    }
+    if (channel === MANAGED_PLUGIN_REMOVE_REQUEST_CHANNEL) {
+      const request = validatedManagedPluginRemoveRequest(value);
+      if (request === undefined) return;
+      if (trustedOrigin === undefined) {
+        sendManagedRemoveResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'runtime-unavailable',
+        });
+        return;
+      }
+      if (!acceptManagedExecute() || managedMutationActive) {
+        sendManagedRemoveResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'busy',
+        });
+        return;
+      }
+      const originRevision = trustedOriginRevision;
+      managedMutationActive = true;
+      void options.onManagedPluginRemove(request)
+        .then((result) => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedRemoveResult(
+            result.requestId === request.requestId
+              ? result
+              : { requestId: request.requestId, status: 'unavailable', reason: 'failed' },
+          );
+        })
+        .catch(() => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedRemoveResult({
+            requestId: request.requestId,
+            status: 'unavailable',
+            reason: 'failed',
+          });
+        })
+        .finally(() => { managedMutationActive = false; });
+      return;
+    }
+    if (channel === MANAGED_PLUGIN_SET_ENABLED_REQUEST_CHANNEL) {
+      const request = validatedManagedPluginSetEnabledRequest(value);
+      if (request === undefined) return;
+      if (trustedOrigin === undefined) {
+        sendManagedSetEnabledResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'runtime-unavailable',
+        });
+        return;
+      }
+      if (!acceptManagedExecute() || managedMutationActive) {
+        sendManagedSetEnabledResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'busy',
+        });
+        return;
+      }
+      const originRevision = trustedOriginRevision;
+      managedMutationActive = true;
+      void options.onManagedPluginSetEnabled(request)
+        .then((result) => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedSetEnabledResult(
+            result.requestId === request.requestId
+              ? result
+              : { requestId: request.requestId, status: 'unavailable', reason: 'failed' },
+          );
+        })
+        .catch(() => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedSetEnabledResult({
+            requestId: request.requestId,
+            status: 'unavailable',
+            reason: 'failed',
+          });
+        })
+        .finally(() => { managedMutationActive = false; });
+      return;
+    }
+    if (channel === MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL) {
+      const request = validatedManagedPluginRollbackRequest(value);
+      if (request === undefined) return;
+      if (trustedOrigin === undefined) {
+        sendManagedRollbackResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'runtime-unavailable',
+        });
+        return;
+      }
+      if (!acceptManagedExecute() || managedMutationActive) {
+        sendManagedRollbackResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'busy',
+        });
+        return;
+      }
+      const originRevision = trustedOriginRevision;
+      managedMutationActive = true;
+      void options.onManagedPluginRollback(request)
+        .then((result) => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedRollbackResult(
+            result.requestId === request.requestId
+              ? result
+              : { requestId: request.requestId, status: 'unavailable', reason: 'failed' },
+          );
+        })
+        .catch(() => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendManagedRollbackResult({
+            requestId: request.requestId,
+            status: 'unavailable',
+            reason: 'failed',
+          });
+        })
+        .finally(() => { managedMutationActive = false; });
+      return;
+    }
     if (channel !== ACCOUNT_BALANCE_REQUEST_CHANNEL || typeof value !== 'boolean') {
       return;
     }
@@ -177,6 +545,7 @@ export function createHarnessProductBridge(
   return {
     setTrustedOrigin(origin) {
       trustedOrigin = origin;
+      trustedOriginRevision += 1;
     },
     setUpdateState(state) {
       updateState = state;
@@ -190,6 +559,7 @@ export function createHarnessProductBridge(
     },
     dispose() {
       disposed = true;
+      managedPreviewRequests.clear();
       balanceRequestRevision += 1;
       webContents.removeListener('will-navigate', onNavigate);
       webContents.removeListener('ipc-message', onIpcMessage);

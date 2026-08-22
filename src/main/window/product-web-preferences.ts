@@ -11,5 +11,8 @@ export function createProductWebPreferences(preloadPath: string): WebPreferences
     contextIsolation: true,
     sandbox: true,
     webSecurity: true,
+    // Harness agents must keep running while the product view is hidden by
+    // the startup shell or while the desktop window is in the background.
+    backgroundThrottling: false,
   };
 }

@@ -3,6 +3,8 @@
       name: '@dsh-desktop/settings'
     - id: desktop-companion
       name: '@dsh-desktop/companion'
+    - id: desktop-market
+      name: '@dsh-desktop/market'
 
 # The rc.8 turn-tail is a first-match chain. The Companion entry reuses the
 # exported official ProducedFiles component and appends its read-only card.

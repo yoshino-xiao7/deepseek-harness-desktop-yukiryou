@@ -25,4 +25,32 @@ describe('Harness runtime command', () => {
       '/runtime/desktop-integrated.patch.yml',
     );
   });
+
+  it('places Bootstrap-authorized managed bundles after the desktop overlay', () => {
+    const args = createHarnessRuntimeCommand('/runtime', 'legacy', [
+      `/runtime-home/user-plugins/generations/gen-${'a'.repeat(64)}/node_modules/@example/tool/cordis.patch.yml`,
+      `/runtime-home/user-plugins/generations/gen-${'b'.repeat(64)}/node_modules/example-two/patch.yml`,
+    ]).args;
+
+    expect(args).toEqual([
+      '/runtime/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js',
+      '--patch',
+      '/runtime/desktop-extensions.patch.yml',
+      '--patch',
+      `/runtime-home/user-plugins/generations/gen-${'a'.repeat(64)}/node_modules/@example/tool/cordis.patch.yml`,
+      '--patch',
+      `/runtime-home/user-plugins/generations/gen-${'b'.repeat(64)}/node_modules/example-two/patch.yml`,
+      '--profile',
+      'web',
+      '--no-open',
+    ]);
+  });
+
+  it('uses the target-specific Windows Node executable', () => {
+    expect(
+      createHarnessRuntimeCommand('/runtime', 'legacy', [], 'win32', 'x64'),
+    ).toMatchObject({
+      command: '/runtime/node/node.exe',
+    });
+  });
 });

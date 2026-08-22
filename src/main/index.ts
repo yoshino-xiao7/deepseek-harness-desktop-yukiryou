@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import squirrelStartup from 'electron-squirrel-startup';
 
 import { AppCoordinator } from './app-coordinator.js';
 import {
@@ -6,6 +7,10 @@ import {
   releaseSmokeMarker,
 } from './release-smoke.js';
 import { prepareUserDataLocation } from './user-data-location.js';
+import {
+  shouldConfigureWindowsApplicationIdentity,
+  windowsSquirrelAppUserModelId,
+} from './windows-release.js';
 
 async function run(): Promise<void> {
   if (isReleaseSmokeTest(process.argv)) {
@@ -32,4 +37,12 @@ async function run(): Promise<void> {
   await coordinator.run();
 }
 
-void run();
+if (shouldConfigureWindowsApplicationIdentity(process.platform)) {
+  app.setAppUserModelId(windowsSquirrelAppUserModelId);
+}
+
+if (squirrelStartup) {
+  app.quit();
+} else {
+  void run();
+}

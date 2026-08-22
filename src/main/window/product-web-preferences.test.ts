@@ -10,6 +10,7 @@ describe('product web preferences', () => {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: false,
     });
   });
 

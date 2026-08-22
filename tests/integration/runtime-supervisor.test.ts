@@ -39,6 +39,7 @@ describe('RuntimeSupervisor', () => {
       startupTimeoutMs: 5_000,
       shutdownTimeoutMs: 2_000,
       createCompanionToken: () => 'test-companion-token-that-never-enters-state',
+      developmentPluginFixture: true,
     });
 
     const ready = await supervisor.start();
@@ -54,6 +55,7 @@ describe('RuntimeSupervisor', () => {
         ),
         workspace: canonicalWorkspaceRoot,
         companionTokenConfigured: true,
+        developmentPluginFixture: true,
       });
     expect(JSON.stringify(supervisor.getState())).not.toContain(
       'test-companion-token',
@@ -90,6 +92,37 @@ describe('RuntimeSupervisor', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it('reconfigures a stopped Runtime without replacing its supervisor', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-runtime-test-'));
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-workspace-test-'));
+    supervisor = createRuntimeSupervisor({
+      command: process.execPath,
+      args: [fakeHarness, '--launch-marker', 'before'],
+      runtimeHome,
+      workspaceRoot,
+      version: 'fake-1.0.0',
+      startupTimeoutMs: 5_000,
+      shutdownTimeoutMs: 2_000,
+    });
+
+    const before = await supervisor.start();
+    await expect(fetch(before.origin).then((response) => response.json()))
+      .resolves.toMatchObject({ launchMarker: 'before' });
+    expect(() => supervisor?.configureLaunch(
+      process.execPath,
+      [fakeHarness, '--launch-marker', 'invalid'],
+    )).toThrow('while stopped');
+
+    await supervisor.stop('restart');
+    supervisor.configureLaunch(
+      process.execPath,
+      [fakeHarness, '--launch-marker', 'after'],
+    );
+    const after = await supervisor.start();
+    await expect(fetch(after.origin).then((response) => response.json()))
+      .resolves.toMatchObject({ launchMarker: 'after' });
   });
 
   it.each([

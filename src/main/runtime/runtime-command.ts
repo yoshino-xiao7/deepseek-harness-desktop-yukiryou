@@ -1,15 +1,20 @@
 import { join } from 'node:path';
 import type { DesktopCarrierMode } from '../window/desktop-carrier-mode.js';
+import { resolveBundledRuntimePlatform } from './runtime-platform.js';
 
 export function createHarnessRuntimeCommand(
   runtimeRoot: string,
   carrierMode: DesktopCarrierMode = 'legacy',
+  managedPluginPatches: readonly string[] = [],
+  platform: NodeJS.Platform = process.platform,
+  architecture: string = process.arch,
 ): {
   readonly command: string;
   readonly args: readonly string[];
 } {
+  const layout = resolveBundledRuntimePlatform(platform, architecture);
   return {
-    command: join(runtimeRoot, 'node', 'bin', 'node'),
+    command: join(runtimeRoot, layout.nodeExecutable),
     args: [
       join(
         runtimeRoot,
@@ -27,6 +32,7 @@ export function createHarnessRuntimeCommand(
           ? 'desktop-integrated.patch.yml'
           : 'desktop-extensions.patch.yml',
       ),
+      ...managedPluginPatches.flatMap((patchPath) => ['--patch', patchPath]),
       '--profile',
       'web',
       '--no-open',
