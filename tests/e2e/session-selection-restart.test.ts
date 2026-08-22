@@ -84,7 +84,9 @@ describe('Harness session selection across desktop restarts', () => {
     await crashed;
     electronApp = undefined;
 
-    const thirdLaunch = await launchAndWait(userData);
+    const thirdLaunch = await launchAndWait(userData, {
+      retryTransientWindowsLaunch: true,
+    });
     electronApp = thirdLaunch.application;
     expect(thirdLaunch.origin).toBe(firstOrigin);
     await expect
@@ -121,12 +123,9 @@ function crashDesktopProcessTree(desktopProcess: ChildProcess): void {
 
 async function launchAndWait(
   userData: string,
+  options: { retryTransientWindowsLaunch?: boolean } = {},
 ): Promise<{ application: ElectronApplication; origin: string }> {
-  const application = await electron.launch({
-    executablePath: resolveE2eExecutablePath(),
-    args: [`--user-data-dir=${userData}`],
-    env: { ...process.env, DSH_DESKTOP_E2E: '1' },
-  });
+  const application = await launchElectron(userData, options);
   await application.firstWindow();
   let origin: string | undefined;
   await expect
@@ -137,6 +136,31 @@ async function launchAndWait(
     .toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   if (origin === undefined) throw new Error('Harness origin is missing');
   return { application, origin };
+}
+
+async function launchElectron(
+  userData: string,
+  options: { retryTransientWindowsLaunch?: boolean },
+): Promise<ElectronApplication> {
+  const attempts =
+    process.platform === 'win32' && options.retryTransientWindowsLaunch === true
+      ? 10
+      : 1;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await electron.launch({
+        executablePath: resolveE2eExecutablePath(),
+        args: [`--user-data-dir=${userData}`],
+        env: { ...process.env, DSH_DESKTOP_E2E: '1' },
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+    }
+  }
+  throw lastError;
 }
 
 async function readHarnessOrigin(
