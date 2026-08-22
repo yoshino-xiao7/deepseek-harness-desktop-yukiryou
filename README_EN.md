@@ -2,17 +2,18 @@
   <img src="resources/icons/deepseek-yukiryou.png" width="168" alt="DeepSeek YukiRyou">
 </p>
 
-<h1 align="center">DeepSeek YukiRyou — DeepSeek Harness Desktop for macOS</h1>
+<h1 align="center">DeepSeek YukiRyou — DeepSeek Harness Desktop for macOS & Windows</h1>
 
 <p align="center">
-  <strong>DeepSeek Harness, delivered as a real Mac app.</strong><br>
-  A self-contained Apple Silicon workspace with a bundled runtime, account balance, workspace review, file previews, and trusted updates.
+  <strong>DeepSeek Harness, delivered as a real desktop app.</strong><br>
+  A self-contained macOS and Windows workspace with a bundled runtime, Workspace Review, a managed plugin marketplace, and recoverable lifecycle management.
 </p>
 
 <p align="center">
   <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
+  <img alt="Windows 11 x64 candidate" src="https://img.shields.io/badge/Windows%2011-x64%20candidate-3157a4?style=flat-square&logo=windows11">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
 </p>
 
@@ -31,24 +32,26 @@
 </p>
 
 <p align="center">
-  If this project helps you, consider giving it a Star. It helps other people looking for a DeepSeek Harness macOS client discover the project.
+  If this project helps you, consider giving it a Star. It helps other people looking for a DeepSeek Harness desktop client discover the project.
 </p>
 
 ---
 
 ## Project positioning
 
-DeepSeek Harness provides a local Web UI, but routine use still involves preparing a runtime, starting commands, managing ports, and recovering failed processes. DeepSeek YukiRyou packages those responsibilities into an installable macOS app. It starts the pinned Harness runtime, cleans up only the processes it owns, and presents the complete Web UI in a native window.
+DeepSeek Harness provides a local Web UI, but routine use still involves preparing a runtime, starting commands, managing ports, and recovering failed processes. DeepSeek YukiRyou packages those responsibilities into an installable cross-platform desktop app. It starts the pinned Harness runtime, cleans up only the processes it owns, and presents the complete Web UI in a native window.
 
 This is not a rewrite of Harness and does not change how the agent works. Its job is to deliver Harness to the desktop with predictable startup, recovery, isolation, and updates, while adding desktop capabilities for account status, workspace files, and change review.
 
-> The current release is an Apple Silicon Beta. Available features and the roadmap are listed separately below. Features marked “In development” or “Planned” are not included in the current installer.
+> The product now supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS has a public signed and notarized beta. Windows has passed a real Squirrel install-lifecycle candidate gate, but unsigned installers are not published until code signing, cross-version updates, and independent client acceptance are complete.
 
 | Ready to open | Native desktop | Inspectable | Trusted releases |
 | --- | --- | --- | --- |
-| Bundled Node.js, pnpm, and pinned Harness | Native traffic lights, draggable title bar, synchronized sidebar motion | Runtime recovery, rotated logs, redacted diagnostics | Developer ID signing, Apple notarization, in-app updates |
+| Bundled Node.js, pnpm, and pinned Harness | Platform-aware chrome, synchronized themes, responsive Workspace Review | Runtime recovery, rotated logs, redacted diagnostics | Signed/notarized macOS releases; real Windows install-lifecycle candidate gate |
 
 ## Download and install
+
+### macOS
 
 Open [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases) and download the Apple Silicon DMG:
 
@@ -64,6 +67,10 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 Requirements: an Apple Silicon Mac (M1 or newer) running macOS 14 or later.
 
 Every public release includes SHA-256 checksums. The app and update artifacts are Developer ID signed and Apple-notarized. Download only from this repository's GitHub Releases page.
+
+### Windows
+
+Windows 11 x64 support is at release-candidate stage. A real Windows runner verifies the pinned Runtime, ConPTY, Squirrel install/repair/uninstall, session restoration, shortcuts, registry cleanup, and user-data retention. Public distribution still requires Authenticode signing, a real previous-version upgrade, the automatic-update loop, and independent Windows 11 client acceptance. Until then, unsigned CI candidates are not presented as public downloads.
 
 ## Available today
 
@@ -88,9 +95,16 @@ Every public release includes SHA-256 checksums. The app and update artifacts ar
 - **Private diagnostics:** exported diagnostics contain bounded, redacted environment and log data—not source files, sessions, or credentials.
 - **Trusted release pipeline:** candidates are Developer ID signed, installed on a fresh runner, exercised in a real-app soak, Apple-notarized, and verified again before publication.
 
+### Plugin marketplace
+
+- **Complete discovery:** search, categories, pagination, and custom HTTPS sources operate over a complete local index. Catalog inclusion is never presented as endorsement or a security audit.
+- **Pre-install inspection:** verifies catalog/npm identity, repository backlinks, lifecycle scripts, integrity, platform and Runtime compatibility, the complete dependency graph, peers, and actual package bytes.
+- **Managed lifecycle:** install, update, reinstall, enable, disable, rollback to the previous verified version, and uninstall. Mutations require native confirmation and unhealthy restarts automatically restore the prior version.
+- **Explicit permission boundary:** plugins share the local user's permissions with Harness. The renderer never receives Runtime tokens, cache paths, or executable installation plans.
+
 ## Why YukiRyou
 
-- **Delivered for Apple Silicon:** not a website shortcut, but a standalone macOS app with pinned Node.js, pnpm, and DeepSeek Harness runtimes.
+- **One product for macOS and Windows:** not a website shortcut. Both platforms share the pinned Harness Runtime, product capabilities, and state contracts, with platform differences isolated to window, path, process, and installer adapters.
 - **A complete workspace review loop:** inspect the file tree, current Git changes, per-turn changes, line statistics, and rendered Markdown without leaving the conversation workflow.
 - **Desktop capabilities that fit Harness:** account balance, the Companion sidebar, settings, and updates follow the existing interface instead of replacing or rewriting Harness's core workflow.
 - **Verifiable releases:** public artifacts are Developer ID signed, Apple-notarized, installed in clean environments, exercised as real apps, and accompanied by SHA-256 checksums.
@@ -100,8 +114,8 @@ Every public release includes SHA-256 checksums. The app and update artifacts ar
 | Feature | Status | Planned scope |
 | --- | --- | --- |
 | Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
-| Plugin marketplace | **Planned** | Plugin discovery, details, install, update, removal, and accurate trust disclosure, opened only after the full dependency graph is frozen and registry provenance/integrity, compatibility, and recovery boundaries are implemented. |
-| Windows x64 release | **Planned** | Windows 11 x64 is the initial target, sharing the Plugin-first product layer while separating the Electron carrier and Runtime root frame through DesktopProductCarrier and DesktopFramePlugin, with dedicated release gates for native chrome, Runtime, signing, installation, and updates. |
+| Plugin ecosystem | **Ongoing** | Extend the existing discovery, inspection, and managed lifecycle with stronger publisher signals, clearer permissions, and richer compatibility information. |
+| Public Windows x64 release | **Release hardening** | Product support and the unsigned candidate gate are complete; Authenticode, real cross-version upgrades, automatic updates, and independent Windows 11 client acceptance remain. |
 
 The roadmap describes direction, not committed dates. If the security model, upstream Harness contracts, or required assets are not ready, the feature remains unavailable instead of shipping through brittle DOM injection or weakened system protections.
 
@@ -109,12 +123,12 @@ The roadmap describes direction, not committed dates. If the security model, ups
 
 ~~~mermaid
 flowchart LR
-    A["DeepSeek YukiRyou.app"] --> B["Electron main process"]
+    A["DeepSeek YukiRyou"] --> B["Electron main process"]
     B --> C["Bundled Node.js"]
     C --> D["Pinned DeepSeek Harness"]
     D --> E["Stable 127.0.0.1 origin + HMAC secret-possession proof"]
     E --> F["Isolated Harness WebContentsView"]
-    B --> G["Window, updates, and recovery"]
+    B --> G["macOS / Windows platform adapters"]
     G --> F
 ~~~
 
@@ -132,12 +146,12 @@ The desktop shell, Node.js, pnpm, and Harness form one atomic release. Runtime p
 
 ### Requirements
 
-- Apple Silicon Mac
-- macOS 14+
 - Node.js 22.19+ or 24+
 - Corepack / pnpm 10.34.5
+- macOS development: an Apple Silicon Mac running macOS 14+
+- Windows development: Windows 11 x64; the Windows Runtime must be assembled on a Windows host
 
-### Start the project
+### Start the project on macOS
 
 ~~~bash
 corepack enable
@@ -154,14 +168,26 @@ pnpm test:e2e
 pnpm package:mac -- --arch=arm64
 ~~~
 
-Signing, notarization, and public distribution run only through the GitHub Actions **Release macOS** workflow. Local packaging is for development verification and is not a public release artifact.
+macOS signing, notarization, and public distribution run only through the GitHub Actions **Release macOS** workflow. Local packaging is for development verification and is not a public release artifact.
+
+Windows development and candidate verification must run on a Windows x64 host:
+
+~~~powershell
+corepack enable
+pnpm install --frozen-lockfile
+pnpm runtime:vendor:win
+pnpm runtime:verify
+pnpm make:win
+~~~
+
+The **Windows x64 candidate** workflow also installs, launches, repair-installs, and uninstalls the Squirrel candidate. It uploads only a short-lived unsigned CI artifact and does not create a public Release.
 
 ## Pinned runtime
 
 | Component | Current version | Policy |
 | --- | --- | --- |
 | DeepSeek Harness | <code>0.1.0-rc.8</code> | Pinned and verified with the app |
-| Node.js | <code>24.19.0</code> | Bundled Apple Silicon runtime |
+| Node.js | <code>24.19.0</code> | Bundled per <code>darwin-arm64</code> / <code>win32-x64</code> target |
 | pnpm | <code>10.34.5</code> | Used only by the bundled Harness |
 | Electron | <code>43.4.0</code> | Desktop shell runtime |
 
@@ -172,14 +198,14 @@ The app does not invoke globally installed copies of Node.js, dsh, or pnpm, and 
 <details>
 <summary><strong>Is this an official DeepSeek client?</strong></summary>
 
-No. This is an independently developed community macOS project and is neither affiliated with nor endorsed by DeepSeek.
+No. This is an independently developed cross-platform community project and is neither affiliated with nor endorsed by DeepSeek.
 
 </details>
 
 <details>
-<summary><strong>Does it support Intel Macs or Windows?</strong></summary>
+<summary><strong>Which platforms are supported?</strong></summary>
 
-The current release target is Apple Silicon arm64 only. Intel, Windows, and Linux are outside the present support scope.
+The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS has a public signed and notarized beta. Windows product support and candidate gates are complete, but no installer is published until signing and upgrade acceptance are finished. Intel Macs, Windows on Arm, and Linux are not currently supported.
 
 </details>
 
@@ -193,7 +219,7 @@ For offline startup and reproducible versions, the app bundles its verified Node
 <details>
 <summary><strong>How should I report a startup problem?</strong></summary>
 
-Export a diagnostics archive from the app, then open a [GitHub Issue](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues) with the macOS version, app version, and reproduction steps. Review attachments before publishing them.
+Export a diagnostics archive from the app, then open a [GitHub Issue](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues) with the operating-system version, app version, and reproduction steps. Review attachments before publishing them.
 
 </details>
 
@@ -214,7 +240,7 @@ Export a diagnostics archive from the app, then open a [GitHub Issue](https://gi
 - If the project solves a problem for you, support it with a [Star](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou).
 - For reproducible problems, use the [bug report form](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=bug-report.yml).
 - For a concrete workflow or product idea, use the [feature request form](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=feature-request.yml).
-- Before reporting, try the [latest release](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest) and include the app version, macOS version, and Apple chip model.
+- Before reporting, try the [latest public release](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest) and include the app version, operating-system version, and CPU architecture.
 
 ## Maintainer and license
 

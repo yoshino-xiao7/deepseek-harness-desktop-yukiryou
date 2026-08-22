@@ -2,17 +2,18 @@
   <img src="resources/icons/deepseek-yukiryou.png" width="168" alt="DeepSeek YukiRyou">
 </p>
 
-<h1 align="center">DeepSeek YukiRyou — DeepSeek Harness Desktop for macOS</h1>
+<h1 align="center">DeepSeek YukiRyou — DeepSeek Harness Desktop for macOS & Windows</h1>
 
 <p align="center">
-  <strong>让 DeepSeek Harness 真正像一个 Mac 应用。</strong><br>
-  为 Apple Silicon 打造的独立桌面工作台：内置运行时、账户余额、工作区审阅、文件预览与可信更新，打开即可工作。
+  <strong>让 DeepSeek Harness 真正成为桌面应用。</strong><br>
+  面向 macOS 与 Windows 的独立工作台：内置运行时、Workspace Review、受管插件市场与可恢复的桌面生命周期。
 </p>
 
 <p align="center">
   <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
+  <img alt="Windows 11 x64 candidate" src="https://img.shields.io/badge/Windows%2011-x64%20candidate-3157a4?style=flat-square&logo=windows11">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
 </p>
 
@@ -31,24 +32,26 @@
 </p>
 
 <p align="center">
-  如果这个项目对你有帮助，欢迎点一个 Star。它能帮助更多正在寻找 DeepSeek Harness macOS 客户端的人发现本项目。
+  如果这个项目对你有帮助，欢迎点一个 Star。它能帮助更多正在寻找 DeepSeek Harness 桌面客户端的人发现本项目。
 </p>
 
 ---
 
 ## 项目定位
 
-官方 DeepSeek Harness 提供 Web UI，但日常使用仍需要准备运行环境、启动命令、管理本地端口和处理异常退出。DeepSeek YukiRyou 把这些工作收进一个可安装的 macOS 应用：应用启动时拉起内置 Harness，退出时回收自己创建的进程，并用原生窗口承载完整 Web UI。
+官方 DeepSeek Harness 提供 Web UI，但日常使用仍需要准备运行环境、启动命令、管理本地端口和处理异常退出。DeepSeek YukiRyou 把这些工作收进一个可安装的跨平台桌面应用：应用启动时拉起内置 Harness，退出时回收自己创建的进程，并用原生窗口承载完整 Web UI。
 
 它不是 Harness 的重写版本，也不会改变 Agent 的工作方式。它专注于把 Harness 稳定、安全、可恢复地交付到桌面，并在官方界面之外补足账户状态、工作区文件和变更审核等桌面能力。
 
-> 当前为 Apple Silicon Beta。已经上线的能力与后续路线图在本文中分开列出；标记为“开发中”或“规划中”的功能不包含在当前安装包中。
+> 当前产品代码支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 已有签名、公证的公开 Beta；Windows 已通过真实 Squirrel 安装生命周期候选门禁，但在代码签名、跨版本更新和独立客户端验收完成前不公开未签名安装包。
 
 | 打开即用 | 原生体验 | 可诊断 | 安全更新 |
 | --- | --- | --- | --- |
-| 内置固定版本的 Node.js、pnpm 与 Harness | 原生交通灯、可拖动顶栏、侧栏动画同步 | 自动恢复运行时、日志轮转、脱敏诊断包 | Developer ID 签名、Apple 公证、应用内检查更新 |
+| 内置固定版本的 Node.js、pnpm 与 Harness | 平台化窗口、主题同步、响应式 Workspace Review | 自动恢复运行时、日志轮转、脱敏诊断包 | macOS 签名/公证；Windows 真实安装生命周期候选门禁 |
 
 ## 下载与安装
+
+### macOS
 
 前往 [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases)，下载适用于 Apple Silicon 的 DMG：
 
@@ -64,6 +67,10 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 系统要求：Apple Silicon Mac（M1 或更新芯片）、macOS 14 或更高版本。
 
 每个正式版本同时提供 SHA-256 校验文件。应用和更新包均使用 Developer ID 签名并经过 Apple 公证；不要从 GitHub Releases 以外的非可信来源下载安装包。
+
+### Windows
+
+Windows 11 x64 支持已经进入发行候选阶段：固定 Runtime、ConPTY、Squirrel 安装/修复/卸载、会话恢复、快捷方式与注册项清理均已在真实 Windows runner 验证。公开安装包仍需完成 Authenticode 签名、真实上一版覆盖升级、自动更新闭环和独立 Windows 11 客户端验收；在此之前不会把未签名 CI 候选当作正式下载提供。
 
 ## 当前可用功能
 
@@ -88,9 +95,16 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 - **隐私友好的诊断**：导出包只包含脱敏后的环境摘要和有界日志，不打包项目源码、会话或凭据。
 - **可信发布链**：候选包经过 Developer ID 签名、异机安装、真实应用稳定性测试、Apple 公证和最终产物复验后才会公开。
 
+### 插件市场
+
+- **完整目录发现**：市场基于完整本地索引提供搜索、分类、分页和自定义 HTTPS 来源管理，不把目录收录描述为官方认可或安全审核。
+- **安装前安全预检**：核验目录/npm 身份、仓库回链、生命周期脚本、完整性、平台、Runtime、完整依赖图、Peer 兼容性和真实包体。
+- **受管生命周期**：支持安装、更新、重装、启停、上一验证版本回滚和卸载；写入前需要原生确认，重启后健康失败会自动恢复。
+- **明确权限边界**：插件与 Harness 共享本机用户权限；Renderer 不会获得 Runtime token、缓存路径或可执行安装计划。
+
 ## 为什么选择 YukiRyou
 
-- **面向 Apple Silicon 交付**：不是网页快捷方式，而是带固定 Node.js、pnpm 和 DeepSeek Harness 运行时的独立 macOS 应用。
+- **面向 macOS 与 Windows 的同一产品**：不是网页快捷方式；两端共享固定 Harness Runtime、产品能力和状态合同，平台差异收敛在窗口、路径、进程和安装 Adapter。
 - **工作区审阅闭环**：在对话之外直接查看文件树、当前 Git 变更、逐轮变更、增删行和 Markdown 渲染结果。
 - **融入 Harness 的桌面能力**：账户余额、Companion 侧栏、设置与更新入口遵循现有界面节奏，不取代或篡改 Harness 的核心工作流。
 - **发布结果可验证**：公开包经过 Developer ID 签名、Apple 公证、全新环境安装和真实应用稳定性验证，并附带 SHA-256 校验文件。
@@ -100,8 +114,8 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 | 功能 | 状态 | 计划范围 |
 | --- | --- | --- |
 | 手机远程控制 | **规划中** | 通过明确配对和权限边界，在手机端查看任务状态、接收必要提醒，并在用户确认后继续任务；不会直接暴露本机 Harness 端口。 |
-| 插件市场 | **规划中** | 提供插件发现、详情、安装、更新、移除和真实信任说明；冻结完整依赖图并完成 registry provenance/integrity、兼容性与回滚边界后再开放安装能力。 |
-| Windows x64 发行 | **规划中** | 以 Windows 11 x64 为首发基线，共用 Plugin-first 产品能力，以 DesktopProductCarrier 与 DesktopFramePlugin 分离窗口载体和根布局，并为原生标题栏、Runtime、代码签名、安装和更新提供独立发布门。 |
+| 插件生态完善 | **持续开发** | 在现有发现、预检和受管生命周期上继续补齐可信发布者信号、权限可见性和更完整的兼容性信息。 |
+| Windows x64 公开发行 | **发行收口中** | 产品与未签名候选门禁已完成；剩余 Authenticode、真实跨版本升级、自动更新和独立 Windows 11 客户端验收。 |
 
 路线图表示产品方向，不承诺具体发布日期。安全模型、上游 Harness 接口或素材准备不足时，相关功能会继续保持不可用，而不是通过不稳定的 DOM 注入或降低系统安全要求提前上线。
 
@@ -109,12 +123,12 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 
 ```mermaid
 flowchart LR
-    A["DeepSeek YukiRyou.app"] --> B["Electron 主进程"]
+    A["DeepSeek YukiRyou"] --> B["Electron 主进程"]
     B --> C["应用内置 Node.js"]
     C --> D["固定版本 DeepSeek Harness"]
     D --> E["稳定 127.0.0.1 origin + HMAC secret 持有证明"]
     E --> F["隔离的 Harness WebContentsView"]
-    B --> G["原生窗口、更新与恢复"]
+    B --> G["macOS / Windows 平台 Adapter"]
     G --> F
 ```
 
@@ -132,12 +146,12 @@ Harness 只监听由应用持久选择的稳定回环地址，不向局域网暴
 
 ### 准备环境
 
-- Apple Silicon Mac
-- macOS 14+
 - Node.js 22.19+ 或 24+
 - Corepack / pnpm 10.34.5
+- macOS 开发：Apple Silicon Mac、macOS 14+
+- Windows 开发：Windows 11 x64；Windows Runtime 必须在 Windows 主机装配
 
-### 启动项目
+### 在 macOS 启动项目
 
 ```bash
 corepack enable
@@ -154,7 +168,7 @@ pnpm test:e2e
 pnpm package:mac -- --arch=arm64
 ```
 
-正式签名、公证和发行只通过 GitHub Actions 的 **Release macOS** 工作流执行。本机只能生成不可发布的签名候选：
+macOS 正式签名、公证和发行只通过 GitHub Actions 的 **Release macOS** 工作流执行。本机只能生成不可发布的签名候选：
 
 ```bash
 export MACOS_SIGN_IDENTITY="Developer ID Application: ... (...)"
@@ -163,12 +177,24 @@ pnpm release:mac:candidate
 
 工作流使用多个全新 Apple Silicon runner：先验证候选复制到 `/Applications` 后仍能验签和启动，才允许提交 Apple；公证后的 DMG 与 ZIP 还会在另一个 runner 上重新安装、Gatekeeper 验证并启动。全部通过后只创建 Draft，显式允许后才公开 Release。详见 [发布规则](docs/09-github-and-apple-release.md)和[更新日志](CHANGELOG.md)。
 
+Windows 开发与候选验证需在 Windows x64 主机运行：
+
+```powershell
+corepack enable
+pnpm install --frozen-lockfile
+pnpm runtime:vendor:win
+pnpm runtime:verify
+pnpm make:win
+```
+
+仓库的 **Windows x64 candidate** 工作流还会真实安装、启动、修复安装并卸载 Squirrel 候选。该工作流只上传短期未签名 CI artifact，不创建公开 Release。
+
 ## 固定运行时
 
 | 组件 | 当前版本 | 策略 |
 | --- | --- | --- |
 | DeepSeek Harness | `0.1.0-rc.8` | 随应用固定并验证 |
-| Node.js | `24.19.0` | Apple Silicon 内置运行时 |
+| Node.js | `24.19.0` | 按 `darwin-arm64` / `win32-x64` 目标内置 |
 | pnpm | `10.34.5` | 仅供内置 Harness 使用 |
 | Electron | `43.4.0` | 桌面壳运行时 |
 
@@ -179,14 +205,14 @@ pnpm release:mac:candidate
 <details>
 <summary><strong>这是 DeepSeek 官方客户端吗？</strong></summary>
 
-不是。这是由社区独立开发的 macOS 桌面项目，与 DeepSeek 官方没有隶属或背书关系。
+不是。这是由社区独立开发的跨平台桌面项目，与 DeepSeek 官方没有隶属或背书关系。
 
 </details>
 
 <details>
-<summary><strong>支持 Intel Mac 或 Windows 吗？</strong></summary>
+<summary><strong>支持哪些平台？</strong></summary>
 
-当前只交付 Apple Silicon arm64 版本。Intel、Windows 和 Linux 不在当前发布范围内。
+产品当前支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 提供公开签名、公证 Beta；Windows 产品和候选门禁已完成，但签名与升级验收收口前不公开安装包。Intel Mac、Windows on Arm 和 Linux 暂不支持。
 
 </details>
 
@@ -200,7 +226,7 @@ pnpm release:mac:candidate
 <details>
 <summary><strong>遇到启动问题怎么办？</strong></summary>
 
-先使用应用菜单导出诊断包，再到 [Issues](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues) 描述 macOS 版本、应用版本和复现步骤。提交前请自行确认附件中没有不希望公开的信息。
+先使用应用菜单导出诊断包，再到 [Issues](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues) 描述操作系统版本、应用版本和复现步骤。提交前请自行确认附件中没有不希望公开的信息。
 
 </details>
 
@@ -221,7 +247,7 @@ pnpm release:mac:candidate
 - 如果项目解决了你的问题，可以通过 [Star](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou) 支持它。
 - 遇到可复现问题，请使用 [Bug 反馈表单](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=bug-report.yml)。
 - 有明确使用场景或产品建议，请使用 [功能建议表单](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=feature-request.yml)。
-- 反馈前建议先安装[最新版本](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest)，并附上应用版本、macOS 版本和 Apple 芯片型号。
+- 反馈前建议先安装[最新公开版本](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest)，并附上应用版本、操作系统版本和 CPU 架构。
 
 ## 开发者与许可
 

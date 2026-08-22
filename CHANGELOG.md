@@ -6,6 +6,27 @@
 
 ## [未发布]
 
+## [0.2.3-beta.1] - 2026-08-22
+
+### 新增
+
+- 新增社区插件市场：完整目录索引、搜索、分类、分页、来源管理、安装前安全预检，以及受管安装、更新、重装、启停、回滚和卸载。
+- 新增面向 Windows 11 x64 的桌面 Runtime、Squirrel 安装包和候选构建流水线；真实 Windows runner 已覆盖 Runtime 装配、ConPTY、打包启动、会话恢复、安装、修复安装和卸载生命周期。
+- Workspace Review 新增文件与变更搜索、审阅队列、前进/后退历史、预览内查找、路径与行号复制，以及通过拖放或右键把文件、文件夹和代码行引用加入当前对话。
+
+### 安全与改进
+
+- 插件安装只接受通过目录/npm 身份、仓库回链、生命周期脚本、SHA-512、官方 tarball、平台、DSH bundle、Node、完整依赖图、Peer 兼容性和真实包体验证的冻结计划；Renderer 不接触 Runtime token、缓存路径或可执行计划。
+- 插件变更使用一次性预览能力、系统原生确认、内容寻址缓存、离线 generation、双健康启动和失败自动恢复；受管 receipt 精确约束启停、回滚与卸载，失败版本进入 blocklist。
+- 插件目录时间统一显示为本地化时间，不再直接暴露 ISO 时间字符串；长名称、深色主题和详情布局同步改善。
+- Windows 路径、诊断归档、插件 junction、PTY 终止、应用进程树回收和 Squirrel 静默卸载合同得到平台化修复。
+- 工作区右栏改为不遮挡对话的响应式 dock/overlay 布局，并修复拖动宽度状态、深色菜单对比度、长行 diff 显示和空白预览状态。
+
+### 发行状态
+
+- macOS 14+ Apple Silicon 继续提供 Developer ID 签名和 Apple 公证发行。
+- Windows 11 x64 产品支持与未签名候选门禁已经落地；代码签名、真实上一版覆盖升级、自动更新闭环和独立 Windows 11 客户端验收完成前，不公开 Windows 安装包。
+
 ## [0.2.2-beta.1] - 2026-08-21
 
 ### 新增
@@ -131,6 +152,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[0.2.3-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.1
 [0.2.2-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.2-beta.1
 [0.2.1-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.2
 [0.2.1-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.1
