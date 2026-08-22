@@ -13,16 +13,32 @@ const testTimeoutMs = process.platform === 'win32' ? 150_000 : 75_000;
 
 async function captureApplicationWindow(
   electronApp: ElectronApplication,
-  fileName: string,
+  captureName: string,
 ): Promise<void> {
   const directory = join(process.cwd(), 'out', 'windows-ui-verification');
   await mkdir(directory, { recursive: true });
-  const png = await electronApp.evaluate(async ({ BrowserWindow }) => {
+  const captures = await electronApp.evaluate(async ({ BrowserWindow, webContents }) => {
     const applicationWindow = BrowserWindow.getAllWindows()[0];
     if (applicationWindow === undefined) throw new Error('application window is unavailable');
-    return (await applicationWindow.capturePage()).toPNG().toString('base64');
+    const harness = webContents
+      .getAllWebContents()
+      .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
+    if (harness === undefined) throw new Error('Harness view is unavailable');
+    return {
+      shell: (await applicationWindow.capturePage()).toPNG().toString('base64'),
+      harness: (await harness.capturePage()).toPNG().toString('base64'),
+    };
   });
-  await writeFile(join(directory, fileName), Buffer.from(png, 'base64'));
+  await Promise.all([
+    writeFile(
+      join(directory, `shell-${captureName}.png`),
+      Buffer.from(captures.shell, 'base64'),
+    ),
+    writeFile(
+      join(directory, `harness-${captureName}.png`),
+      Buffer.from(captures.harness, 'base64'),
+    ),
+  ]);
 }
 
 describe('packaged desktop application', () => {
@@ -550,7 +566,7 @@ describe('packaged desktop application', () => {
           : /Apple Silicon.*arm64/,
       );
       if (process.platform === 'win32') {
-        await captureApplicationWindow(electronApp, 'settings-dark.png');
+        await captureApplicationWindow(electronApp, 'settings-dark');
       }
 
       await electronApp.evaluate(({ webContents }) => {
