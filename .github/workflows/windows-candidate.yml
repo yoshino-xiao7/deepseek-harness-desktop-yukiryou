@@ -45,7 +45,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm test:integration
 
   build_candidate:
     name: Vendor Runtime, make Squirrel, and smoke
@@ -66,6 +65,8 @@ jobs:
         run: |
           pnpm runtime:vendor:win
           pnpm runtime:verify
+      - name: Run integration tests against the verified Runtime
+        run: pnpm test:integration
       - name: Build unsigned Squirrel candidate
         run: pnpm make:win
       - name: Start and restart the exact packaged application

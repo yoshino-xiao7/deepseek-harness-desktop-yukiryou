@@ -1,7 +1,7 @@
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -46,17 +46,21 @@ describe('RuntimeSupervisor', () => {
 
     expect(ready.kind).toBe('ready');
     expect(ready.version).toBe('fake-1.0.0');
-    await expect(fetch(ready.origin).then((response) => response.json())).resolves
-      .toMatchObject({
+    const runtimeResponse = await fetch(ready.origin).then((response) =>
+      response.json() as Promise<Record<string, unknown>>
+    );
+    expect(runtimeResponse).toMatchObject({
         status: 'ready',
         home: runtimeHome,
-        path: expect.stringMatching(
-          new RegExp(`^${runtimeBinDirectory.replaceAll('/', '\\/')}:`),
-        ),
-        workspace: canonicalWorkspaceRoot,
         companionTokenConfigured: true,
         developmentPluginFixture: true,
       });
+    expect(String(runtimeResponse.path).split(delimiter)[0]).toBe(
+      runtimeBinDirectory,
+    );
+    await expect(realpath(String(runtimeResponse.workspace))).resolves.toBe(
+      canonicalWorkspaceRoot,
+    );
     expect(JSON.stringify(supervisor.getState())).not.toContain(
       'test-companion-token',
     );

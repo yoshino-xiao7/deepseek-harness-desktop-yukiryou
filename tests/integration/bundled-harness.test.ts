@@ -11,6 +11,7 @@ import {
 } from '../../src/main/runtime/runtime-supervisor.js';
 import { createHarnessRuntimeCommand } from '../../src/main/runtime/runtime-command.js';
 import { ensureDesktopSettingsExtension } from '../../src/main/runtime/runtime-extension.js';
+import { resolveBundledRuntimePlatform } from '../../src/main/runtime/runtime-platform.js';
 import { createPluginProfileBootstrap } from '../../src/main/runtime/plugin-profile-bootstrap.js';
 
 const projectRoot = process.cwd();
@@ -55,6 +56,7 @@ describe('bundled Harness runtime', () => {
       const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-real-home-'));
       const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-real-workspace-'));
       const runtimeRoot = join(projectRoot, 'resources', 'runtime');
+      const runtimeLayout = resolveBundledRuntimePlatform(process.platform, process.arch);
       await ensureDesktopSettingsExtension(runtimeHome, runtimeRoot);
       const managedPatch = join(runtimeHome, 'managed-profile.patch.yml');
       await writeFile(managedPatch, '[]\n');
@@ -82,7 +84,7 @@ describe('bundled Harness runtime', () => {
         runtimeHome,
         runtimeBinDirectories: [
           join(runtimeRoot, 'dsh', 'node_modules', '.bin'),
-          join(runtimeRoot, 'node', 'bin'),
+          join(runtimeRoot, runtimeLayout.nodeBinDirectory),
         ],
         workspaceRoot,
         version: '0.1.0-rc.8',
@@ -167,6 +169,7 @@ describe('bundled Harness runtime', () => {
       const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-fixture-home-'));
       const workspaceRoot = await mkdtemp(join(tmpdir(), 'dsh-fixture-workspace-'));
       const runtimeRoot = join(projectRoot, 'resources', 'runtime');
+      const runtimeLayout = resolveBundledRuntimePlatform(process.platform, process.arch);
       await ensureDesktopSettingsExtension(runtimeHome, runtimeRoot);
       const marketRoot = new URL(
         '../../resources/runtime/dsh/node_modules/@dsh-desktop/market/',
@@ -214,7 +217,7 @@ describe('bundled Harness runtime', () => {
         runtimeHome,
         runtimeBinDirectories: [
           join(runtimeRoot, 'dsh', 'node_modules', '.bin'),
-          join(runtimeRoot, 'node', 'bin'),
+          join(runtimeRoot, runtimeLayout.nodeBinDirectory),
         ],
         workspaceRoot,
         version: '0.1.0-rc.8',
@@ -241,7 +244,8 @@ describe('bundled Harness runtime', () => {
   it('provides pnpm to the official plugin command without a global install', async () => {
     const runtimeHome = await mkdtemp(join(tmpdir(), 'dsh-plugin-home-'));
     const runtimeRoot = join(projectRoot, 'resources', 'runtime');
-    const node = join(runtimeRoot, 'node', 'bin', 'node');
+    const runtimeLayout = resolveBundledRuntimePlatform(process.platform, process.arch);
+    const node = join(runtimeRoot, runtimeLayout.nodeExecutable);
     const dsh = join(
       runtimeRoot,
       'dsh',
@@ -253,7 +257,7 @@ describe('bundled Harness runtime', () => {
     );
     const runtimePath = [
       join(runtimeRoot, 'dsh', 'node_modules', '.bin'),
-      join(runtimeRoot, 'node', 'bin'),
+      join(runtimeRoot, runtimeLayout.nodeBinDirectory),
       process.env.PATH,
     ]
       .filter((entry): entry is string => entry !== undefined)
