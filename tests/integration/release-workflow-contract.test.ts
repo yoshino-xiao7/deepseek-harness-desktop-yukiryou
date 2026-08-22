@@ -86,6 +86,22 @@ describe('macOS release workflow contract', () => {
     );
   });
 
+  it('waits for Squirrel background cleanup before enforcing an empty install root', async () => {
+    const lifecycleScript = await readFile(
+      join(process.cwd(), 'scripts', 'windows-squirrel-lifecycle.ps1'),
+      'utf8',
+    );
+
+    expect(lifecycleScript).toContain(
+      "Wait-Until -FailureMessage 'Unexpected files remained after Squirrel uninstall'",
+    );
+    expect(lifecycleScript).toContain(
+      '$script:unexpectedEntries = @(Get-UnexpectedInstallEntries)',
+    );
+    expect(lifecycleScript).not.toContain('vk_swiftshader.dll');
+    expect(lifecycleScript).not.toContain('vk_swiftshader_icd.json');
+  });
+
   it('vendors the bundled runtime before running integration tests', async () => {
     const workflow = parse(
       await readFile(
