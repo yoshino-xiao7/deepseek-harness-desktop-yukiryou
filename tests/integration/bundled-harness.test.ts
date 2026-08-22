@@ -9,6 +9,7 @@ import {
   createRuntimeSupervisor,
   type RuntimeSupervisor,
 } from '../../src/main/runtime/runtime-supervisor.js';
+import { runtimeStartupTimeoutMs } from '../../src/main/runtime/runtime-startup-policy.js';
 import { createHarnessRuntimeCommand } from '../../src/main/runtime/runtime-command.js';
 import { ensureDesktopSettingsExtension } from '../../src/main/runtime/runtime-extension.js';
 import { resolveBundledRuntimePlatform } from '../../src/main/runtime/runtime-platform.js';
@@ -88,7 +89,7 @@ describe('bundled Harness runtime', () => {
         ],
         workspaceRoot,
         version: '0.1.0-rc.8',
-        startupTimeoutMs: 60_000,
+        startupTimeoutMs: runtimeStartupTimeoutMs(),
         shutdownTimeoutMs: 5_000,
         createCompanionToken: () => 'integration-token-that-is-long-enough-123456789',
       });

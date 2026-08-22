@@ -14,6 +14,7 @@ import {
   type RuntimeFailure,
   type RuntimeSupervisor,
 } from './runtime/runtime-supervisor.js';
+import { runtimeStartupTimeoutMs } from './runtime/runtime-startup-policy.js';
 import { createRuntimeRecoveryPolicy } from './runtime/runtime-recovery-policy.js';
 import { createHarnessRuntimeCommand } from './runtime/runtime-command.js';
 import { createRuntimeCompanionClient } from './runtime/runtime-companion-client.js';
@@ -264,7 +265,7 @@ export class AppCoordinator {
       ],
       workspaceRoot: app.getPath('documents'),
       version: '0.1.0-rc.8',
-      startupTimeoutMs: 20_000,
+      startupTimeoutMs: runtimeStartupTimeoutMs(),
       shutdownTimeoutMs: 5_000,
       port: runtimePort.port,
       developmentPluginFixture: developmentPluginFixtureEnabled(app.isPackaged),

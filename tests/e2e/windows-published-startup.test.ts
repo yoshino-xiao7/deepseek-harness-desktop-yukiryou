@@ -40,7 +40,7 @@ describe.skipIf(process.platform !== 'win32')(
           harnessReadyState: 'complete',
           hasInteractiveComposer: true,
         });
-    }, 60_000);
+    }, 90_000);
   },
 );
 

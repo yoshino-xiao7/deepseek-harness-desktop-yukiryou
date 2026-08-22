@@ -73,6 +73,10 @@ jobs:
           $executables = @(Get-ChildItem -LiteralPath $extract -Recurse -Filter 'DeepSeek YukiRyou.exe')
           if ($executables.Count -ne 1) { throw "Expected one executable, found $($executables.Count)" }
           "DSH_E2E_EXECUTABLE_PATH=$($executables[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Close an existing product instance before the isolated launch
+        run: |
+          Get-Process -Name 'DeepSeek YukiRyou' -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 1
       - name: Reproduce the published wake-screen failure
         run: pnpm exec vitest run tests/e2e/windows-published-startup.test.ts --no-file-parallelism
       - name: Collect redacted application logs
