@@ -74,7 +74,9 @@ jobs:
     name: Vendor Runtime, make EXE + portable ZIP, and smoke
     needs: quality
     runs-on: [self-hosted, Windows, X64, yukiryou-local]
-    timeout-minutes: 35
+    # Packaging and uploading the bundled 387 MiB / 55k-file Runtime is slow
+    # on the physical runner. Keep enough headroom for lifecycle verification.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - name: Enable runner-local PowerShell 7
