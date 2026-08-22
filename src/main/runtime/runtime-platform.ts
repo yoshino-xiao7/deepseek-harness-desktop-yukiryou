@@ -63,8 +63,8 @@ export function resolveBundledRuntimePlatform(
       ],
       ptyShell: {
         command: 'cmd.exe',
-        args: ['/d', '/q'],
-        input: 'echo DSH_PTY_OK & exit\r',
+        args: ['/d', '/q', '/c', 'echo DSH_PTY_OK'],
+        input: '',
       },
     };
   }

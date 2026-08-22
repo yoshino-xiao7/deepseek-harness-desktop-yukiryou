@@ -422,7 +422,9 @@ child.onExit(({ exitCode }) => {
   process.stderr.write(observed);
   process.exitCode = 1;
 });
-child.write(${JSON.stringify(shell.input)});
+if (${JSON.stringify(shell.input)} !== '') {
+  child.write(${JSON.stringify(shell.input)});
+}
 `;
 }
 

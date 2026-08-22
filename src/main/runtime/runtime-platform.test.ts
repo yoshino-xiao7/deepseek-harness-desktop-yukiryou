@@ -32,7 +32,11 @@ describe('bundled Runtime platform layout', () => {
         'conpty/conpty.dll',
         'conpty/OpenConsole.exe',
       ],
-      ptyShell: { command: 'cmd.exe', args: ['/d', '/q'], input: 'echo DSH_PTY_OK & exit\r' },
+      ptyShell: {
+        command: 'cmd.exe',
+        args: ['/d', '/q', '/c', 'echo DSH_PTY_OK'],
+        input: '',
+      },
     });
   });
 
