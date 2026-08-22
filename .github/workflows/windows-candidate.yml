@@ -156,6 +156,9 @@ jobs:
           const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
           if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==4||!m.artifacts.some(a=>a.file.endsWith('-portable.zip')))
           throw new Error('Windows candidate provenance mismatch')"
+      - name: Recover an interrupted lifecycle test installation
+        shell: pwsh
+        run: ./scripts/windows-squirrel-lifecycle.ps1 -Action Recover
       - name: Install the frozen Squirrel candidate
         shell: pwsh
         run: |
