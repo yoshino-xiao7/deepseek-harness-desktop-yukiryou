@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('Install', 'Repair', 'Uninstall')]
+  [ValidateSet('Recover', 'Install', 'Repair', 'Uninstall')]
   [string]$Action,
 
   [string]$CandidateDirectory = 'out/windows-candidate',
@@ -19,6 +19,8 @@ $setupPath = Join-Path $candidateRoot 'DeepSeek-YukiRyou-Setup.exe'
 $manifestPath = Join-Path $candidateRoot 'windows-candidate-manifest.json'
 $executableName = 'DeepSeek YukiRyou.exe'
 $shortcutName = 'DeepSeek YukiRyou.lnk'
+$markerName = 'windows-lifecycle-user-data-marker.json'
+$markerPath = Join-Path $userDataRoot $markerName
 
 function Wait-Until {
   param(
@@ -79,6 +81,80 @@ function Read-State {
   return Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
 }
 
+if ($Action -eq 'Recover') {
+  if (-not (Test-Path -LiteralPath $installRoot)) {
+    if (Test-Path -LiteralPath $markerPath) {
+      Remove-Item -LiteralPath $markerPath -Force
+    }
+    Write-Output 'No stale Squirrel lifecycle installation found'
+    exit 0
+  }
+  if (-not (Test-Path -LiteralPath $markerPath)) {
+    $installedExecutable = Get-InstalledExecutable
+    $shortcutPaths = @(Get-ShortcutPaths | Where-Object { Test-Path -LiteralPath $_ })
+    $uninstallEntries = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+      Get-ItemProperty -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -eq 'DeepSeek YukiRyou' }
+    $unexpectedEntries = @(Get-UnexpectedInstallEntries)
+    if (
+      $null -ne $installedExecutable -or
+      $shortcutPaths.Count -gt 0 -or
+      @($uninstallEntries).Count -gt 0 -or
+      $unexpectedEntries.Count -gt 0
+    ) {
+      throw "Refusing to remove an unmarked pre-existing Squirrel installation: $installRoot"
+    }
+
+    Remove-Item -LiteralPath $installRoot -Recurse -Force
+    Write-Output 'Removed unregistered Squirrel self-cleanup tombstones'
+    exit 0
+  }
+  if (-not (Test-Path -LiteralPath $manifestPath)) {
+    throw "Windows candidate manifest is missing: $manifestPath"
+  }
+
+  $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+  $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  if (
+    [string]::IsNullOrWhiteSpace([string]$marker.nonce) -or
+    [string]$marker.version -ne [string]$manifest.version
+  ) {
+    throw 'Refusing to remove a Squirrel installation without a matching lifecycle marker'
+  }
+
+  $updateExecutable = Join-Path $installRoot 'Update.exe'
+  if (-not (Test-Path -LiteralPath $updateExecutable)) {
+    throw "Marked Squirrel installation has no Update.exe: $updateExecutable"
+  }
+  $process = Start-Process -FilePath $updateExecutable -ArgumentList '--uninstall', '--silent' -Wait -PassThru
+  if ($process.ExitCode -ne 0) {
+    throw "Stale Squirrel uninstall failed with exit code $($process.ExitCode)"
+  }
+
+  Wait-Until -FailureMessage 'Stale installed application remained runnable after uninstall' -Condition {
+    return $null -eq (Get-InstalledExecutable)
+  }
+  foreach ($shortcutPath in @(Get-ShortcutPaths)) {
+    if (Test-Path -LiteralPath $shortcutPath) {
+      throw "Stale Squirrel shortcut remained after uninstall: $shortcutPath"
+    }
+  }
+  $script:unexpectedEntries = @(Get-UnexpectedInstallEntries)
+  Wait-Until -FailureMessage 'Unexpected files remained after stale Squirrel uninstall' -FailureDetail {
+    return ": $($script:unexpectedEntries -join ', ')"
+  } -Condition {
+    $script:unexpectedEntries = @(Get-UnexpectedInstallEntries)
+    return $script:unexpectedEntries.Count -eq 0
+  }
+
+  if (Test-Path -LiteralPath $installRoot) {
+    Remove-Item -LiteralPath $installRoot -Recurse -Force
+  }
+  Remove-Item -LiteralPath $markerPath -Force
+  Write-Output 'Recovered a stale, lifecycle-marked Squirrel test installation'
+  exit 0
+}
+
 if ($Action -eq 'Install') {
   if (-not (Test-Path -LiteralPath $setupPath)) {
     throw "Windows candidate setup is missing: $setupPath"
@@ -97,7 +173,6 @@ if ($Action -eq 'Install') {
 
   New-Item -ItemType Directory -Path (Split-Path -Parent $stateFile) -Force | Out-Null
   New-Item -ItemType Directory -Path $userDataRoot -Force | Out-Null
-  $markerPath = Join-Path $userDataRoot 'windows-lifecycle-user-data-marker.json'
   $marker = [ordered]@{
     nonce = [Guid]::NewGuid().ToString('N')
     version = [string]$manifest.version

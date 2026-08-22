@@ -1,12 +1,51 @@
 import { mkdir, mkdtemp, readlink, writeFile } from 'node:fs/promises';
+import type * as FileSystemPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ensureDesktopSettingsExtension } from './runtime-extension.js';
 
 describe('desktop settings runtime extension', () => {
+  it('uses directory junctions on Windows without requiring Developer Mode', async () => {
+    const actualFileSystem = await vi.importActual<typeof FileSystemPromises>(
+      'node:fs/promises',
+    );
+    const symlink = vi.fn(actualFileSystem.symlink);
+    vi.resetModules();
+    vi.doMock('node:fs/promises', () => ({ ...actualFileSystem, symlink }));
+    try {
+      const root = await mkdtemp(join(tmpdir(), 'dsh-extension-windows-'));
+      const runtimeHome = join(root, 'home');
+      const runtimeRoot = join(root, 'runtime');
+      for (const extension of [
+        'settings',
+        'companion',
+        'frame-prototype',
+        'market',
+      ]) {
+        await mkdir(
+          join(runtimeRoot, 'dsh', 'node_modules', '@dsh-desktop', extension),
+          { recursive: true },
+        );
+      }
+
+      const isolatedModule = await import('./runtime-extension.js');
+      await isolatedModule.ensureBundledRuntimeExtensions(
+        runtimeHome,
+        runtimeRoot,
+        'win32',
+      );
+
+      expect(symlink).toHaveBeenCalledTimes(4);
+      expect(symlink.mock.calls.every((call) => call[2] === 'junction')).toBe(true);
+    } finally {
+      vi.doUnmock('node:fs/promises');
+      vi.resetModules();
+    }
+  });
+
   it('links the app-owned profile package to the bundled plugin', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-extension-'));
     const runtimeHome = join(root, 'home');

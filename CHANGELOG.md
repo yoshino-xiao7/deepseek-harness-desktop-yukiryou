@@ -6,6 +6,19 @@
 
 ## [未发布]
 
+## [0.2.3-beta.2] - 2026-08-23
+
+### 修复
+
+- 修复 Windows 普通用户首次启动长期停留在“正在唤醒 Harness”的问题：桌面扩展改用不要求管理员权限或 Developer Mode 的目录 junction。
+- Windows 冷启动等待窗口从 20 秒调整为 60 秒，避免首次组装 Runtime 时被过早判定失败。
+- Windows“关于”和手动更新状态改为显示 Windows x64、Setup EXE 与便携 ZIP，不再错误显示 Apple Silicon、macOS 和 DMG。
+
+### 验证
+
+- 真实 Windows 11 x64 非管理员交互桌面已覆盖固定 Runtime 装配、完整桌面功能/UI E2E、打包应用与便携 ZIP 启动/重启、Squirrel 首次安装、已安装应用启动、同版本修复安装、卸载清理和用户数据保留。
+- Windows 候选流水线改为采集宿主窗口与 Harness 附着视图的独立截图，并为 387 MiB Runtime 的打包及产物上传预留完整时限。
+
 ## [0.2.3-beta.1] - 2026-08-22
 
 ### 新增
@@ -152,6 +165,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[0.2.3-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.2
 [0.2.3-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.1
 [0.2.2-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.2-beta.1
 [0.2.1-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.1-beta.2

@@ -1,12 +1,45 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveE2eExecutablePath } from './executable-path.js';
+import { runtimeStartupTimeoutMs } from '../../src/main/runtime/runtime-startup-policy.js';
 
 const executablePath = resolveE2eExecutablePath();
+const startupTimeoutMs = runtimeStartupTimeoutMs(process.platform) + 10_000;
+const testTimeoutMs = process.platform === 'win32' ? 150_000 : 75_000;
+
+async function captureApplicationWindow(
+  electronApp: ElectronApplication,
+  captureName: string,
+): Promise<void> {
+  const directory = join(process.cwd(), 'out', 'windows-ui-verification');
+  await mkdir(directory, { recursive: true });
+  const captures = await electronApp.evaluate(async ({ BrowserWindow, webContents }) => {
+    const applicationWindow = BrowserWindow.getAllWindows()[0];
+    if (applicationWindow === undefined) throw new Error('application window is unavailable');
+    const harness = webContents
+      .getAllWebContents()
+      .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
+    if (harness === undefined) throw new Error('Harness view is unavailable');
+    return {
+      shell: (await applicationWindow.capturePage()).toPNG().toString('base64'),
+      harness: (await harness.capturePage()).toPNG().toString('base64'),
+    };
+  });
+  await Promise.all([
+    writeFile(
+      join(directory, `shell-${captureName}.png`),
+      Buffer.from(captures.shell, 'base64'),
+    ),
+    writeFile(
+      join(directory, `harness-${captureName}.png`),
+      Buffer.from(captures.harness, 'base64'),
+    ),
+  ]);
+}
 
 describe('packaged desktop application', () => {
   let electronApp: ElectronApplication | undefined;
@@ -78,7 +111,7 @@ describe('packaged desktop application', () => {
                 .map((contents) => contents.getURL())
                 .find((url) => url.startsWith('http://127.0.0.1:')),
             ),
-          { timeout: 20_000 },
+          { timeout: startupTimeoutMs },
         )
         .toMatch(/^http:\/\/127\.0\.0\.1:\d+\/?/);
 
@@ -515,7 +548,7 @@ describe('packaged desktop application', () => {
         'https://github.com/yoshino-xiao7',
       );
       expect(settingsResult?.updateButtonText).toMatch(
-        /^(检查更新|检查中…|下载中…|下载 DMG|重新检查|重启并更新|Check for updates|Checking…|Downloading…|Download DMG|Check again|Restart and update)$/,
+        /^(检查更新|检查中…|下载中…|下载 DMG|下载 EXE|重新检查|重启并更新|Check for updates|Checking…|Downloading…|Download DMG|Download EXE|Check again|Restart and update)$/,
       );
       expect(settingsResult?.updateStatusText).toBeTruthy();
       expect(settingsResult?.updateBridgeShape).toEqual({
@@ -527,7 +560,14 @@ describe('packaged desktop application', () => {
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
       expect(settingsResult?.aboutText).toContain('0.1.0-rc.8');
-      expect(settingsResult?.aboutText).toMatch(/Apple Silicon.*arm64/);
+      expect(settingsResult?.aboutText).toMatch(
+        process.platform === 'win32'
+          ? /Windows.*x64/
+          : /Apple Silicon.*arm64/,
+      );
+      if (process.platform === 'win32') {
+        await captureApplicationWindow(electronApp, 'settings-dark');
+      }
 
       await electronApp.evaluate(({ webContents }) => {
         const harness = webContents
@@ -627,8 +667,14 @@ describe('packaged desktop application', () => {
         .toMatchObject({
           header: '',
           headerLabel: expect.stringMatching(/^(手动下载更新|Download update manually)$/),
-          card: expect.stringMatching(/^(下载 DMG|Download DMG)$/),
-          status: expect.stringMatching(/(macOS|DMG)/),
+          card: expect.stringMatching(
+            process.platform === 'win32'
+              ? /^(下载 EXE|Download EXE)$/
+              : /^(下载 DMG|Download DMG)$/,
+          ),
+          status: expect.stringMatching(
+            process.platform === 'win32' ? /(Windows|EXE|ZIP)/ : /(macOS|DMG)/,
+          ),
         });
 
       await electronApp.evaluate(({ webContents }) => {
@@ -748,6 +794,6 @@ describe('packaged desktop application', () => {
       expect(Date.now() - closeStartedAt).toBeLessThan(20_000);
       electronApp = undefined;
     },
-    45_000,
+    testTimeoutMs,
   );
 });

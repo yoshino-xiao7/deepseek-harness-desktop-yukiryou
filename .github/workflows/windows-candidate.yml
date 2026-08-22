@@ -27,14 +27,37 @@ concurrency:
 env:
   NODE_VERSION: '24'
   PNPM_VERSION: '10.34.5'
+  RUNNER_PWSH_PATH: 'C:\r\y\pwsh-7.6.4'
 
 jobs:
   quality:
     name: Windows quality gate
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, yukiryou-local]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+      - name: Enable runner-local PowerShell 7
+        shell: powershell
+        run: |
+          if (-not (Test-Path "$env:RUNNER_PWSH_PATH\pwsh.exe")) {
+            throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
+          }
+          $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Require an unlocked interactive Windows desktop
+        run: |
+          $sessionId = (Get-Process -Id $PID).SessionId
+          if ($sessionId -eq 0) {
+            throw 'Runner is executing in non-interactive Session 0'
+          }
+          $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($explorer.Count -eq 0) {
+            throw "No logged-in Windows desktop was found in Session $sessionId"
+          }
+          $lockUi = @(Get-Process LockApp, LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($lockUi.Count -ne 0) {
+            throw "Windows desktop Session $sessionId is locked"
+          }
+          "Using unlocked interactive Windows desktop Session $sessionId"
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -50,10 +73,34 @@ jobs:
   build_candidate:
     name: Vendor Runtime, make EXE + portable ZIP, and smoke
     needs: quality
-    runs-on: windows-latest
-    timeout-minutes: 35
+    runs-on: [self-hosted, Windows, X64, yukiryou-local]
+    # Packaging and uploading the bundled 387 MiB / 55k-file Runtime is slow
+    # on the physical runner. Keep enough headroom for lifecycle verification.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Enable runner-local PowerShell 7
+        shell: powershell
+        run: |
+          if (-not (Test-Path "$env:RUNNER_PWSH_PATH\pwsh.exe")) {
+            throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
+          }
+          $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Require an unlocked interactive Windows desktop
+        run: |
+          $sessionId = (Get-Process -Id $PID).SessionId
+          if ($sessionId -eq 0) {
+            throw 'Runner is executing in non-interactive Session 0'
+          }
+          $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($explorer.Count -eq 0) {
+            throw "No logged-in Windows desktop was found in Session $sessionId"
+          }
+          $lockUi = @(Get-Process LockApp, LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          if ($lockUi.Count -ne 0) {
+            throw "Windows desktop Session $sessionId is locked"
+          }
+          "Using unlocked interactive Windows desktop Session $sessionId"
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -77,7 +124,16 @@ jobs:
           pnpm exec vitest run
           tests/e2e/packaged-startup.test.ts
           tests/e2e/session-selection-restart.test.ts
+          tests/e2e/packaged-app.test.ts
           --no-file-parallelism
+      - name: Upload Windows UI verification screenshots
+        if: ${{ always() && hashFiles('out/windows-ui-verification/*.png') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-verification
+          path: out/windows-ui-verification/
+          if-no-files-found: error
+          retention-days: 14
       - name: Start and restart the exact portable ZIP application
         shell: pwsh
         run: |
@@ -100,6 +156,9 @@ jobs:
           const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
           if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==4||!m.artifacts.some(a=>a.file.endsWith('-portable.zip')))
           throw new Error('Windows candidate provenance mismatch')"
+      - name: Recover an interrupted lifecycle test installation
+        shell: pwsh
+        run: ./scripts/windows-squirrel-lifecycle.ps1 -Action Recover
       - name: Install the frozen Squirrel candidate
         shell: pwsh
         run: |

@@ -108,6 +108,38 @@ describe('macOS release workflow contract', () => {
     expect(electronCleanup).toContain('applicationProcess.exitCode !== null');
   });
 
+  it('only recovers persistent-runner installs carrying the lifecycle marker', async () => {
+    const [workflowSource, lifecycleScript] = await Promise.all([
+      readFile(
+        join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
+        'utf8',
+      ),
+      readFile(
+        join(process.cwd(), 'scripts', 'windows-squirrel-lifecycle.ps1'),
+        'utf8',
+      ),
+    ]);
+
+    expect(workflowSource).toContain(
+      './scripts/windows-squirrel-lifecycle.ps1 -Action Recover',
+    );
+    expect(lifecycleScript).toContain(
+      'Refusing to remove an unmarked pre-existing Squirrel installation',
+    );
+    expect(lifecycleScript).toContain(
+      "Where-Object { $_.DisplayName -eq 'DeepSeek YukiRyou' }",
+    );
+    expect(lifecycleScript).toContain(
+      "Write-Output 'Removed unregistered Squirrel self-cleanup tombstones'",
+    );
+    expect(lifecycleScript).toContain(
+      '[string]$marker.version -ne [string]$manifest.version',
+    );
+    expect(lifecycleScript).toContain(
+      "Remove-Item -LiteralPath $installRoot -Recurse -Force",
+    );
+  });
+
   it('vendors the bundled runtime before running integration tests', async () => {
     const workflow = parse(
       await readFile(

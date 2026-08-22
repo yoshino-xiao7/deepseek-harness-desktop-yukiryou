@@ -83,6 +83,11 @@ let updateState: DesktopUpdateState = {
   status: 'disabled',
   currentVersion: '0.0.0',
 };
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouPlatform', Object.freeze({
+  platform: process.platform,
+  architecture: process.arch,
+}));
 const updateListeners = new Set<(state: DesktopUpdateState) => void>();
 let balanceState: AccountBalanceSnapshot = { status: 'loading' };
 const balanceListeners = new Set<(state: AccountBalanceSnapshot) => void>();

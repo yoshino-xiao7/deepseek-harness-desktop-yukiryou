@@ -11,6 +11,7 @@ const DESKTOP_EXTENSIONS = [
 export async function ensureBundledRuntimeExtensions(
   runtimeHome: string,
   runtimeRoot: string,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<void> {
   const scopeDirectory = join(
     runtimeHome,
@@ -21,7 +22,7 @@ export async function ensureBundledRuntimeExtensions(
   await mkdir(scopeDirectory, { recursive: true, mode: 0o700 });
 
   for (const extension of DESKTOP_EXTENSIONS) {
-    await ensureExtensionLink(scopeDirectory, runtimeRoot, extension);
+    await ensureExtensionLink(scopeDirectory, runtimeRoot, extension, platform);
   }
 }
 
@@ -29,6 +30,7 @@ async function ensureExtensionLink(
   scopeDirectory: string,
   runtimeRoot: string,
   extension: (typeof DESKTOP_EXTENSIONS)[number],
+  platform: NodeJS.Platform,
 ): Promise<void> {
   const linkPath = join(scopeDirectory, extension);
   const targetPath = join(runtimeRoot, 'dsh', 'node_modules', '@dsh-desktop', extension);
@@ -51,7 +53,11 @@ async function ensureExtensionLink(
     }
   }
 
-  await symlink(targetPath, linkPath, 'dir');
+  await symlink(
+    targetPath,
+    linkPath,
+    platform === 'win32' ? 'junction' : 'dir',
+  );
 }
 
 /** @deprecated Use the complete app-owned extension assembly. */
