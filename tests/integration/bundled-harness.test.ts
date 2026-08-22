@@ -51,6 +51,30 @@ describe('bundled Harness runtime', () => {
     expect(client).not.toContain('defaultInput: ["text", "image"]');
   });
 
+  it('ships the rc.8-scoped session selection startup patch', async () => {
+    const client = await readFile(
+      join(
+        projectRoot,
+        'resources',
+        'runtime',
+        'dsh',
+        'node_modules',
+        '@deepseek-ai',
+        'dsh-client-runtime',
+        'lib',
+        'client.js',
+      ),
+      'utf8',
+    );
+
+    expect(client).toContain(
+      'deepseek-yukiryou:session-selection-patch:v1',
+    );
+    expect(client).toContain(
+      'persisted !== void 0 && phase === "ready"',
+    );
+  });
+
   it(
     'serves the official Harness UI from an isolated Runtime Home',
     async () => {
