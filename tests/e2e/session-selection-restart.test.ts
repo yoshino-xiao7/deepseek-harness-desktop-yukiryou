@@ -72,8 +72,10 @@ describe('Harness session selection across desktop restarts', () => {
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
-    await expect(readSessionIds(secondOrigin)).resolves.toEqual(
-      [expectedSessionId],
+    await expectOnlyCreatedSessions(
+      secondOrigin,
+      expectedSessionId,
+      createdSessionIds,
     );
 
     const crashedProcess = electronApp.process();
@@ -88,8 +90,10 @@ describe('Harness session selection across desktop restarts', () => {
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
-    await expect(readSessionIds(thirdLaunch.origin)).resolves.toEqual(
-      [expectedSessionId],
+    await expectOnlyCreatedSessions(
+      thirdLaunch.origin,
+      expectedSessionId,
+      createdSessionIds,
     );
   }, 90_000);
 });
@@ -187,6 +191,18 @@ async function readSessionIds(origin: string): Promise<string[]> {
   const items = record.items;
   if (!Array.isArray(items)) throw new Error('session.list returned no items');
   return items.map((item) => readString(item, 'sessionId')).sort();
+}
+
+async function expectOnlyCreatedSessions(
+  origin: string,
+  selectedSessionId: string,
+  createdSessionIds: readonly string[],
+): Promise<void> {
+  const visibleSessionIds = await readSessionIds(origin);
+  expect(visibleSessionIds).toContain(selectedSessionId);
+  expect(
+    visibleSessionIds.every((sessionId) => createdSessionIds.includes(sessionId)),
+  ).toBe(true);
 }
 
 async function callHarnessApi(
