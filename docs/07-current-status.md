@@ -44,7 +44,7 @@
 ## 自动验证现状
 
 ```text
-Unit:        385 passed（85 files）
+Unit:        386 passed（85 files）
 Integration: 27 passed（9 files；fake Harness、真实 rc.8 dsh、受管 generation fixture、内置 pnpm、发布流程契约、压力/soak 冒烟）
 E2E arm64:   7 passed（稳定启动、完整 UI/显式退出、renderer 恢复、Session 选择恢复、Companion 宽度持久化、Workspace 搜索/筛选/预览历史与逐文件审阅、Integrated 单产品窗口/Frame 健康门）
 Upgrade:     3/3 consecutive runs passed（0.2.1-beta.2 → 0.2.2-beta.1；真实非空 Session、相同 origin/current selection/Session 集合、Runtime Home 回退副本）

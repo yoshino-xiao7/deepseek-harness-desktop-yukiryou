@@ -10,7 +10,7 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, URL } from 'node:url';
 
@@ -390,11 +390,17 @@ function integrityDigest(integrity) {
 async function defaultLinkDirectory(target, path, context = {}) {
   const platform = context.platform ?? process.platform;
   const resolvedTarget = await realpath(target);
+  const resolvedTemporary = typeof context.temporary === 'string'
+    ? await realpath(context.temporary)
+    : context.temporary;
+  const resolvedDestination = typeof context.destination === 'string'
+    ? join(await realpath(dirname(context.destination)), basename(context.destination))
+    : context.destination;
   const linkTarget = platform === 'win32'
     ? resolvePublishedJunctionTarget(
         resolvedTarget,
-        context.temporary,
-        context.destination,
+        resolvedTemporary,
+        resolvedDestination,
       )
     : relative(await realpath(dirname(path)), resolvedTarget);
   await symlink(linkTarget, path, platform === 'win32' ? 'junction' : 'dir');

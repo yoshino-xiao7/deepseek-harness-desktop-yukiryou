@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { lstat, readdir } from 'node:fs/promises';
-import { basename, dirname, extname, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
@@ -196,7 +196,7 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
       return { kind: 'unavailable', reason: 'invalid-node' };
     }
     const absolutePath = resolve(dirname(source.absolutePath), target);
-    const relativePath = relative(this.#root, absolutePath);
+    const relativePath = workspaceRelativePath(this.#root, absolutePath);
     if (!safeRelativePath(relativePath)) return { kind: 'unavailable', reason: 'invalid-node' };
     const targetNodeId = await this.#registerExistingFile(relativePath);
     return targetNodeId === undefined
@@ -260,7 +260,7 @@ class NodeWorkspaceInspector implements WorkspaceInspector {
     const nodes: WorkspaceNode[] = [];
     for (const entry of visible.slice(0, MAX_DIRECTORY_ENTRIES)) {
       const absolutePath = join(parent.absolutePath, entry.name);
-      const relativePath = relative(this.#root, absolutePath);
+      const relativePath = workspaceRelativePath(this.#root, absolutePath);
       const node = this.#register(absolutePath, relativePath, entry.name, entry.isDirectory() ? 'directory' : 'file', parent.depth + 1);
       nodes.push({ id: node.id, name: displayName(node.name), kind: node.kind, ...(node.kind === 'file' && extname(node.name) !== '' ? { extension: extname(node.name).slice(1).toLowerCase() } : {}) });
     }
@@ -495,7 +495,12 @@ function positiveDimensions(width: number, height: number): { width: number; hei
 }
 
 function safeRelativePath(value: string): boolean {
-  return value !== '' && !value.startsWith('/') && !value.split('/').includes('..') && !value.includes('\0');
+  return value !== '' && !value.startsWith('/') && !value.includes('\\') &&
+    !value.split('/').includes('..') && !value.includes('\0');
+}
+
+function workspaceRelativePath(root: string, absolutePath: string): string {
+  return relative(root, absolutePath).split(sep).join('/');
 }
 
 function displayName(value: string): string {
