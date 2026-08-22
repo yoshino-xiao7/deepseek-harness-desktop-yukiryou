@@ -91,7 +91,7 @@ async function runArchiver(source: string, destination: string): Promise<void> {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        '[IO.Compression.ZipFile]::CreateFromDirectory($env:DSH_DIAGNOSTIC_SOURCE,$env:DSH_DIAGNOSTIC_DESTINATION,[IO.Compression.CompressionLevel]::Optimal,$true)',
+        'Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory($env:DSH_DIAGNOSTIC_SOURCE,$env:DSH_DIAGNOSTIC_DESTINATION,[IO.Compression.CompressionLevel]::Optimal,$true)',
       ],
       {
         ...process.env,

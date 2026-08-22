@@ -91,7 +91,7 @@ async function extractArchive(archive: string, destination: string): Promise<voi
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      '[IO.Compression.ZipFile]::ExtractToDirectory($env:DSH_TEST_ARCHIVE,$env:DSH_TEST_DESTINATION)',
+      'Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory($env:DSH_TEST_ARCHIVE,$env:DSH_TEST_DESTINATION)',
     ], {
       env: {
         ...process.env,
