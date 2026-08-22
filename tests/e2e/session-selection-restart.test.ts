@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -70,8 +71,9 @@ describe('Harness session selection across desktop restarts', () => {
     );
 
     const crashedProcess = electronApp.process();
-    crashedProcess.kill('SIGKILL');
-    await once(crashedProcess, 'exit');
+    const crashed = once(crashedProcess, 'exit');
+    crashDesktopProcessTree(crashedProcess);
+    await crashed;
     electronApp = undefined;
 
     const thirdLaunch = await launchAndWait(userData);
@@ -85,6 +87,27 @@ describe('Harness session selection across desktop restarts', () => {
     );
   }, 90_000);
 });
+
+function crashDesktopProcessTree(desktopProcess: ChildProcess): void {
+  if (desktopProcess.pid === undefined) {
+    throw new Error('Desktop process has no pid');
+  }
+  if (process.platform !== 'win32') {
+    desktopProcess.kill('SIGKILL');
+    return;
+  }
+  const result = spawnSync(
+    'taskkill.exe',
+    ['/pid', String(desktopProcess.pid), '/t', '/f'],
+    { encoding: 'utf8', shell: false },
+  );
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `taskkill failed with status ${String(result.status)}: ${result.stderr}`,
+    );
+  }
+}
 
 async function launchAndWait(
   userData: string,
