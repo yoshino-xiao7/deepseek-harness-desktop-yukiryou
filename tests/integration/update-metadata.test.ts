@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
@@ -11,7 +13,81 @@ import {
   writeWebsiteDownloadManifest,
 } from '../../scripts/update-metadata.js';
 
+const execFileAsync = promisify(execFile);
+
 describe('cross-platform update metadata', () => {
+  it('runs the update metadata CLI with the repository Node runtime', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'update-metadata-cli-'));
+    const assets = join(root, 'assets');
+    const output = join(root, 'output');
+    await mkdir(assets);
+    const version = '1.2.3-beta.4';
+    await writeFile(
+      join(assets, `DeepSeek.YukiRyou-darwin-arm64-${version}.zip`),
+      'signed-mac',
+    );
+    await writeFile(
+      join(assets, `DeepSeek.YukiRyou-${version}-win32-x64-Setup.exe`),
+      'windows-installer',
+    );
+
+    await execFileAsync(process.execPath, [
+      join(process.cwd(), 'scripts', 'prepare-update-metadata.ts'),
+      `--assets=${assets}`,
+      `--output=${output}`,
+      `--version=${version}`,
+    ]);
+
+    await expect(readFile(join(output, 'darwin-arm64', 'latest-mac.yml'), 'utf8'))
+      .resolves.toContain(`version: ${version}`);
+    await expect(readFile(join(output, 'win32-x64', 'latest.yml'), 'utf8'))
+      .resolves.toContain(`version: ${version}`);
+  });
+
+  it('runs the China mirror CLI with the repository Node runtime', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'china-mirror-cli-'));
+    const assets = join(root, 'assets');
+    const output = join(root, 'output');
+    await mkdir(assets);
+    const version = '1.2.3-beta.4';
+    const commit = 'a'.repeat(40);
+    const files = [
+      `DeepSeek.YukiRyou-${version}-arm64.dmg`,
+      `DeepSeek.YukiRyou-darwin-arm64-${version}.zip`,
+      `DeepSeek.YukiRyou-${version}-win32-x64-Setup.exe`,
+      `DeepSeek.YukiRyou-win32-x64-${version}-portable.zip`,
+      'SHA256SUMS.txt',
+      'SHA256SUMS-Windows.txt',
+      'notarization-log.json',
+    ];
+    for (const [index, name] of files.entries()) {
+      await writeFile(join(assets, name), `verified-${index}`);
+    }
+    await writeFile(join(assets, 'release-manifest.json'), JSON.stringify({
+      schemaVersion: 1,
+      version,
+      gitCommit: commit,
+      dirtyWorktree: false,
+    }));
+
+    await execFileAsync(process.execPath, [
+      join(process.cwd(), 'scripts', 'prepare-china-mirror.ts'),
+      `--assets=${assets}`,
+      `--output=${output}`,
+      `--version=${version}`,
+      '--origin=https://download-cn.suzuki.ink',
+    ]);
+
+    const manifest = JSON.parse(
+      await readFile(join(output, 'downloads', 'latest.json'), 'utf8'),
+    ) as { version: string; gitCommit: string };
+    expect(manifest).toMatchObject({ version, gitCommit: commit });
+    await expect(readFile(join(output, 'updates', 'darwin-arm64', 'latest-mac.yml'), 'utf8'))
+      .resolves.toContain(`version: ${version}`);
+    await expect(readFile(join(output, 'updates', 'win32-x64', 'latest.yml'), 'utf8'))
+      .resolves.toContain(`version: ${version}`);
+  });
+
   it('binds the exact macOS ZIP and Windows installer bytes with SHA-512', async () => {
     const root = await mkdtemp(join(tmpdir(), 'update-metadata-'));
     const assets = join(root, 'assets');
