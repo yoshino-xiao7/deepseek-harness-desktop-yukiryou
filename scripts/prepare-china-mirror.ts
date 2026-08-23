@@ -4,7 +4,7 @@ import { basename, join, resolve } from 'node:path';
 import {
   writeUpdateMetadata,
   writeWebsiteDownloadManifest,
-} from './update-metadata.js';
+} from './update-metadata.ts';
 
 interface ReleaseManifest {
   readonly schemaVersion: 1;

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { writeUpdateMetadata } from './update-metadata.js';
+import { writeUpdateMetadata } from './update-metadata.ts';
 
 await writeUpdateMetadata({
   sourceDirectory: resolve(requiredArgument('--assets')),
