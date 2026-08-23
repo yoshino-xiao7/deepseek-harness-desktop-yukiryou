@@ -595,7 +595,7 @@ describe('packaged desktop application', () => {
         getSnapshot: 'function',
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
-      expect(settingsResult?.aboutText).toContain('0.1.0-rc.8');
+      expect(settingsResult?.aboutText).toContain('0.1.1-rc.2');
       expect(settingsResult?.aboutText).toMatch(
         process.platform === 'win32'
           ? /Windows.*x64/
