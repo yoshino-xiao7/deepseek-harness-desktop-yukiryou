@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { _electron as electron, type ElectronApplication } from 'playwright';
@@ -12,6 +12,7 @@ const previousExecutable = process.env.DSH_PREVIOUS_EXECUTABLE_PATH?.trim();
 const expectedPreviousVersion =
   process.env.DSH_PREVIOUS_EXPECTED_VERSION?.trim() || '0.2.1-beta.2';
 const rc2BackupDirectoryName = 'runtime.pre-dsh-0.1.1-rc.2';
+const rc2UpgradeMarkerName = '.dsh-0.1.1-rc.2-storage-v1.json';
 const currentSessionStorageKey = 'dsh.sessions.current';
 
 describe('previous-version upgrade', () => {
@@ -29,7 +30,7 @@ describe('previous-version upgrade', () => {
     }
   });
 
-  it('preserves the active real session and creates an rc.2 rollback copy', async () => {
+  it('preserves the active real session and prepares the rc.2 migration exactly once', async () => {
     if (previousExecutable === undefined || previousExecutable === '') {
       throw new Error(
         `Set DSH_PREVIOUS_EXECUTABLE_PATH to an extracted ${expectedPreviousVersion} executable`,
@@ -104,6 +105,14 @@ describe('previous-version upgrade', () => {
     electronApp = undefined;
 
     const runtimeHome = join(userData, 'runtime');
+    const upgradeMarkerPath = join(userData, rc2UpgradeMarkerName);
+    const markerBeforeCandidate = await readOptionalFile(upgradeMarkerPath);
+    if (markerBeforeCandidate !== undefined) {
+      expect(JSON.parse(markerBeforeCandidate)).toEqual({
+        upgrade: 'dsh-0.1.1-rc.2-storage-v1',
+        backupName: null,
+      });
+    }
     const preservedDirectory = join(runtimeHome, 'upgrade-preserved');
     const sentinelPath = join(preservedDirectory, 'sentinel.txt');
     const settingsPath = join(runtimeHome, 'settings.yaml');
@@ -135,29 +144,45 @@ describe('previous-version upgrade', () => {
 
     await expect(readFile(sentinelPath)).resolves.toEqual(sentinel);
 
-    const backupHome = join(userData, rc2BackupDirectoryName);
-    await expect(
-      readFile(join(backupHome, 'upgrade-preserved', 'sentinel.txt')),
-    ).resolves.toEqual(sentinel);
-    await expect(readFile(join(backupHome, 'settings.yaml'))).resolves.toEqual(
-      settings,
-    );
-
     const desktopLog = await readFile(join(userData, 'logs', 'desktop.log'), 'utf8');
     const upgradeRecords = desktopLog
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as { event?: unknown; details?: unknown })
       .filter((record) => record.event === 'runtime.upgrade-backup-created');
-    expect(upgradeRecords).toEqual([
-      {
-        timestamp: expect.any(String),
-        event: 'runtime.upgrade-backup-created',
-        details: `backup=${rc2BackupDirectoryName}`,
-      },
-    ]);
+    const backupHome = join(userData, rc2BackupDirectoryName);
+    if (markerBeforeCandidate === undefined) {
+      await expect(
+        readFile(join(backupHome, 'upgrade-preserved', 'sentinel.txt')),
+      ).resolves.toEqual(sentinel);
+      await expect(readFile(join(backupHome, 'settings.yaml'))).resolves.toEqual(
+        settings,
+      );
+      expect(upgradeRecords).toEqual([
+        {
+          timestamp: expect.any(String),
+          event: 'runtime.upgrade-backup-created',
+          details: `backup=${rc2BackupDirectoryName}`,
+        },
+      ]);
+    } else {
+      await expect(readFile(upgradeMarkerPath, 'utf8')).resolves.toBe(
+        markerBeforeCandidate,
+      );
+      await expect(lstat(backupHome)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(upgradeRecords).toEqual([]);
+    }
   }, 180_000);
 });
+
+async function readOptionalFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
 
 async function launchAndWait(
   executablePath: string,
