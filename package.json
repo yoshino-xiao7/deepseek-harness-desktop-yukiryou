@@ -57,7 +57,7 @@
     "package:mac": "electron-forge package --platform=darwin",
     "make:mac": "electron-forge make --platform=darwin",
     "package:win": "electron-forge package --platform=win32 --arch=x64",
-    "make:win": "electron-forge make --platform=win32 --arch=x64 && electron-builder --win nsis --x64 --prepackaged \"out/DeepSeek YukiRyou-win32-x64\"",
+    "make:win": "electron-forge make --platform=win32 --arch=x64 && electron-builder --win nsis --x64 --prepackaged \"out/DeepSeek YukiRyou-win32-x64\" --publish never",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration"
   },
   "devDependencies": {

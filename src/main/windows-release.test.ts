@@ -50,5 +50,10 @@ describe('Windows release identity', () => {
     expect(builder).toContain('oneClick: false');
     expect(builder).toContain('allowToChangeInstallationDirectory: true');
     expect(builder).toContain('perMachine: false');
+
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.['make:win']).toContain('--publish never');
   });
 });
