@@ -55,7 +55,7 @@
 pnpm test:stress # 100 次启动、就绪、停止与端口回收
 pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
 pnpm test:memory # 打包应用 2500 次侧栏/标签变化与 working-set 门禁
-pnpm test:upgrade # 真实上一公开版非空 Session + 稳定 origin + rc.8 Runtime Home 回退副本门禁
+pnpm test:upgrade # 真实上一公开版非空 Session + 稳定 origin + rc.2 Runtime Home 回退副本门禁
 pnpm test:soak:app # 打包应用 60 秒 shell/Harness/进程/内存资格测试
 pnpm test:soak:app:release # 正式候选 30 分钟打包应用 soak
 pnpm test:soak:app:extended # 独立工作流 5 小时扩展 soak
@@ -91,11 +91,11 @@ Windows 候选 CI 会同时生成并验证未签名的向导式 NSIS `Setup.exe`
 ### Release tag
 
 1. 第一台 Apple Silicon runner 使用 Electron Forge 官方 `osxSign` 生成签名候选。
-2. 第二台全新 runner 下载候选与上一公开版、复制候选到 `/Applications`，执行签名/证书链/架构、包内原生模块验证；随后用同一临时用户目录在上一版创建并完成真实非空 Session、持久化 `dsh.sessions.current`，再启动候选，验证相同 origin、当前 Session ID、精确 Session 集合与 rc.8 回退副本，不得新增空白 Session；最后真实启动精确候选直到 Harness 就绪并产生绑定 SHA-256 与 commit 的回执。
+2. 第二台全新 runner 下载候选与上一公开版、复制候选到 `/Applications`，执行签名/证书链/架构、包内原生模块验证；随后用同一临时用户目录在上一版创建并完成真实非空 Session、持久化 `dsh.sessions.current`，再启动候选，验证相同 origin、当前 Session ID、精确 Session 集合与 rc.2 回退副本，不得新增空白 Session；最后真实启动精确候选直到 Harness 就绪并产生绑定 SHA-256 与 commit 的回执。
 3. 只有回执与候选完全匹配，第三台 runner 才提交 Apple 一次；Accepted 后检查公证日志、staple 并生成最终 DMG/ZIP。
 4. 第四台全新 runner 分别安装最终 DMG/ZIP，执行 `codesign`、`spctl`、ticket、架构、校验和，并再次启动精确的最终应用直到 Harness 就绪。
 5. 同一提交还必须在 Windows x64 runner 通过 Runtime/ConPTY、向导式 NSIS 安装 EXE、便携 ZIP、会话恢复和安装/修复/卸载生命周期门禁；公开资产仍只有版本化 EXE、便携 ZIP 与 Windows SHA-256 清单。
-6. 全部通过后创建包含 macOS DMG/ZIP 与 Windows EXE/ZIP 的同一 Draft；独立发布工作流从 Draft 重新下载并再次安装 macOS 产物，通过后才发布 prerelease。任何失败都不得创建公开 Release。
+6. 全部通过后创建包含 macOS DMG/ZIP 与 Windows EXE/ZIP 的同一 Draft；独立发布工作流从 Draft 重新下载并再次安装 macOS 产物，通过后才公开为正式 Release。任何失败都不得创建公开 Release。
 
 正式发布必须从干净 commit 构建。CI 不允许在签名后修改 `.app` 内容，也不允许覆盖已经存在的版本或 tag。
 

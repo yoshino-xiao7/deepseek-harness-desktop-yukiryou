@@ -11,7 +11,7 @@ import { resolveE2eExecutablePath } from '../e2e/executable-path.js';
 const previousExecutable = process.env.DSH_PREVIOUS_EXECUTABLE_PATH?.trim();
 const expectedPreviousVersion =
   process.env.DSH_PREVIOUS_EXPECTED_VERSION?.trim() || '0.2.1-beta.2';
-const rc8BackupDirectoryName = 'runtime.pre-dsh-0.1.0-rc.8';
+const rc2BackupDirectoryName = 'runtime.pre-dsh-0.1.1-rc.2';
 const currentSessionStorageKey = 'dsh.sessions.current';
 
 describe('previous-version upgrade', () => {
@@ -29,7 +29,7 @@ describe('previous-version upgrade', () => {
     }
   });
 
-  it('preserves the active real session and creates an rc.8 rollback copy', async () => {
+  it('preserves the active real session and creates an rc.2 rollback copy', async () => {
     if (previousExecutable === undefined || previousExecutable === '') {
       throw new Error(
         `Set DSH_PREVIOUS_EXECUTABLE_PATH to an extracted ${expectedPreviousVersion} executable`,
@@ -122,7 +122,7 @@ describe('previous-version upgrade', () => {
     if (candidateOrigin === undefined) {
       throw new Error('Candidate Harness origin is missing');
     }
-    // The rc.8 UI can briefly materialize its reusable blank-session
+    // The Harness UI can briefly materialize its reusable blank-session
     // placeholder while applying the restored selection. Keep the invariant
     // strict, but allow the normal reuse/cleanup cycle to settle before
     // deciding that the upgrade persisted an extra Session.
@@ -135,7 +135,7 @@ describe('previous-version upgrade', () => {
 
     await expect(readFile(sentinelPath)).resolves.toEqual(sentinel);
 
-    const backupHome = join(userData, rc8BackupDirectoryName);
+    const backupHome = join(userData, rc2BackupDirectoryName);
     await expect(
       readFile(join(backupHome, 'upgrade-preserved', 'sentinel.txt')),
     ).resolves.toEqual(sentinel);
@@ -153,7 +153,7 @@ describe('previous-version upgrade', () => {
       {
         timestamp: expect.any(String),
         event: 'runtime.upgrade-backup-created',
-        details: `backup=${rc8BackupDirectoryName}`,
+        details: `backup=${rc2BackupDirectoryName}`,
       },
     ]);
   }, 180_000);
