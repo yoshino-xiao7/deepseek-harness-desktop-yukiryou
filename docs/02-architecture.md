@@ -104,7 +104,7 @@ interface AppUpdater {
 }
 ```
 
-自动检查与手动检查复用同一个更新状态机。正式版启动 15 秒后检查，随后每 6 小时检查；生产使用固定的签名更新 feed。
+自动检查与手动检查复用同一个更新状态机。正式版启动 15 秒后检查，随后每 6 小时检查；`DistributionRouting` 根据可信的系统地区信息选择有序 provider，中国大陆为 OSS/ESA generic → GitHub，其他地区只有 GitHub。两平台元数据都以 SHA-512 绑定最终 ZIP/EXE，下载完成后由用户确认重启安装。
 
 ### `AppCoordinator`
 

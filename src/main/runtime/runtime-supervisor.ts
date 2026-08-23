@@ -47,6 +47,7 @@ export interface RuntimeSupervisorOptions {
   readonly shutdownTimeoutMs: number;
   readonly port?: number;
   readonly developmentPluginFixture?: boolean;
+  readonly distributionRegion?: 'china' | 'global';
   readonly createCompanionToken?: () => string;
   readonly onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }
@@ -143,6 +144,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
           this.#options.runtimeBinDirectories ?? [],
           companionToken,
           this.#options.developmentPluginFixture === true,
+          this.#options.distributionRegion,
         ),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
@@ -266,6 +268,7 @@ function buildRuntimeEnvironment(
   runtimeBinDirectories: readonly string[],
   companionToken?: string,
   developmentPluginFixture = false,
+  distributionRegion?: 'china' | 'global',
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { DSH_HOME: runtimeHome };
   environment.DSH_DESKTOP_OWNER_PID = String(process.pid);
@@ -274,6 +277,9 @@ function buildRuntimeEnvironment(
   }
   if (developmentPluginFixture) {
     environment.DSH_DESKTOP_DEVELOPMENT_PLUGIN_FIXTURE = '1';
+  }
+  if (distributionRegion !== undefined) {
+    environment.DSH_DESKTOP_DISTRIBUTION_REGION = distributionRegion;
   }
   for (const name of ['TMPDIR', 'LANG', 'LC_ALL'] as const) {
     const value = process.env[name];

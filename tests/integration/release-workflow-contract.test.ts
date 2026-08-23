@@ -66,6 +66,29 @@ describe('macOS release workflow contract', () => {
     expect(commands).toContain('SHA256SUMS-Windows.txt');
   });
 
+  it('publishes updater metadata for the notarized macOS ZIP and Windows installer', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const steps = workflow.jobs?.release?.steps ?? [];
+    const metadataIndex = steps.findIndex(
+      (step) => step.name === 'Generate cross-platform auto-update metadata',
+    );
+    const draftIndex = steps.findIndex(
+      (step) => step.name === 'Create immutable draft release',
+    );
+    const commands = steps.map((step) => step.run?.trim() ?? '').join('\n');
+
+    expect(metadataIndex).toBeGreaterThan(-1);
+    expect(draftIndex).toBeGreaterThan(metadataIndex);
+    expect(commands).toContain('prepare-update-metadata.ts');
+    expect(commands).toContain('latest-mac.yml');
+    expect(commands).toContain('latest.yml');
+  });
+
   it('smoke-tests the executable extracted from the portable ZIP', async () => {
     const workflow = parse(
       await readFile(
@@ -294,11 +317,56 @@ describe('macOS release workflow contract', () => {
       step.uses?.startsWith('actions/checkout@'),
     );
     const publish = steps.find((step) => step.name === 'Publish release');
+    const metadataVerification = steps.find(
+      (step) => step.name === 'Verify auto-update metadata binds the exact release bytes',
+    );
 
     expect(requireDraft?.run).toContain('targetCommitish');
     expect(requireDraft?.run).not.toContain('/git/ref/tags/');
     expect(checkout?.with?.ref).toBe('${{ steps.draft.outputs.target }}');
     expect(publish?.run).toContain('--draft=false');
     expect(publish?.run).toContain('--prerelease=false');
+    expect(metadataVerification?.run).toContain('verify-update-metadata.ts');
+  });
+
+  it('mirrors only a public verified release and publishes mutable China metadata last', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'publish-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const mirror = workflow.jobs?.sync_china_mirror;
+    const steps = mirror?.steps ?? [];
+    const commands = steps.map((step) => step.run?.trim() ?? '').join('\n');
+    const immutableIndex = steps.findIndex(
+      (step) => step.name === 'Upload and verify immutable versioned release objects',
+    );
+    const mutableIndex = steps.findIndex(
+      (step) =>
+        step.name === 'Publish mutable update, website, and plugin metadata last',
+    );
+
+    expect(mirror?.needs).toBe('verify_and_publish');
+    expect(commands).toContain('r.isDraft || r.isPrerelease');
+    expect(commands).toContain('sha256sum -c SHA256SUMS-Windows.txt');
+    expect(commands).toContain('china-mirror/downloads/latest.json');
+    expect(commands).toContain('oss://${OSS_BUCKET}/downloads/latest.json');
+    expect(commands).toContain(
+      'cmp china-mirror/downloads/latest.json mutable-verification/downloads-latest.json',
+    );
+    expect(commands).not.toContain('always()');
+    expect(immutableIndex).toBeGreaterThan(-1);
+    expect(mutableIndex).toBeGreaterThan(immutableIndex);
+  });
+
+  it('retries only the known transient hdiutil resource-busy failure', async () => {
+    const source = await readFile(
+      join(process.cwd(), 'scripts', 'release-macos.ts'),
+      'utf8',
+    );
+    expect(source).toContain('const maximumAttempts = 3');
+    expect(source).toContain('/resource busy/iu');
+    expect(source).toContain('await createDiskImageWithRetry');
   });
 });

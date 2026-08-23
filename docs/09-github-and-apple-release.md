@@ -24,6 +24,7 @@ Apple 明确说明：成功公证的软件仍可能因为签名问题无法运�
 4. **精确候选公证**：第三个 runner 只有在验证回执与候选字节完全匹配时才允许提交 Apple。Accepted 后保存并检查公证日志、staple App/DMG，生成最终 DMG、ZIP、SHA-256 和 manifest。
 5. **最终异机安装**：第四个全新 runner 分别下载最终 ZIP 和 DMG，再次模拟 quarantine、复制到 `/Applications`、验证 `codesign`、Gatekeeper、ticket 和启动冒烟。只有此门禁通过，才创建 GitHub Draft。
 6. **公开前复验**：审阅 Draft 后，独立的 **Publish verified macOS draft** 工作流从 Draft 重新下载附件，在又一个全新 runner 上复验校验和、DMG/ZIP 安装、Gatekeeper、ticket 和启动；全部通过才公开 Release。
+7. **国内镜像下游同步**：只有公开 Release job 成功后，`sync_china_mirror` 才重新读取公开 Release 和不可变目标提交、复验 provenance 与双平台校验和。版本化对象上传并回读验证成功后，才最后覆盖两平台 `latest*.yml`、官网 `downloads/latest.json` 和插件目录；此步骤失败不回滚已经公开的 GitHub Release，但不会发布新的国内 `latest` 指针。
 
 任一步失败都会阻止后续阶段。公证前的签名问题只消耗 CI 构建时间，不产生 Apple Submission。
 
@@ -39,6 +40,15 @@ Apple 明确说明：成功公证的软件仍可能因为签名问题无法运�
 | `APPLE_API_KEY_ID` | API Key ID | App Store Connect → 用户和访问 → 集成 → 团队密钥 |
 | `APPLE_API_ISSUER` | Issuer ID | 同一 API 页面 |
 
+另在 **Actions variables** 配置短期 OIDC 凭据交换所需的非秘密 ARN：
+
+| Variable | 内容 |
+| --- | --- |
+| `ALIYUN_GITHUB_OIDC_PROVIDER_ARN` | RAM 中信任 GitHub Actions、audience 为 `github-actions` 的 OIDC Provider ARN |
+| `ALIYUN_OSS_RELEASE_ROLE_ARN` | 仅允许向 `deepseek-yukiryou-cn` 写入/读取发行对象的 RAM Role ARN |
+
+工作流固定使用阿里云官方凭据 Action 的不可变提交并只取得 30 分钟 STS 凭据，不保存长期 AccessKey。Role 信任条件必须限制为本仓库默认分支/发行环境；资源策略只授予目标前缀的 `PutObject/GetObject/ListParts/AbortMultipartUpload`，不得授予删除对象、删除 Bucket、修改 ACL 或账号级管理权限。
+
 Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Actions artifact、日志或 `.env`。
 
 ## 发版步骤
@@ -48,7 +58,8 @@ Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Act
 3. `version` 必须与 `package.json` 一致。
 4. 前五个自动门禁全部通过后，GitHub 中会出现带 DMG、ZIP、校验文件、manifest 和 Apple 公证日志的 Draft。
 5. 审阅 Draft 后运行 **Publish verified macOS draft**，输入相同版本；它会重新下载和安装验证附件，通过后才公开。
-6. 版本/tag 一旦存在，不允许覆盖或强推；任何修改都必须提升版本。
+6. 公开成功后同一工作流再同步 OSS；确认版本化对象、`latest-mac.yml`、`latest.yml`、`downloads/latest.json` 与插件目录全部成功后，国内更新及官网直链才算就绪。
+7. 版本/tag 一旦存在，不允许覆盖或强推；任何修改都必须提升版本。
 
 面向用户的版本变化同时汇总到根目录 `CHANGELOG.md`。Release 正文由对应的 `docs/releases/v<version>.md` 自动生成，不在 GitHub 页面临时手写。
 版本说明正文不要再写一级标题；GitHub Release 页面已经使用版本名称作为页面标题。说明应聚焦相对上一公开版本的变化，只有仓库从未存在公开 Release 时才能使用“首个公开版本”。
@@ -60,10 +71,15 @@ Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Act
 - `SHA256SUMS.txt`
 - `release-manifest.json`
 - `notarization-log.json`
+- `DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe`
+- `DeepSeek.YukiRyou-win32-x64-<version>-portable.zip`
+- `SHA256SUMS-Windows.txt`
+- `latest-mac.yml`
+- `latest.yml`
 
-更新 ZIP 的 `darwin-arm64` 命名不可改变，否则 `update.electronjs.org` 无法选择 Apple Silicon 资源。
+更新 ZIP、Setup 与 `latest*.yml` 的文件名不可改变；`electron-updater` 使用元数据中的 SHA-512 绑定最终产物字节。
 
-GitHub 的 `prerelease` 标记必须为 `false`，因为 `update.electronjs.org` 会忽略所有标记为 prerelease 的 Release。Beta 身份由 SemVer 后缀（例如 `0.1.1-beta.1`）和标题表达；这不代表该版本已经成为稳定版。
+GitHub 的 `prerelease` 标记必须为 `false`，作为两个更新 provider 共用的正式可升级通道。Beta 身份由 SemVer 后缀（例如 `0.1.1-beta.1`）和标题表达；这不代表该版本已经成为稳定版。
 
 ## 本机诊断入口
 

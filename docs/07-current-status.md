@@ -23,7 +23,7 @@
 - 插件版本更新继续复用同一条受管安装事务，而不是新增旁路：预览会根据当前精确 receipt 区分首次安装、同版本重装和版本更新，并把旧 package/version/generation 一并冻结；确认后 receipt 漂移会拒绝落盘。更新成功才替换 receipt；失败只 blocklist 新 generation，并恢复、重新加载旧稳定 generation，不再因同包名误伤已经验证的旧版本。
 - 真实开发 fixture 已完成失败升级演练：健康的 `@dsh-desktop/development-install-fixture@1.0.3` 更新到会在顶层立即抛错的 `1.0.4-failure.1` 后，Harness Loader 确实在 ready 前退出；Host 随即恢复旧 receipt/profile，把失败 generation 以 `runtime-unhealthy` 写入 blocklist，并且只消费一次恢复重启。重启后 Runtime 恢复健康，已安装页保持 `1.0.3`，同时显示“已自动恢复失败版本 1.0.4-failure.1”，未出现无限循环。该 fixture 只由开发策略装配，正式 vendor/verify 路径继续拒绝携带它。
 - Legacy 产品文档导航仍以 15 秒为单次硬超时，但每次尝试前都会中止残留导航并把隐藏的产品 `WebContents` 复位到 `about:blank`；一次导航在主文档完成事件或对应 `loadURL()` 正常完成时均可收敛，首次冷加载超时后再对同一可信 origin 发起一次全新导航。只有连续两次都未完成才进入失败页。隐藏视图不参与 Chromium 后台节流，这样既保留永久悬挂的有界保护，也不会把可恢复的冷启动误报为 `spawn-failed`。
-- Windows 发行适配已进入 Phase 6：Forge 继续生成便携 ZIP，electron-builder 以同一打包目录生成向导式 NSIS 安装 EXE；安装器按用户安装、允许修改目录，并保留七尺寸 ICO 与稳定 AppUserModelID。Runtime schema 2 已纳入官方 Windows x64 Node ZIP、ConPTY 原生资产及 PE x64 校验。正式窗口使用 44px 自绘标题栏与原生 caption controls，菜单语言跟随 Harness 的中文/英文设置。Windows 更新检查直接读取正式 GitHub Release 并做语义版本比较，不再依赖未发布的 Squirrel 元数据。`Windows x64 candidate` CI 会冻结 Setup、portable ZIP、SHA-256 与提交来源清单，并真实执行指定目录首装、应用启动、同版本修复安装和卸载。当前 Windows Beta 有意保持未签名并明确披露 SmartScreen 风险；独立 Windows 11 客户端实机验收继续作为发行门禁，Authenticode 留待用户规模需要时接入。
+- Windows 发行适配已进入 Phase 6：Forge 继续生成便携 ZIP，electron-builder 以同一打包目录生成向导式 NSIS 安装 EXE；安装器按用户安装、允许修改目录，并保留七尺寸 ICO 与稳定 AppUserModelID。Runtime schema 2 已纳入官方 Windows x64 Node ZIP、ConPTY 原生资产及 PE x64 校验。正式窗口使用 44px 自绘标题栏与原生 caption controls，菜单语言跟随 Harness 的中文/英文设置。macOS 与 Windows 安装版现统一使用 `electron-updater`：国内走 OSS/ESA generic provider、海外走固定 GitHub provider，检查或下载失败自动回退 GitHub，下载完成后由用户确认重启安装。`Windows x64 candidate` CI 会冻结 Setup、portable ZIP、SHA-256 与提交来源清单，并真实执行指定目录首装、应用启动、同版本修复安装和卸载。当前 Windows Beta 有意保持未签名并明确披露 SmartScreen 风险；独立 Windows 11 客户端实机验收继续作为发行门禁，Authenticode 留待用户规模需要时接入。
 - bundled Runtime manifest 已升级为 schema 2，并以完整 target 而非单独 architecture 锁定官方 Node 归档：现有 `darwin-arm64`/`darwin-x64` 保留，新增 `win32-x64` 的 Node 24.19.0 ZIP 与官方 SHA-256。统一 `RuntimePlatformLayout` 成为 vendor、verify 和应用 Runtime 命令的唯一平台来源，定义 Node/npm 路径、`node-pty` prebuild、原生文件及 PTY smoke shell。vendor 只能在目标同平台主机运行，使用通用 tar 解压、目标化 npm 环境并裁剪非目标 prebuild；Windows 额外移除 PDB 和 Node 自带 npm 工具。verify 在 Darwin 使用 `lipo`，在 Windows 解析 PE x64 machine header，并继续真实运行 Node、DSH、pnpm、node-pty、Sharp 与 Koffi smoke。新脚本已在 macOS 重新 vendor/verify `darwin-arm64` 成功；`win32-x64` 会在 Darwin 下载或写盘前失败关闭，真实 Windows 验证留给 Windows runner。
 - Harness “设置”上方已通过官方 `sidebar.footer.action` 插槽显示账户概览：悬浮同时展示今日估算消耗与当前凭据所属账户余额，点击以单飞和限频方式同步刷新两项。余额来自官方 `/user/balance`；今日 token 来自本机会话内官方逐请求 usage，并按北京时间工作日 9:00–12:00、14:00–18:00 的峰价及其余半价逐请求估算，Vision Exp 与 V4 Flash 同价且图片 token 不重复换算。UI 明确标注“估算”，不包含其他设备、已删除日志或非 Harness 调用。API Key 只在 Runtime credential service 内解析，主进程只接收聚合后的脱敏快照。
 - 本地 shell 与 Harness 已改为两个独立 preload 构建产物；余额桥只存在于 Harness，shell 页面 E2E 已验证检测不到该 bridge。
@@ -44,8 +44,8 @@
 ## 自动验证现状
 
 ```text
-Unit:        406 passed（89 files）
-Integration: 32 passed（9 files；fake Harness、真实 rc.2 dsh、受管 generation fixture、内置 pnpm、发布流程契约、压力/soak 冒烟）
+Unit:        412 passed（91 files）
+Integration: 37 passed（10 files；fake Harness、真实 rc.2 dsh、受管 generation fixture、内置 pnpm、发布/国内镜像与官网清单元数据契约、压力/soak 冒烟）
 E2E arm64:   7 passed（稳定启动、完整 UI/显式退出、renderer 恢复、Session 选择恢复、Companion 宽度持久化、Workspace 搜索/筛选/预览历史与逐文件审阅、Integrated 单产品窗口/Frame 健康门）
 Upgrade:     3/3 consecutive runs passed（0.2.1-beta.2 → 0.2.2-beta.1；真实非空 Session、相同 origin/current selection/Session 集合、Runtime Home 回退副本）
 Prior stress baseline:    100/100 passed（启动、就绪、停止、端口回收）
@@ -76,7 +76,7 @@ Artifacts:   beta.3 双平台最终产物待正式 Release 工作流生成和验
 - Harness 缺少已验证的稳定任务事件接口，因此通知功能按方案延期，不使用 DOM 文本猜测。
 - Intel 原生机器上的 x64 E2E；当前用户设备与交付目标为 Apple Silicon。
 - Integrated 仅保留双开关内部传输原型：直接 Harness ProductWindow、独立 RecoveryWindow、Frame 健康门与共用 Product bridge 可运行，但真实评审确认 rc.8 缺少占位侧栏、自然拖动区和稳定主题 seam。`shell.overlay` Workspace Review 已因遮挡、主题不一致和预览退化撤回；默认和单独请求 Integrated 都使用 Legacy。上游 composition contract 未补齐前，不继续迁移产品 UI。
-- Windows 11 x64 仍处于 Beta：公开提供未签名 Setup EXE 与便携 ZIP，Authenticode、Windows on Arm 和稳定自动更新安装留待后续；真实安装、修复、卸载与 packaged E2E 继续作为每版发布门禁。
+- Windows 11 x64 仍处于 Beta：公开提供未签名 Setup EXE 与便携 ZIP；自动下载与重启安装已接入，Authenticode 与 Windows on Arm 留待后续，真实安装、修复、卸载、跨版本自动更新与 packaged E2E 继续作为每版发布门禁。
 - Desktop Companion 非宠物阶段已完成，详见 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。宠物实验已经停止，不属于当前产品线；后续开发与发布保持不包含宠物代码。
 
 ## 冷备份分支

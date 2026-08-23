@@ -151,7 +151,7 @@ async function submitRelease(): Promise<void> {
     run('ditto', [signedApp, stagedApp]);
     verifyApplicationSignature(stagedApp);
     await symlink('/Applications', join(diskImageRoot, 'Applications'));
-    run('hdiutil', [
+    await createDiskImageWithRetry([
       'create',
       '-volname',
       productName,
@@ -443,6 +443,29 @@ function run(command: string, arguments_: readonly string[], cwd?: string): void
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) {
     throw new Error(`${command} failed with status ${String(result.status)}`);
+  }
+}
+
+async function createDiskImageWithRetry(arguments_: readonly string[]): Promise<void> {
+  const maximumAttempts = 3;
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    const result = spawnSync('hdiutil', arguments_, {
+      encoding: 'utf8',
+      shell: false,
+    });
+    if (result.stdout !== '') process.stdout.write(result.stdout);
+    if (result.stderr !== '') process.stderr.write(result.stderr);
+    if (result.error !== undefined) throw result.error;
+    if (result.status === 0) return;
+    const transient = /resource busy/iu.test(`${result.stdout}\n${result.stderr}`);
+    if (!transient || attempt === maximumAttempts) {
+      throw new Error(`hdiutil failed with status ${String(result.status)}`);
+    }
+    const diskImage = arguments_.at(-1);
+    if (diskImage !== undefined) await rm(diskImage, { force: true });
+    await new Promise<void>((resolvePromise) => {
+      setTimeout(resolvePromise, attempt * 2_000);
+    });
   }
 }
 

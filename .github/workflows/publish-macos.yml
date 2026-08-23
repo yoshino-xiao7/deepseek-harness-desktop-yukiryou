@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: publish-macos-${{ inputs.version }}
@@ -63,6 +64,11 @@ jobs:
         run: |
           shasum -a 256 -c SHA256SUMS.txt
           shasum -a 256 -c SHA256SUMS-Windows.txt
+      - name: Verify auto-update metadata binds the exact release bytes
+        run: |
+          node scripts/verify-update-metadata.ts \
+            --assets=release-assets \
+            --version="${RELEASE_VERSION}"
       - name: Reinstall and verify ZIP
         run: |
           pnpm verify:distribution -- \
@@ -90,3 +96,135 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --draft=false \
             --prerelease=false
+
+  sync_china_mirror:
+    name: Mirror the public verified release to China
+    needs: verify_and_publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      OSSUTIL_VERSION: '2.3.0'
+      OSSUTIL_ZIP: ossutil-2.3.0-linux-amd64.zip
+      OSSUTIL_SHA256: 3ae4d9fc85a7a6e9f5654d1599766f1a3a42a3692870887b5ae9338d582ef65a
+      OSS_BUCKET: deepseek-yukiryou-cn
+      OSS_REGION: cn-shanghai
+      OSS_ENDPOINT: oss-cn-shanghai.aliyuncs.com
+      CHINA_DOWNLOAD_ORIGIN: https://download-cn.suzuki.ink
+    steps:
+      - name: Require the public immutable GitHub release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_json=$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,isPrerelease,tagName,targetCommitish)
+          target=$(node -e "const r=JSON.parse(process.argv[1]); if (r.isDraft || r.isPrerelease || r.tagName !== process.env.RELEASE_TAG) throw new Error('China mirror requires the matching public formal release'); if (!/^[0-9a-f]{40}$/.test(r.targetCommitish)) throw new Error('Release must target an immutable commit SHA'); process.stdout.write(r.targetCommitish)" "${release_json}")
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.target }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm for mirror tooling
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Download assets from the now-public GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release-assets
+          gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --dir release-assets
+      - name: Reverify public release provenance and checksums
+        env:
+          TARGET_COMMIT: ${{ steps.release.outputs.target }}
+        run: |
+          node -e "const fs=require('node:fs'); const m=JSON.parse(fs.readFileSync('release-assets/release-manifest.json','utf8')); if (m.schemaVersion !== 1 || m.version !== process.env.RELEASE_VERSION || m.gitCommit !== process.env.TARGET_COMMIT || m.dirtyWorktree !== false) throw new Error('Public assets do not match release provenance')"
+          (cd release-assets && sha256sum -c SHA256SUMS.txt && sha256sum -c SHA256SUMS-Windows.txt)
+      - name: Prepare immutable objects and mutable metadata
+        run: |
+          node scripts/prepare-china-mirror.ts \
+            --assets=release-assets \
+            --output=china-mirror \
+            --version="${RELEASE_VERSION}" \
+            --origin="${CHINA_DOWNLOAD_ORIGIN}"
+          mkdir -p china-mirror/plugins/catalog
+          curl --fail --silent --show-error --location \
+            --output china-mirror/plugins/catalog/catalog-v1.json \
+            https://raw.githubusercontent.com/yoshino-xiao7/deepseek-yukiryou-plugin-catalog/main/catalog-v1.json
+          node -e "JSON.parse(require('node:fs').readFileSync('china-mirror/plugins/catalog/catalog-v1.json','utf8'))"
+      - name: Install checksum-pinned official ossutil
+        run: |
+          curl --fail --silent --show-error --location \
+            --output "${OSSUTIL_ZIP}" \
+            "https://gosspublic.alicdn.com/ossutil/v2/${OSSUTIL_VERSION}/${OSSUTIL_ZIP}"
+          echo "${OSSUTIL_SHA256}  ${OSSUTIL_ZIP}" | sha256sum -c -
+          unzip -q "${OSSUTIL_ZIP}"
+          sudo install -m 0755 "ossutil-${OSSUTIL_VERSION}-linux-amd64/ossutil" /usr/local/bin/ossutil
+          ossutil version
+      - name: Require scoped Alibaba Cloud OIDC configuration
+        env:
+          OIDC_PROVIDER_ARN: ${{ vars.ALIYUN_GITHUB_OIDC_PROVIDER_ARN }}
+          RELEASE_ROLE_ARN: ${{ vars.ALIYUN_OSS_RELEASE_ROLE_ARN }}
+        run: |
+          test -n "${OIDC_PROVIDER_ARN}" || { echo 'Missing ALIYUN_GITHUB_OIDC_PROVIDER_ARN Actions variable'; exit 1; }
+          test -n "${RELEASE_ROLE_ARN}" || { echo 'Missing ALIYUN_OSS_RELEASE_ROLE_ARN Actions variable'; exit 1; }
+      - name: Acquire short-lived Alibaba Cloud credentials
+        id: aliyun
+        uses: aliyun/configure-aliyun-credentials-action@1e5248c8d5d93a8781ac344a68e19a43341e79e6
+        with:
+          oidc-provider-arn: ${{ vars.ALIYUN_GITHUB_OIDC_PROVIDER_ARN }}
+          role-to-assume: ${{ vars.ALIYUN_OSS_RELEASE_ROLE_ARN }}
+          role-session-name: deepseek-yukiryou-release
+          audience: github-actions
+      - name: Upload and verify immutable versioned release objects
+        env:
+          OSS_ACCESS_KEY_ID: ${{ steps.aliyun.outputs.aliyun-access-key-id }}
+          OSS_ACCESS_KEY_SECRET: ${{ steps.aliyun.outputs.aliyun-access-key-secret }}
+          OSS_SESSION_TOKEN: ${{ steps.aliyun.outputs.aliyun-security-token }}
+        run: |
+          set -euo pipefail
+          release_root="china-mirror/releases/${RELEASE_TAG}"
+          remote_root="oss://${OSS_BUCKET}/releases/${RELEASE_TAG}"
+          for source in "${release_root}"/*; do
+            ossutil cp --force --cache-control "public, max-age=31536000, immutable" "${source}" "${remote_root}/$(basename "${source}")"
+          done
+          mkdir -p mirror-verification
+          for source in "${release_root}"/*; do
+            name=$(basename "${source}")
+            ossutil cp --force "${remote_root}/${name}" "mirror-verification/${name}"
+            test "$(sha256sum "${source}" | cut -d' ' -f1)" = "$(sha256sum "mirror-verification/${name}" | cut -d' ' -f1)"
+          done
+      - name: Publish mutable update, website, and plugin metadata last
+        env:
+          OSS_ACCESS_KEY_ID: ${{ steps.aliyun.outputs.aliyun-access-key-id }}
+          OSS_ACCESS_KEY_SECRET: ${{ steps.aliyun.outputs.aliyun-access-key-secret }}
+          OSS_SESSION_TOKEN: ${{ steps.aliyun.outputs.aliyun-security-token }}
+        run: |
+          set -euo pipefail
+          for target in darwin-arm64 win32-x64; do
+            metadata=latest.yml
+            if [[ "${target}" = darwin-arm64 ]]; then metadata=latest-mac.yml; fi
+            ossutil cp --force --content-type text/yaml --cache-control "public, max-age=60" \
+              "china-mirror/updates/${target}/${metadata}" \
+              "oss://${OSS_BUCKET}/updates/${target}/${metadata}"
+          done
+          ossutil cp --force --content-type application/json --cache-control "public, max-age=60" \
+            china-mirror/plugins/catalog/catalog-v1.json \
+            "oss://${OSS_BUCKET}/plugins/catalog/catalog-v1.json"
+          ossutil cp --force --content-type application/json --cache-control "public, max-age=60" \
+            china-mirror/downloads/latest.json \
+            "oss://${OSS_BUCKET}/downloads/latest.json"
+          mkdir -p mutable-verification
+          ossutil cp --force "oss://${OSS_BUCKET}/updates/darwin-arm64/latest-mac.yml" mutable-verification/latest-mac.yml
+          ossutil cp --force "oss://${OSS_BUCKET}/updates/win32-x64/latest.yml" mutable-verification/latest.yml
+          ossutil cp --force "oss://${OSS_BUCKET}/plugins/catalog/catalog-v1.json" mutable-verification/catalog-v1.json
+          ossutil cp --force "oss://${OSS_BUCKET}/downloads/latest.json" mutable-verification/downloads-latest.json
+          cmp china-mirror/updates/darwin-arm64/latest-mac.yml mutable-verification/latest-mac.yml
+          cmp china-mirror/updates/win32-x64/latest.yml mutable-verification/latest.yml
+          cmp china-mirror/plugins/catalog/catalog-v1.json mutable-verification/catalog-v1.json
+          cmp china-mirror/downloads/latest.json mutable-verification/downloads-latest.json

@@ -66,7 +66,7 @@ DeepSeek.YukiRyou-<version>-arm64.dmg
 
 Requirements: an Apple Silicon Mac (M1 or newer) running macOS 14 or later.
 
-Every public release includes SHA-256 checksums. The app and update artifacts are Developer ID signed and Apple-notarized. Download only from this repository's GitHub Releases page.
+Every public release includes SHA-256 checksums. macOS app and update artifacts are Developer ID signed and Apple-notarized. GitHub Releases is the global origin; installations in mainland China prefer the ESA-protected `download-cn.suzuki.ink` mirror, which is populated only after the GitHub release is public and fully verified, with GitHub fallback. The website can consume `downloads/latest.json` from the China mirror to obtain versioned direct links, sizes, and SHA-256 digests for all four packages.
 
 ### Windows
 
@@ -122,7 +122,7 @@ The EXE is a guided NSIS installer that lets users choose the install directory;
 | --- | --- | --- |
 | Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
 | Plugin ecosystem | **Ongoing** | Extend the existing discovery, inspection, and managed lifecycle with stronger publisher signals, clearer permissions, and richer compatibility information. |
-| Windows x64 distribution | **Beta** | The same Release ships an unsigned installer EXE and portable ZIP. Real cross-version upgrades, automatic updates, and independent Windows 11 acceptance continue; Authenticode can be added when distribution scale warrants it. |
+| Windows x64 distribution | **Beta** | The same Release ships an unsigned installer EXE and portable ZIP. The installed build supports automatic download and confirmed restart-to-install through both regional channels; independent Windows 11 acceptance continues and Authenticode can be added when distribution scale warrants it. |
 
 The roadmap describes direction, not committed dates. If the security model, upstream Harness contracts, or required assets are not ready, the feature remains unavailable instead of shipping through brittle DOM injection or weakened system protections.
 
@@ -143,7 +143,7 @@ Harness listens on a stable loopback endpoint selected and persisted by the app,
 
 ## Versions and updates
 
-The app checks public GitHub Releases after startup, and updates can also be checked from **Settings → About**. After an update is downloaded, installation starts only after user confirmation.
+The app checks for updates after startup and can also be checked from **Settings → About**. Mainland China installations prefer the China mirror while other regions prefer GitHub, with automatic GitHub fallback. Both macOS and installed Windows builds download in the background and install only after user confirmation and restart.
 
 Before upgrading from `v0.2.1-beta.2` to the first rc.8 build, quit the old app completely from its application menu. If the old app was force-quit, its main process crashed, or desktop logs were manually removed, restart macOS before installing. The previous Runtime has no owner watchdog, and this one-time origin migration relies on its retained final ready record. Rebooting prevents old and new Runtimes from writing concurrently; if that record was already lost, you may need to select the previous session once from the sidebar after upgrading.
 

@@ -32,9 +32,9 @@ webPreferences: {
 - 本地顶栏 renderer 与 Harness 使用不同的 webContents；Harness 只加载到下方 `WebContentsView`。隔离 preload 只读观察侧栏宽度，并通过固定 IPC channel 上报数值；主进程校验数值有限且位于当前窗口宽度内后才转发给本地顶栏。更新存在时，preload 只在 Harness 侧栏右下角显示固定图标入口；找不到预期侧栏结构或更新消失时立即移除。
 - 外观与关于页使用 Harness 官方插件插槽。桌面扩展随应用离线打包，只获得 Harness 的 slots、locale 和 theme 服务，不暴露 Electron/Node API，也不通过任意用户路径加载代码。外观同步 IPC 只接受 `light|dark` 和浏览器归一化的 `rgb/rgba` 颜色，拒绝选择器、CSS 代码、URL 与任意属性。
 - 启动恢复只检查 Runtime Home 根目录下的常规文件 `settings.yaml`，使用与 Harness 相同的结构化 YAML 解析器。仅语法损坏或根节点不是映射时触发恢复；原文件以原权限重命名保存，新的空设置文件使用 `0600`，会话、凭据、工作区缓存和符号链接均不在自动恢复范围内。
-- macOS 更新器仅在打包的 arm64 应用启用，feed 固定为公开仓库在 `update.electronjs.org` 上的架构专属 HTTPS 端点。Squirrel.Mac 要求当前应用和下载的更新均通过代码签名验证；开发包不会进入安装流程，更新安装前先停止本应用拥有的 Harness 进程。
-- Windows 更新检查仅访问固定仓库的 GitHub Releases API，校验非草稿 Release 的版本字段并在本地做语义版本比较。Windows 不执行远程返回的 URL 或命令；发现新版本后只把应用切换到手动下载状态，用户通过固定的仓库 Release 页面获取安装 EXE。
-- `contextBridge` 只向 Harness 暴露更新状态快照、订阅和 `check|install|download` 三个无参数命令。主进程再次校验固定命令枚举；`install` 仅在 macOS 状态为 `downloaded` 时生效，`download` 只打开编译期固定的 Release 页面，不接受 URL、路径、shell 命令或任意参数。
+- macOS arm64 与 Windows x64 安装版共用 `electron-updater` 的签名/哈希校验状态机。中国大陆优先读取 `download-cn.suzuki.ink` 上与平台匹配的短缓存元数据，其他地区读取固定 GitHub 仓库；国内检查或下载失败会切换到 GitHub provider。macOS 仍强制 Developer ID 签名和 Apple 公证；Windows Beta 在接入 Authenticode 前依赖发布清单 SHA-512、GitHub/OSS 同源校验与用户确认，不宣称系统级发布者信任。
+- 国内镜像发布是 GitHub 公开发布的严格下游 job：先重新下载公开附件、核对不可变提交、provenance、双平台 SHA-256，再上传版本化对象并回读验证 SHA-256；只有这些步骤成功后才覆盖 `latest-mac.yml`、`latest.yml` 与插件目录。job 不使用 `always()`，因此上游失败不会向 OSS 写入任何对象。OSS Bucket 保持私有并只由 ESA 回源；ESA 拒绝中国大陆以外访问。
+- `contextBridge` 只向 Harness 暴露更新状态快照、订阅和 `check|install|download` 三个无参数命令。主进程再次校验固定命令枚举；`install` 仅在校验完成的 `downloaded` 状态生效，安装前先停止本应用拥有的 Harness 进程；`download` 仅作为全部自动源失败后的固定 GitHub Release 兜底，不接受网页传入 URL、路径、shell 命令或任意参数。
 - 使用 `will-navigate` 拒绝非当前可信 origin。
 - `setWindowOpenHandler` 默认 deny；允许的 `https:` 外链交给系统浏览器。
 - 拒绝新窗口、下载和权限请求，除非有明确产品场景与测试。

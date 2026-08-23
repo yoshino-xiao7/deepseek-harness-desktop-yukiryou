@@ -109,8 +109,8 @@ Windows 候选 CI 会同时生成并验证未签名的向导式 NSIS `Setup.exe`
 ## 发布与回滚
 
 - 更新默认分批：先手动下载验证，再开放自动检查。
-- V1 使用 `https://update.electronjs.org/yoshino-xiao7/deepseek-harness-desktop-yukiryou/darwin-arm64/<version>` 读取公开 GitHub Release；ZIP 文件名必须同时包含 `darwin` 与 `arm64`。
-- 更新 feed 保留上一个稳定版本下载链接和校验值。
+- 两平台使用 `electron-updater` 元数据：GitHub Release 附带 `latest-mac.yml` 与 `latest.yml`，国内镜像分别发布到 `updates/darwin-arm64/` 与 `updates/win32-x64/`。元数据中的 SHA-512 必须由最终公开 ZIP/EXE 的精确字节生成。
+- GitHub Release 成功公开后，独立下游 job 才能向 OSS 上传；版本化对象必须先上传并回读校验，短缓存 `latest*` 元数据、官网 `downloads/latest.json` 与插件目录最后更新。官网清单必须绑定四个版本化包的 URL、大小与 SHA-256。国内源失败时客户端回退 GitHub provider。
 - 桌面偏好迁移采用“读取旧版、写入新临时文件、原子替换”；失败则回退默认偏好。
 - 不自动降级 Harness 数据格式。若新版 dsh 写入不可逆格式，发布前必须提供备份/恢复策略，否则不升级该运行时。
 - 用户回滚应用时不得自动删除 Runtime Home。

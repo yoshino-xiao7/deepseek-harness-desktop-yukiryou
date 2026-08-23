@@ -1,7 +1,10 @@
 import { autoUpdater, type Event } from 'electron';
+import type { AllPublishOptions, UpdateInfo } from 'builder-util-runtime';
+import { MacUpdater, NsisUpdater } from 'electron-updater';
 
 import { updateFeedUrl } from './update-config.js';
 import { updateRecoveryForError } from './update-error.js';
+import type { DesktopUpdateSource } from '../distribution/distribution-routing.js';
 import type { DesktopUpdateState } from '../../shared/update-bridge.js';
 
 export type UpdateCheckResult =
@@ -11,6 +14,7 @@ export type UpdateCheckResult =
 export interface AppUpdater {
   checkForUpdates(): Promise<UpdateCheckResult>;
   getState(): DesktopUpdateState;
+  getDownloadUrl(): string | undefined;
   subscribe(listener: (state: DesktopUpdateState) => void): () => void;
   startAutomaticChecks(): void;
   quitAndInstall(): void;
@@ -26,13 +30,209 @@ export interface AppUpdaterOptions {
   readonly automaticCheckDelayMs?: number;
   readonly automaticCheckIntervalMs?: number;
   readonly fetchLatestRelease?: typeof fetch;
+  readonly releaseMetadataUrls?: readonly string[];
+  readonly updateSources?: readonly DesktopUpdateSource[];
+  readonly createNativeUpdater?: (
+    platform: NodeJS.Platform,
+    source: AllPublishOptions,
+  ) => NativeUpdateClient;
 }
 
 export function createAppUpdater(options: AppUpdaterOptions): AppUpdater {
-  if (options.enabled && options.platform === 'win32') {
-    return new GitHubReleaseAppUpdater(options);
+  if (options.enabled && (options.platform === 'darwin' || options.platform === 'win32')) {
+    return new CrossPlatformAppUpdater(options);
   }
   return new ElectronAppUpdater(options);
+}
+
+export interface NativeUpdateClient {
+  autoDownload: boolean;
+  autoInstallOnAppQuit: boolean;
+  channel: string | null;
+  allowDowngrade: boolean;
+  disableDifferentialDownload: boolean;
+  on(event: 'update-available' | 'update-not-available' | 'update-downloaded', listener: (info: UpdateInfo) => void): unknown;
+  on(event: 'error', listener: (error: Error) => void): unknown;
+  removeListener(event: 'update-available' | 'update-not-available' | 'update-downloaded', listener: (info: UpdateInfo) => void): unknown;
+  removeListener(event: 'error', listener: (error: Error) => void): unknown;
+  setFeedURL(source: AllPublishOptions): void;
+  checkForUpdates(): Promise<{ readonly updateInfo: UpdateInfo } | null>;
+  quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
+}
+
+export class CrossPlatformAppUpdater implements AppUpdater {
+  readonly #options: AppUpdaterOptions;
+  readonly #native: NativeUpdateClient;
+  readonly #listeners = new Set<(state: DesktopUpdateState) => void>();
+  readonly #sources: readonly DesktopUpdateSource[];
+  #sourceIndex = 0;
+  #checking = false;
+  #recovering = false;
+  #state: DesktopUpdateState;
+  #initialTimer: ReturnType<typeof setTimeout> | undefined;
+  #intervalTimer: ReturnType<typeof setInterval> | undefined;
+
+  constructor(options: AppUpdaterOptions) {
+    this.#options = options;
+    this.#sources = options.updateSources ?? [{
+      provider: 'github',
+      owner: 'yoshino-xiao7',
+      repo: 'deepseek-harness-desktop-yukiryou',
+      private: false,
+    }];
+    const source = this.#source(0);
+    this.#native = options.createNativeUpdater?.(options.platform, source) ??
+      (options.platform === 'win32'
+        ? new NsisUpdater(source)
+        : new MacUpdater(source));
+    this.#native.autoDownload = true;
+    this.#native.autoInstallOnAppQuit = true;
+    this.#native.channel = 'latest';
+    this.#native.allowDowngrade = false;
+    this.#native.disableDifferentialDownload = true;
+    this.#native.on('update-available', this.#handleAvailable);
+    this.#native.on('update-not-available', this.#handleNotAvailable);
+    this.#native.on('update-downloaded', this.#handleDownloaded);
+    this.#native.on('error', this.#handleError);
+    this.#state = { status: 'idle', currentVersion: options.currentVersion };
+  }
+
+  readonly #handleAvailable = (info: UpdateInfo): void => {
+    this.#setState({
+      status: 'downloading',
+      currentVersion: this.#options.currentVersion,
+      releaseName: info.version.slice(0, 80),
+      ...optionalReleaseNotes(info),
+      checkedAt: new Date().toISOString(),
+    });
+  };
+
+  readonly #handleNotAvailable = (): void => {
+    this.#setState({
+      status: 'latest',
+      currentVersion: this.#options.currentVersion,
+      checkedAt: new Date().toISOString(),
+    });
+  };
+
+  readonly #handleDownloaded = (info: UpdateInfo): void => {
+    this.#setState({
+      status: 'downloaded',
+      currentVersion: this.#options.currentVersion,
+      releaseName: info.version.slice(0, 80),
+      ...optionalReleaseNotes(info),
+      checkedAt: new Date().toISOString(),
+    });
+  };
+
+  readonly #handleError = (error: Error): void => {
+    if (this.#checking || this.#recovering) return;
+    if (this.#sourceIndex + 1 < this.#sources.length) {
+      void this.#recoverDownloadFromFallback();
+      return;
+    }
+    this.#reportFailure(error);
+  };
+
+  async checkForUpdates(): Promise<UpdateCheckResult> {
+    if (this.#checking || this.#state.status === 'downloading') return { status: 'busy' };
+    if (this.#state.status === 'downloaded') return { status: 'available' };
+    this.#checking = true;
+    this.#setState({ status: 'checking', currentVersion: this.#options.currentVersion });
+    let lastFailure: Error | undefined;
+    try {
+      for (let index = 0; index < this.#sources.length; index += 1) {
+        this.#sourceIndex = index;
+        this.#native.setFeedURL(this.#source(index));
+        try {
+          const result = await this.#native.checkForUpdates();
+          if (result === null || compareVersions(result.updateInfo.version, this.#options.currentVersion) <= 0) {
+            this.#handleNotAvailable();
+            return { status: 'not-available' };
+          }
+          return { status: 'available' };
+        } catch (error) {
+          lastFailure = error instanceof Error ? error : new Error(String(error));
+        }
+      }
+      throw lastFailure ?? new Error('No update source is configured');
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      this.#reportFailure(failure);
+      throw failure;
+    } finally {
+      this.#checking = false;
+    }
+  }
+
+  getState(): DesktopUpdateState { return this.#state; }
+
+  getDownloadUrl(): string | undefined { return undefined; }
+
+  subscribe(listener: (state: DesktopUpdateState) => void): () => void {
+    this.#listeners.add(listener);
+    listener(this.#state);
+    return () => this.#listeners.delete(listener);
+  }
+
+  startAutomaticChecks(): void {
+    if (this.#initialTimer !== undefined) return;
+    const check = (): void => { void this.checkForUpdates().catch(() => undefined); };
+    this.#initialTimer = setTimeout(check, this.#options.automaticCheckDelayMs ?? 15_000);
+    this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
+  }
+
+  quitAndInstall(): void { this.#native.quitAndInstall(false, true); }
+
+  dispose(): void {
+    clearTimeout(this.#initialTimer);
+    clearInterval(this.#intervalTimer);
+    this.#native.removeListener('update-available', this.#handleAvailable);
+    this.#native.removeListener('update-not-available', this.#handleNotAvailable);
+    this.#native.removeListener('update-downloaded', this.#handleDownloaded);
+    this.#native.removeListener('error', this.#handleError);
+    this.#listeners.clear();
+  }
+
+  #source(index: number): AllPublishOptions {
+    const source = this.#sources[index];
+    if (source === undefined) throw new Error('No update source is configured');
+    return source;
+  }
+
+  async #recoverDownloadFromFallback(): Promise<void> {
+    this.#recovering = true;
+    this.#sourceIndex += 1;
+    this.#native.setFeedURL(this.#source(this.#sourceIndex));
+    this.#setState({ status: 'checking', currentVersion: this.#options.currentVersion });
+    try {
+      await this.#native.checkForUpdates();
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      if (this.#sourceIndex + 1 < this.#sources.length) {
+        this.#recovering = false;
+        await this.#recoverDownloadFromFallback();
+        return;
+      }
+      this.#reportFailure(failure);
+    } finally {
+      this.#recovering = false;
+    }
+  }
+
+  #reportFailure(error: Error): void {
+    this.#setState({
+      status: updateRecoveryForError(error) === 'manual-download' ? 'manual' : 'error',
+      currentVersion: this.#options.currentVersion,
+      message: safeErrorMessage(error),
+    });
+    this.#options.onError(error);
+  }
+
+  #setState(state: DesktopUpdateState): void {
+    this.#state = state;
+    for (const listener of this.#listeners) listener(state);
+  }
 }
 
 interface GitHubRelease {
@@ -50,6 +250,7 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
   #state: DesktopUpdateState;
   #initialTimer: ReturnType<typeof setTimeout> | undefined;
   #intervalTimer: ReturnType<typeof setInterval> | undefined;
+  #downloadUrl: string | undefined;
 
   constructor(options: AppUpdaterOptions) {
     this.#options = options;
@@ -65,23 +266,7 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
     this.#checking = true;
     this.#setState({ status: 'checking', currentVersion: this.#options.currentVersion });
     try {
-      const response = await (this.#options.fetchLatestRelease ?? fetch)(
-        updateFeedUrl({
-          currentVersion: this.#options.currentVersion,
-          platform: this.#options.platform,
-          architecture: this.#options.architecture,
-        }),
-        {
-          headers: {
-            Accept: 'application/vnd.github+json',
-            'User-Agent': `DeepSeek-YukiRyou/${this.#options.currentVersion}`,
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-          signal: AbortSignal.timeout(30_000),
-        },
-      );
-      if (!response.ok) throw new Error(`GitHub update check failed (${String(response.status)})`);
-      const release = validatedGitHubRelease(await response.json());
+      const release = await this.#fetchLatestRelease();
       const checkedAt = new Date().toISOString();
       if (compareVersions(release.tag_name, this.#options.currentVersion) <= 0) {
         this.#setState({ status: 'latest', currentVersion: this.#options.currentVersion, checkedAt });
@@ -94,6 +279,7 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
         releaseNotes: (release.body ?? '').slice(0, 2_000),
         checkedAt,
       });
+      this.#downloadUrl = release.html_url;
       return { status: 'available' };
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
@@ -110,6 +296,8 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
   }
 
   getState(): DesktopUpdateState { return this.#state; }
+
+  getDownloadUrl(): string | undefined { return this.#downloadUrl; }
 
   subscribe(listener: (state: DesktopUpdateState) => void): () => void {
     this.#listeners.add(listener);
@@ -137,6 +325,34 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
   #setState(state: DesktopUpdateState): void {
     this.#state = state;
     for (const listener of this.#listeners) listener(state);
+  }
+
+  async #fetchLatestRelease(): Promise<GitHubRelease> {
+    const urls = this.#options.releaseMetadataUrls ?? [updateFeedUrl({
+      currentVersion: this.#options.currentVersion,
+      platform: this.#options.platform,
+      architecture: this.#options.architecture,
+    })];
+    let lastFailure: Error | undefined;
+    for (const url of urls) {
+      try {
+        const response = await (this.#options.fetchLatestRelease ?? fetch)(url, {
+          headers: {
+            Accept: 'application/vnd.github+json',
+            'User-Agent': `DeepSeek-YukiRyou/${this.#options.currentVersion}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!response.ok) {
+          throw new Error(`Update metadata request failed (${String(response.status)})`);
+        }
+        return validatedGitHubRelease(await response.json());
+      } catch (error) {
+        lastFailure = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    throw lastFailure ?? new Error('No update metadata source is configured');
   }
 }
 
@@ -269,6 +485,8 @@ class ElectronAppUpdater implements AppUpdater {
     return this.#state;
   }
 
+  getDownloadUrl(): string | undefined { return undefined; }
+
   subscribe(listener: (state: DesktopUpdateState) => void): () => void {
     this.#listeners.add(listener);
     listener(this.#state);
@@ -313,6 +531,19 @@ class ElectronAppUpdater implements AppUpdater {
     this.#state = state;
     for (const listener of this.#listeners) listener(state);
   }
+}
+
+function optionalReleaseNotes(info: UpdateInfo): { readonly releaseNotes?: string } {
+  if (typeof info.releaseNotes === 'string') {
+    return { releaseNotes: info.releaseNotes.slice(0, 2_000) };
+  }
+  if (Array.isArray(info.releaseNotes)) {
+    return { releaseNotes: info.releaseNotes
+      .map((entry) => `${entry.version}: ${entry.note ?? ''}`)
+      .join('\n')
+      .slice(0, 2_000) };
+  }
+  return {};
 }
 
 function safeErrorMessage(error: Error): string {

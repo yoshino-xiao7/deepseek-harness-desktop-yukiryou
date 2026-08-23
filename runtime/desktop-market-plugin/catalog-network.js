@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import { lookup } from 'node:dns/promises';
 import { request } from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import process from 'node:process';
 import { URL, URLSearchParams } from 'node:url';
 
 const GITHUB_REQUEST = Object.freeze({
@@ -13,9 +14,17 @@ const GITHUB_REQUEST = Object.freeze({
     'x-github-api-version': '2022-11-28',
   }),
 });
-const YUKIRYOU_CATALOG_REQUEST = Object.freeze({
+const YUKIRYOU_GITHUB_CATALOG_REQUEST = Object.freeze({
   hostname: 'raw.githubusercontent.com',
   path: '/yoshino-xiao7/deepseek-yukiryou-plugin-catalog/main/catalog-v1.json',
+  headers: Object.freeze({
+    accept: 'application/json',
+    'user-agent': 'DeepSeek-YukiRyou-Curated-Catalog/0.2',
+  }),
+});
+const YUKIRYOU_CHINA_CATALOG_REQUEST = Object.freeze({
+  hostname: 'download-cn.suzuki.ink',
+  path: '/plugins/catalog/catalog-v1.json',
   headers: Object.freeze({
     accept: 'application/json',
     'user-agent': 'DeepSeek-YukiRyou-Curated-Catalog/0.2',
@@ -53,8 +62,19 @@ export function requestGitHubSearch() {
   return requestFixedJson(GITHUB_REQUEST);
 }
 
-export function requestYukiRyouCatalog() {
-  return requestFixedJson(YUKIRYOU_CATALOG_REQUEST);
+export async function requestYukiRyouCatalog() {
+  const requests = process.env.DSH_DESKTOP_DISTRIBUTION_REGION === 'china'
+    ? [YUKIRYOU_CHINA_CATALOG_REQUEST, YUKIRYOU_GITHUB_CATALOG_REQUEST]
+    : [YUKIRYOU_GITHUB_CATALOG_REQUEST];
+  let lastFailure;
+  for (const target of requests) {
+    try {
+      return await requestFixedJson(target);
+    } catch (error) {
+      lastFailure = error;
+    }
+  }
+  throw lastFailure ?? catalogError('network', 'No curated catalog source is configured');
 }
 
 export function requestDsh1024Store() {
