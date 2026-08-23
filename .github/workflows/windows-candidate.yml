@@ -205,6 +205,14 @@ jobs:
         if: ${{ always() && hashFiles('out/windows-lifecycle/state.json') != '' }}
         shell: pwsh
         run: ./scripts/windows-nsis-lifecycle.ps1 -Action Uninstall
+      - name: Upload installed startup diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installed-startup-diagnostics
+          path: out/windows-installed-diagnostics/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:

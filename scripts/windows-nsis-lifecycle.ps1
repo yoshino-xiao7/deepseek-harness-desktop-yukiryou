@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $candidateRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\out\windows-candidate'))
 $stateRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\out\windows-lifecycle'))
 $statePath = Join-Path $stateRoot 'state.json'
-$installRoot = Join-Path $stateRoot 'install'
+$installRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'dsh-yukiryou-nsis-install'
 $setupPath = Join-Path $candidateRoot 'DeepSeek-YukiRyou-Setup.exe'
 $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
@@ -41,6 +41,9 @@ if ($Action -eq 'Recover') {
   if (Test-Path -LiteralPath $uninstaller) {
     Invoke-Checked $uninstaller @('/S')
     Wait-Until { -not (Test-Path -LiteralPath $executable) } 'Stale NSIS installation remained after recovery'
+  }
+  if (Test-Path -LiteralPath $installRoot) {
+    Remove-Item -LiteralPath $installRoot -Recurse -Force
   }
   if (Test-Path -LiteralPath $stateRoot) {
     Remove-Item -LiteralPath $stateRoot -Recurse -Force

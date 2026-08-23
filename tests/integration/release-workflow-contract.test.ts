@@ -104,9 +104,11 @@ describe('macOS release workflow contract', () => {
     expect(lifecycleScript).toContain('$process.WaitForExit(15000)');
     expect(lifecycleScript).toContain('.AddMinutes(10)');
     expect(lifecycleScript).toContain('[System.IO.Path]::GetFullPath');
+    expect(lifecycleScript).toContain("[System.IO.Path]::GetTempPath()) 'dsh-yukiryou-nsis-install'");
     expect(lifecycleScript).toContain('NSIS install, repair, and uninstall checks passed');
     expect(windowsCandidate).toContain("Get-Process -Name 'DeepSeek YukiRyou'");
     expect(windowsCandidate).toContain('windows-installed-diagnostics');
+    expect(windowsCandidate).toContain('windows-installed-startup-diagnostics');
     expect(electronCleanup).toContain("'taskkill.exe'");
     expect(electronCleanup).toContain("'/t', '/f'");
     expect(electronCleanup).toContain('applicationProcess.exitCode !== null');
@@ -127,9 +129,12 @@ describe('macOS release workflow contract', () => {
     expect(workflowSource).toContain(
       './scripts/windows-nsis-lifecycle.ps1 -Action Recover',
     );
-    expect(lifecycleScript).toContain("Join-Path $stateRoot 'install'");
+    expect(lifecycleScript).toContain(
+      "Join-Path ([System.IO.Path]::GetTempPath()) 'dsh-yukiryou-nsis-install'",
+    );
     expect(lifecycleScript).toContain('Lifecycle state points outside the isolated install directory');
     expect(lifecycleScript).toContain("Remove-Item -LiteralPath $stateRoot -Recurse -Force");
+    expect(lifecycleScript).toContain("Remove-Item -LiteralPath $installRoot -Recurse -Force");
   });
 
   it('vendors the bundled runtime before running integration tests', async () => {
