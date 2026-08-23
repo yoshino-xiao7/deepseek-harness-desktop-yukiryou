@@ -95,8 +95,10 @@ describe('macOS release workflow contract', () => {
       readFile(join(process.cwd(), 'tests', 'e2e', 'electron-cleanup.ts'), 'utf8'),
     ]);
 
-    expect(lifecycleScript).toContain("@('/S', \"/D=$installRoot\")");
+    expect(lifecycleScript).toContain("@('/S', '/currentuser', \"/D=$installRoot\")");
     expect(lifecycleScript).toContain("'Uninstall DeepSeek YukiRyou.exe'");
+    expect(lifecycleScript).toContain('$process.WaitForExit(15000)');
+    expect(lifecycleScript).toContain('.AddMinutes(10)');
     expect(lifecycleScript).toContain('NSIS install, repair, and uninstall checks passed');
     expect(electronCleanup).toContain("'taskkill.exe'");
     expect(electronCleanup).toContain("'/t', '/f'");

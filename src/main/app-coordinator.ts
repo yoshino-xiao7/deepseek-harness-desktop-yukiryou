@@ -1177,8 +1177,18 @@ export class AppCoordinator {
 
   #installMenu(logDirectory: string, locale: DesktopLocale): void {
     const labels = locale === 'en-US'
-      ? { edit: 'Edit', view: 'View', window: 'Window', help: 'Help' }
-      : { edit: '编辑', view: '视图', window: '窗口', help: '帮助' };
+      ? {
+          edit: 'Edit', view: 'View', window: 'Window', help: 'Help',
+          restart: 'Restart Harness', reload: 'Reload Harness UI',
+          logs: 'Open Logs', diagnostics: 'Export Diagnostics…',
+          updates: 'Check for Updates…',
+        }
+      : {
+          edit: '编辑', view: '视图', window: '窗口', help: '帮助',
+          restart: '重启 Harness', reload: '重新加载 Harness 界面',
+          logs: '打开日志', diagnostics: '导出诊断信息…',
+          updates: '检查更新…',
+        };
     const menu = Menu.buildFromTemplate([
       {
         id: 'file',
@@ -1187,24 +1197,24 @@ export class AppCoordinator {
           { role: 'about' },
           { type: 'separator' },
           {
-            label: 'Restart Harness',
+            label: labels.restart,
             click: () => void this.restartRuntime(),
           },
           {
-            label: 'Reload Harness UI',
+            label: labels.reload,
             accelerator: 'CmdOrCtrl+R',
             click: () => this.#window?.reload(),
           },
           {
-            label: 'Open Logs',
+            label: labels.logs,
             click: () => void shell.openPath(logDirectory),
           },
           {
-            label: 'Export Diagnostics…',
+            label: labels.diagnostics,
             click: () => void this.#exportDiagnostics(logDirectory),
           },
           {
-            label: 'Check for Updates…',
+            label: labels.updates,
             click: () => void this.#checkForUpdates(),
           },
           { type: 'separator' },
@@ -1217,17 +1227,17 @@ export class AppCoordinator {
       },
       { id: 'edit', role: 'editMenu', label: labels.edit },
       { id: 'view', role: 'viewMenu', label: labels.view },
-      { role: 'windowMenu', label: labels.window },
+      { id: 'window', role: 'windowMenu', label: labels.window },
       {
         id: 'help',
         label: labels.help,
         submenu: [
           {
-            label: locale === 'en-US' ? 'Check for Updates…' : '检查更新…',
+            label: labels.updates,
             click: () => void this.#checkForUpdates(),
           },
           {
-            label: locale === 'en-US' ? 'Open Logs' : '打开日志',
+            label: labels.logs,
             click: () => void shell.openPath(logDirectory),
           },
         ],

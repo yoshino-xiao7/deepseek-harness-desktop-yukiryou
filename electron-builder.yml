@@ -16,3 +16,4 @@ nsis:
   shortcutName: DeepSeek YukiRyou
   uninstallDisplayName: DeepSeek YukiRyou
   deleteAppDataOnUninstall: false
+  runAfterFinish: false

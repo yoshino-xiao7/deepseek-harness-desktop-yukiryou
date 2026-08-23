@@ -167,6 +167,7 @@ class ElectronDesktopWindow implements DesktopWindow {
   #showingHarness = false;
   #sidebarWidth: number | undefined;
   #appearance: DesktopAppearanceSnapshot | undefined;
+  #locale: DesktopLocale | undefined;
   #companionState: DesktopCompanionSnapshot = {
     active: false,
     open: true,
@@ -206,6 +207,7 @@ class ElectronDesktopWindow implements DesktopWindow {
         this.#window.webContents.send(TOOLBAR_APPEARANCE_CHANNEL, appearance);
       },
       onLocale: (locale) => {
+        this.#locale = locale;
         this.#window.webContents.send(TOOLBAR_LOCALE_CHANNEL, locale);
         options.onLocale(locale);
       },
@@ -434,6 +436,9 @@ class ElectronDesktopWindow implements DesktopWindow {
         TOOLBAR_APPEARANCE_CHANNEL,
         this.#appearance,
       );
+    }
+    if (this.#locale !== undefined) {
+      this.#window.webContents.send(TOOLBAR_LOCALE_CHANNEL, this.#locale);
     }
     this.#sendCompanionState();
   }

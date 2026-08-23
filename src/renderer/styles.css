@@ -2,6 +2,7 @@
   --harness-sidebar-width: 280px;
   --toolbar-sidebar-background: #f7f8fa;
   --toolbar-content-background: #fff;
+  --toolbar-foreground: #12182a;
   --companion-border: rgb(127 127 127 / 16%);
   --companion-muted: #737a89;
   --companion-accent: #356ae6;
@@ -59,8 +60,9 @@ body {
   padding: 0 10px;
   border: 0;
   border-radius: 6px;
-  color: color-mix(in srgb, currentColor 78%, transparent);
+  color: var(--toolbar-foreground);
   background: transparent;
+  opacity: .78;
   font: inherit;
   font-size: 13px;
   cursor: default;
@@ -68,8 +70,9 @@ body {
 
 .windows-menu button:hover,
 .windows-menu button:focus-visible {
-  color: currentColor;
+  color: var(--toolbar-foreground);
   background: rgb(127 127 127 / 11%);
+  opacity: 1;
   outline: none;
 }
 
@@ -366,6 +369,7 @@ body[data-companion-active="true"] .loading-shell { display: none; }
 
 :root[data-appearance-scheme="dark"] .companion-toggle { color: #b5bbca; background: rgb(35 38 47 / 76%); }
 :root[data-appearance-scheme="dark"] {
+  --toolbar-foreground: #f2f4fa;
   --companion-surface: #15161a;
   --companion-surface-subtle: #1b1d22;
   --companion-border: rgb(255 255 255 / 8%);

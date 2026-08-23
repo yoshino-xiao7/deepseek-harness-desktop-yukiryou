@@ -14,7 +14,15 @@ $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
 
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
-  $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -Wait
+  $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
+  $deadline = (Get-Date).AddMinutes(10)
+  while (-not $process.WaitForExit(15000)) {
+    if ((Get-Date) -ge $deadline) {
+      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+      throw "$FilePath did not exit within 10 minutes"
+    }
+    Write-Output "Waiting for $([System.IO.Path]::GetFileName($FilePath)) (pid $($process.Id))"
+  }
   if ($process.ExitCode -ne 0) {
     throw "$FilePath failed with exit code $($process.ExitCode)"
   }
@@ -45,7 +53,7 @@ if ($Action -eq 'Install') {
   if (-not (Test-Path -LiteralPath $setupPath)) { throw "Installer is missing: $setupPath" }
   if (Test-Path -LiteralPath $installRoot) { throw "Refusing to overwrite lifecycle directory: $installRoot" }
   New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
-  Invoke-Checked $setupPath @('/S', "/D=$installRoot")
+  Invoke-Checked $setupPath @('/S', '/currentuser', "/D=$installRoot")
   Wait-Until { (Test-Path -LiteralPath $executable) -and (Test-Path -LiteralPath $uninstaller) } 'NSIS did not install the executable and uninstaller'
   @{ executable = $executable; installRoot = $installRoot; uninstaller = $uninstaller } |
     ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
@@ -58,7 +66,7 @@ $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 if ([string]$state.installRoot -ne $installRoot) { throw 'Lifecycle state points outside the isolated install directory' }
 
 if ($Action -eq 'Repair') {
-  Invoke-Checked $setupPath @('/S', "/D=$installRoot")
+  Invoke-Checked $setupPath @('/S', '/currentuser', "/D=$installRoot")
   Wait-Until { Test-Path -LiteralPath $executable } 'NSIS repair did not preserve the executable'
   Write-Output 'NSIS same-version repair completed'
   exit 0

@@ -50,6 +50,7 @@ describe('Windows release identity', () => {
     expect(builder).toContain('oneClick: false');
     expect(builder).toContain('allowToChangeInstallationDirectory: true');
     expect(builder).toContain('perMachine: false');
+    expect(builder).toContain('runAfterFinish: false');
 
     const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
       scripts?: Record<string, string>;

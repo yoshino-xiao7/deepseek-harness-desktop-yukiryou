@@ -13,6 +13,12 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/data-window-menu="file">文件/);
     expect(styles).toMatch(/\.window-toolbar\s*\{[^}]*height:\s*44px/s);
     expect(styles).toMatch(/\.windows-menu\s*\{[^}]*-webkit-app-region:\s*no-drag/s);
+    expect(styles).toMatch(
+      /:root\[data-appearance-scheme="dark"\]\s*\{[^}]*--toolbar-foreground:\s*#f2f4fa/s,
+    );
+    expect(styles).toMatch(
+      /\.windows-menu button\s*\{[^}]*var\(--toolbar-foreground\)/s,
+    );
     expect(renderer).toContain("windowBridge?.openMenu");
   });
 

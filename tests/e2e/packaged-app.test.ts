@@ -565,6 +565,40 @@ describe('packaged desktop application', () => {
           ? /Windows.*x64/
           : /Apple Silicon.*arm64/,
       );
+
+      const selectHarnessLocale = async (locale: 'en-US' | 'zh-CN') => {
+        await electronApp!.evaluate(async ({ webContents }, nextLocale) => {
+          const harness = webContents
+            .getAllWebContents()
+            .find((contents) =>
+              contents.getURL().startsWith('http://127.0.0.1:'),
+            );
+          await harness?.executeJavaScript(
+            `document.documentElement.lang = ${JSON.stringify(nextLocale)}`,
+          );
+        }, locale);
+      };
+      const readDesktopLocale = async () => ({
+        toolbar: await shellPage!
+          .locator('[data-window-menu]')
+          .allTextContents(),
+        menu: await electronApp!.evaluate(({ Menu }) => {
+          const menu = Menu.getApplicationMenu();
+          return ['edit', 'view', 'window', 'help'].map(
+            (id) => menu?.getMenuItemById(id)?.label,
+          );
+        }),
+      });
+      await selectHarnessLocale('en-US');
+      await expect.poll(readDesktopLocale).toEqual({
+        toolbar: ['File', 'Edit', 'View', 'Help'],
+        menu: ['Edit', 'View', 'Window', 'Help'],
+      });
+      await selectHarnessLocale('zh-CN');
+      await expect.poll(readDesktopLocale).toEqual({
+        toolbar: ['文件', '编辑', '视图', '帮助'],
+        menu: ['编辑', '视图', '窗口', '帮助'],
+      });
       if (process.platform === 'win32') {
         await captureApplicationWindow(electronApp, 'settings-dark');
       }
@@ -738,6 +772,9 @@ describe('packaged desktop application', () => {
               .locator('[data-testid="window-drag-region"]')
               .evaluate(() => ({
                 scheme: document.documentElement.dataset.appearanceScheme,
+                menuColor: window.getComputedStyle(
+                  document.querySelector('[data-window-menu]')!,
+                ).color,
                 sidebar: document.documentElement.style.getPropertyValue(
                   '--toolbar-sidebar-background',
                 ),
@@ -749,6 +786,7 @@ describe('packaged desktop application', () => {
         )
         .toMatchObject({
           scheme: 'dark',
+          menuColor: 'rgb(242, 244, 250)',
           sidebar: expect.stringMatching(/^rgb/),
           content: expect.stringMatching(/^rgb/),
         });
