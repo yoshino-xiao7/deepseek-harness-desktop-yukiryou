@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact package.json version, for example 0.1.1-beta.1
+        description: Exact package.json version, for example 1.0.0
         required: true
         type: string
 
@@ -23,7 +23,7 @@ env:
   ARTIFACT_NAME: DeepSeek.YukiRyou
   RELEASE_VERSION: ${{ inputs.version }}
   RELEASE_TAG: v${{ inputs.version }}
-  UPGRADE_FROM_VERSION: 0.2.3-beta.2
+  UPGRADE_FROM_VERSION: 0.2.3-beta.3
   MACOS_SIGN_IDENTITY: 'Developer ID Application: HanTao Cao (7G6J4S76PN)'
 
 jobs:
@@ -361,11 +361,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          release_flags=(--draft)
+          if [[ "${RELEASE_VERSION}" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
           gh release create "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
             --title "DeepSeek YukiRyou ${RELEASE_VERSION}" \
             --notes-file "docs/releases/${RELEASE_TAG}.md" \
-            --draft \
-            --prerelease \
+            "${release_flags[@]}" \
             release-assets/*
