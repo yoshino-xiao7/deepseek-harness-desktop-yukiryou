@@ -13,6 +13,14 @@ const GITHUB_REQUEST = Object.freeze({
     'x-github-api-version': '2022-11-28',
   }),
 });
+const YUKIRYOU_CATALOG_REQUEST = Object.freeze({
+  hostname: 'raw.githubusercontent.com',
+  path: '/yoshino-xiao7/deepseek-yukiryou-plugin-catalog/main/catalog-v1.json',
+  headers: Object.freeze({
+    accept: 'application/json',
+    'user-agent': 'DeepSeek-YukiRyou-Curated-Catalog/0.2',
+  }),
+});
 const DSH_1024STORE_REQUEST = Object.freeze({
   hostname: 'deepseek1024.com',
   path: '/api/v1/plugins',
@@ -29,6 +37,7 @@ const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_MEDIA_RESPONSE_BYTES = 1024 * 1024;
 const MAX_PACKUMENT_RESPONSE_BYTES = 8 * 1024 * 1024;
 const MAX_TARBALL_RESPONSE_BYTES = 32 * 1024 * 1024;
+const MAX_DSHFIND_PAGES = 200;
 const BLOCKED_NETWORKS = new BlockList();
 for (const [network, prefix] of [
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
@@ -44,12 +53,16 @@ export function requestGitHubSearch() {
   return requestFixedJson(GITHUB_REQUEST);
 }
 
+export function requestYukiRyouCatalog() {
+  return requestFixedJson(YUKIRYOU_CATALOG_REQUEST);
+}
+
 export function requestDsh1024Store() {
   return requestFixedJson(DSH_1024STORE_REQUEST);
 }
 
 export function requestDshfindPage(page, dataVersion) {
-  if (!Number.isSafeInteger(page) || page < 1 || page > 100) {
+  if (!Number.isSafeInteger(page) || page < 1 || page > MAX_DSHFIND_PAGES) {
     return Promise.reject(catalogError('invalid-request', 'Invalid dshfind page'));
   }
   if (dataVersion !== undefined && !/^sha256:[0-9a-f]{64}$/u.test(dataVersion)) {

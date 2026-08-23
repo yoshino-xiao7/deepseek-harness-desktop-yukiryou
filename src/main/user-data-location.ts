@@ -2,6 +2,7 @@ import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const PRODUCT_DIRECTORY = 'DeepSeek YukiRyou';
+const DEVELOPMENT_DIRECTORY = 'DeepSeek YukiRyou Development';
 const LEGACY_DIRECTORY = 'DSH Desktop';
 const MIGRATION_MARKER = '.migrated-from-dsh-desktop';
 
@@ -31,6 +32,14 @@ export async function prepareUserDataLocation(
     );
   }
   return productDirectory;
+}
+
+export async function prepareDevelopmentUserDataLocation(
+  appDataDirectory: string,
+): Promise<string> {
+  const developmentDirectory = join(appDataDirectory, DEVELOPMENT_DIRECTORY);
+  await mkdir(developmentDirectory, { recursive: true, mode: 0o700 });
+  return developmentDirectory;
 }
 
 async function exists(path: string): Promise<boolean> {

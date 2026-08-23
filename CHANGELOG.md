@@ -6,6 +6,32 @@
 
 ## [未发布]
 
+## [0.2.3-beta.3] - 2026-08-23
+
+### 新增
+
+- 内置 DeepSeek Harness 升级至 `0.1.1-rc.2`，加入 Vision Exp 模型、图片复用与上游沙箱安全修复；升级前为非空 Runtime Home 创建独立的 rc.2 回退副本。
+- 账户概览新增本机今日估算消耗：按官方逐请求 usage 与北京时间峰谷费率计算，悬浮在余额位置切换展示，点击同步刷新消耗和余额。
+- 插件市场新增由独立公开 JSON 维护的“YukiRyou · 实机验证”来源，记录开发者亲自安装测试过的精确插件版本，同时保留完整安装前安全预检。
+
+### 改进
+
+- Windows 改用可选择安装目录的向导式 NSIS 安装器、自绘原生标题栏和跟随 Harness 语言的菜单；更新检查直接读取正式 GitHub Release。
+- 插件市场的可安装与已安装列表均支持搜索；完整目录容量提升到 20,000 条/200 页，并为超过 100 页的真实增长加入回归门禁。
+- 移除重复的“外观”设置页，统一使用 Harness 官方“通用设置 → 外观”；未来完整 UI 风格通过声明式插件扩展。
+- 所有插件时间统一使用本地化格式，来源详情补充实测平台、Harness 版本和验证时间。
+
+### 修复
+
+- 保留并迁移适用于 Harness rc.2 的会话选择恢复补丁，避免启动时 pending 列表把持久化会话掩蔽为空白会话。
+- 开发版与正式版使用隔离的用户数据目录，避免开发调试污染已安装版本的状态。
+- 修复社区目录超过 10,000 条后被误判为无效响应、开发版无法读取插件的问题。
+
+### 发行
+
+- macOS 14+ Apple Silicon 提供 Developer ID 签名和 Apple 公证的 DMG、ZIP。
+- Windows 11 x64 提供未签名的向导式 Setup EXE 与便携 ZIP，并附独立 SHA-256 清单；可能出现 SmartScreen 警告。
+
 ## [0.2.3-beta.2] - 2026-08-23
 
 ### 修复
@@ -165,6 +191,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[0.2.3-beta.3]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.3
 [0.2.3-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.2
 [0.2.3-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.1
 [0.2.2-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.2-beta.1

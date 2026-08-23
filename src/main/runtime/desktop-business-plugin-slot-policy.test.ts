@@ -12,7 +12,7 @@ const pluginSources = [
 ] as const;
 
 describe('desktop business plugin slot policy', () => {
-  it.each(pluginSources)('%s contributes only through additive rc.8 slots', async (relativeUrl) => {
+  it.each(pluginSources)('%s contributes only through additive Runtime slots', async (relativeUrl) => {
     const source = await readFile(new URL(relativeUrl, import.meta.url), 'utf8');
     const slots = registeredSlotNames(source);
 

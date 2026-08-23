@@ -14,11 +14,11 @@ export interface RuntimeSlotContract {
 }
 
 /**
- * Phase 0 contract extracted from the dsh 0.1.0-rc.8 CLIENT_SLOT_API catalog.
+ * Contract verified against the dsh 0.1.1-rc.2 CLIENT_SLOT_API catalog.
  * This checked-in copy keeps unit tests independent from the gitignored vendored
  * Runtime; runtime:verify remains responsible for proving the pinned Runtime.
  */
-export const RC8_DESKTOP_SLOT_CONTRACT = [
+export const RUNTIME_DESKTOP_SLOT_CONTRACT = [
   {
     key: 'root',
     purpose: 'The built-in render-tree root hole and ancestor of every other seat.',
@@ -170,7 +170,7 @@ export const RC8_DESKTOP_SLOT_CONTRACT = [
 ] as const satisfies readonly RuntimeSlotContract[];
 
 export function runtimeSlotContract(key: string): RuntimeSlotContract {
-  const contract = RC8_DESKTOP_SLOT_CONTRACT.find((entry) => entry.key === key);
-  if (contract === undefined) throw new Error(`Unknown rc.8 desktop slot: ${key}`);
+  const contract = RUNTIME_DESKTOP_SLOT_CONTRACT.find((entry) => entry.key === key);
+  if (contract === undefined) throw new Error(`Unknown Runtime desktop slot: ${key}`);
   return contract;
 }

@@ -77,7 +77,7 @@ DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe
 DeepSeek.YukiRyou-win32-x64-<version>-portable.zip
 ```
 
-EXE 是 Squirrel 安装版；ZIP 解压后可直接运行，不写入安装注册项。两份产物使用同一固定 Runtime，并在真实 Windows runner 验证打包启动、会话恢复、EXE 首装/修复/卸载和便携 ZIP 启动。当前早期 Windows Beta 暂不做 Authenticode 签名，系统可能显示 SmartScreen 警告；请只从本仓库 Release 下载并核对 `SHA256SUMS-Windows.txt`，不要把未签名产物当作已获得 Windows 信任背书。
+EXE 是可修改安装目录的向导式 NSIS 安装版；ZIP 解压后可直接运行，不写入安装注册项。两份产物使用同一固定 Runtime，并在真实 Windows runner 验证打包启动、会话恢复、EXE 首装/修复/卸载和便携 ZIP 启动。当前早期 Windows Beta 暂不做 Authenticode 签名，系统可能显示 SmartScreen 警告；请只从本仓库 Release 下载并核对 `SHA256SUMS-Windows.txt`，不要把未签名产物当作已获得 Windows 信任背书。
 
 ## 当前可用功能
 
@@ -90,14 +90,14 @@ EXE 是 Squirrel 安装版；ZIP 解压后可直接运行，不写入安装注�
 
 ### 账户与工作区
 
-- **账户余额**：在“设置”上方显示当前 DeepSeek 凭据所属账户的余额，不展示无法由官方接口精确提供的今日消费。
+- **账户概览**：悬浮“设置”上方的按钮可查看本机今日估算与当前凭据所属账户余额；点击同时刷新两项。今日金额依据会话中的官方 usage 和北京时间峰谷费率估算，不冒充官方账单。
 - **Desktop Companion**：可收起右栏提供当前工作区文件树、相对 HEAD 的 Git 变更、增删行统计和只读 diff。
 - **适合阅读的预览**：Markdown 可在排版与源码之间切换，纯文本和常见图片也可在应用内预览。
 - **逐轮变更入口**：在 Harness 原生“产物”行下方展示本轮确认变更，点击即可进入对应文件审核。
 
 ### 设置、安全与发布
 
-- **真正有用的设置**：“外观”负责桌面壳风格注入；“关于”展示版本、开发者信息，并可直接检查和安装更新。
+- **单一外观入口**：浅色、深色和跟随系统统一使用“通用设置 → 外观”；“关于”展示版本、开发者信息与更新中心。后续完整 UI 风格作为可选插件交付。
 - **更新不打扰**：应用定时后台检查；只有发现可安装版本时，主界面才显示更新入口。
 - **隐私友好的诊断**：导出包只包含脱敏后的环境摘要和有界日志，不打包项目源码、会话或凭据。
 - **可信发布链**：候选包经过 Developer ID 签名、异机安装、真实应用稳定性测试、Apple 公证和最终产物复验后才会公开。
@@ -194,13 +194,13 @@ pnpm runtime:verify
 pnpm make:win
 ```
 
-仓库的 **Windows x64 candidate** 工作流会验证安装 EXE 与便携 ZIP，真实安装、启动、修复安装并卸载 Squirrel 候选。正式桌面发行工作流只把版本化 EXE、便携 ZIP 和 Windows SHA-256 清单加入与 macOS 相同的 GitHub Release；内部 NUPKG 与 `RELEASES` 不公开。
+仓库的 **Windows x64 candidate** 工作流会验证向导式 NSIS 安装 EXE 与便携 ZIP，真实执行自定义目录安装、启动、修复安装与卸载。正式桌面发行工作流只把版本化 EXE、便携 ZIP 和 Windows SHA-256 清单加入与 macOS 相同的 GitHub Release。
 
 ## 固定运行时
 
 | 组件 | 当前版本 | 策略 |
 | --- | --- | --- |
-| DeepSeek Harness | `0.1.0-rc.8` | 随应用固定并验证 |
+| DeepSeek Harness | `0.1.1-rc.2` | 随应用固定并验证 |
 | Node.js | `24.19.0` | 按 `darwin-arm64` / `win32-x64` 目标内置 |
 | pnpm | `10.34.5` | 仅供内置 Harness 使用 |
 | Electron | `43.4.0` | 桌面壳运行时 |

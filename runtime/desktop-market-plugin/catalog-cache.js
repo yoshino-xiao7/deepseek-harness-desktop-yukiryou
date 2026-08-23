@@ -6,7 +6,7 @@ import process from 'node:process';
 
 const CACHE_DIRECTORY = 'desktop-market-cache';
 const MAX_CACHE_BYTES = 16 * 1024 * 1024;
-const SOURCE_IDS = new Set(['dshfind', 'dsh-1024store', 'github-topic-dsh-plugin']);
+const SOURCE_IDS = new Set(['dshfind', 'yukiryou-curated', 'dsh-1024store', 'github-topic-dsh-plugin']);
 const CUSTOM_SOURCE_ID = /^custom-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 export function createCatalogSnapshotStore(options = {}) {

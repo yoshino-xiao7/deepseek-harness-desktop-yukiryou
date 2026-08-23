@@ -36,14 +36,13 @@ export function createRuntimeCompanionClient(token: string): RuntimeCompanionCli
           body: JSON.stringify({ kind: 'account.balance', force }),
           signal: AbortSignal.timeout(5_000),
         });
-        if (!response.ok) return { status: 'unavailable', reason: 'network' };
+        if (!response.ok) return unavailableBalance();
         const body = await readBoundedBody(response, MAX_RESPONSE_BYTES);
         return validatedAccountBalanceSnapshot(JSON.parse(body)) ?? {
-          status: 'unavailable',
-          reason: 'invalid-response',
+          status: 'unavailable', reason: 'invalid-response', today: { status: 'unavailable' },
         };
       } catch {
-        return { status: 'unavailable', reason: 'network' };
+        return unavailableBalance();
       }
     },
     async authorizeWorkspace(origin, input) {
@@ -65,6 +64,10 @@ export function createRuntimeCompanionClient(token: string): RuntimeCompanionCli
       }
     },
   };
+}
+
+function unavailableBalance(): AccountBalanceSnapshot {
+  return { status: 'unavailable', reason: 'network', today: { status: 'unavailable' } };
 }
 
 async function execute(origin: string, token: string, request: unknown): Promise<unknown> {

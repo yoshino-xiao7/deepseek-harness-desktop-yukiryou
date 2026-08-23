@@ -18,7 +18,7 @@ import { runtimeStartupTimeoutMs } from './runtime/runtime-startup-policy.js';
 import { createRuntimeRecoveryPolicy } from './runtime/runtime-recovery-policy.js';
 import { createHarnessRuntimeCommand } from './runtime/runtime-command.js';
 import { createRuntimeCompanionClient } from './runtime/runtime-companion-client.js';
-import { ensureRc8RuntimeHomeBackup } from './runtime/runtime-home-upgrade.js';
+import { ensureRuntimeHomeUpgradeBackup } from './runtime/runtime-home-upgrade.js';
 import {
   createPluginProfileBootstrap,
   type PluginProfileBootstrap,
@@ -201,7 +201,7 @@ export class AppCoordinator {
       // Resolve endpoint ownership before copying or opening Runtime Home. An
       // orphaned rc.7 process may still be writing the incompatible storage.
       runtimePort = await resolveStableRuntimePort(userData);
-      const upgradeBackup = await ensureRc8RuntimeHomeBackup(runtimeHome);
+      const upgradeBackup = await ensureRuntimeHomeUpgradeBackup(runtimeHome);
       if (upgradeBackup.status === 'created') {
         this.#log.write(
           'runtime.upgrade-backup-created',
@@ -270,7 +270,7 @@ export class AppCoordinator {
         join(runtimeRoot, 'node', 'bin'),
       ],
       workspaceRoot: app.getPath('documents'),
-      version: '0.1.0-rc.8',
+      version: '0.1.1-rc.2',
       startupTimeoutMs: runtimeStartupTimeoutMs(),
       shutdownTimeoutMs: 5_000,
       port: runtimePort.port,
@@ -320,7 +320,11 @@ export class AppCoordinator {
   async #readAccountBalance(force: boolean): Promise<AccountBalanceSnapshot> {
     const state = this.#runtime?.getState();
     if (state?.kind !== 'ready' || this.#companionToken === '') {
-      return { status: 'unavailable', reason: 'network' };
+      return {
+        status: 'unavailable',
+        reason: 'network',
+        today: { status: 'unavailable' },
+      };
     }
     return createRuntimeCompanionClient(this.#companionToken).readAccountBalance(
       state.origin,
@@ -745,7 +749,7 @@ export class AppCoordinator {
       [
         `Application: ${app.name} ${app.getVersion()}`,
         `Electron: ${process.versions.electron}`,
-        `Harness: 0.1.0-rc.8`,
+        `Harness: 0.1.1-rc.2`,
         `Architecture: ${process.arch}`,
         `Failure: ${failure?.code ?? 'none'}`,
         `Details: ${redact(failure?.message ?? 'No failure recorded')}`,
@@ -819,7 +823,7 @@ export class AppCoordinator {
           application: app.name,
           applicationVersion: app.getVersion(),
           electronVersion: process.versions.electron,
-          harnessVersion: '0.1.0-rc.8',
+          harnessVersion: '0.1.1-rc.2',
           architecture: process.arch,
           operatingSystem: `${process.platform} ${release()}`,
           failureCode: failure?.code ?? 'none',

@@ -1,10 +1,11 @@
-import { requestCustomCatalog, requestDsh1024Store, requestDshfindPage, requestGitHubSearch } from './catalog-network.js';
+import { requestCustomCatalog, requestDsh1024Store, requestDshfindPage, requestGitHubSearch, requestYukiRyouCatalog } from './catalog-network.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { URL } from 'node:url';
 
 const CACHE_MS = 5 * 60 * 1000;
 const PERSISTENT_CACHE_MS = 24 * 60 * 60 * 1000;
-const MAX_CATALOG_ITEMS = 10_000;
+const MAX_CATALOG_ITEMS = 20_000;
+const MAX_DSHFIND_PAGES = MAX_CATALOG_ITEMS / 100;
 const NPM_PACKAGE_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u;
 const STABLE_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
 const SOURCES = Object.freeze([
@@ -15,6 +16,15 @@ const SOURCES = Object.freeze([
     completeness: 'complete',
     builtIn: true,
     enabled: true,
+  }),
+  Object.freeze({
+    id: 'yukiryou-curated',
+    displayName: 'YukiRyou · 实机验证',
+    providerId: 'yukiryou-curated-json-v1',
+    completeness: 'complete',
+    builtIn: true,
+    enabled: true,
+    curated: true,
   }),
   Object.freeze({
     id: 'dsh-1024store',
@@ -39,6 +49,7 @@ export function createCatalog(options = {}) {
   const wait = options.wait ?? delay;
   const requests = options.requests ?? Object.freeze({
     dshfind: requestDshfindPage,
+    'yukiryou-curated': requestYukiRyouCatalog,
     'dsh-1024store': requestDsh1024Store,
     'github-topic-dsh-plugin': requestGitHubSearch,
     custom: requestCustomCatalog,
@@ -92,6 +103,8 @@ export function createCatalog(options = {}) {
           const observedAt = new Date(timestamp).toISOString();
           const normalized = sourceId === 'dshfind'
             ? normalizeDshfind(raw, observedAt, availableSources)
+            : sourceId === 'yukiryou-curated'
+              ? normalizeYukiRyouSnapshot(raw, observedAt, availableSources, mediaProxy)
             : sourceId === 'dsh-1024store'
               ? normalizeDsh1024Store(raw, observedAt, availableSources)
               : sourceId === 'github-topic-dsh-plugin'
@@ -181,7 +194,20 @@ function validateStoredItem(raw, source, observedAt, mediaProxy) {
   const packageTarget = isRecord(raw.package) && NPM_PACKAGE_PATTERN.test(raw.package.name ?? '') && STABLE_VERSION_PATTERN.test(raw.package.version ?? '')
     ? Object.freeze({ name: raw.package.name, version: raw.package.version })
     : undefined;
-  const candidate = state === 'candidate' && reason === 'provider-verified-repository-backlink' && packageTarget !== undefined;
+  const developerVerification = raw.developerVerification === undefined
+    ? undefined
+    : normalizeDeveloperVerification(raw.developerVerification);
+  const providerCandidate = state === 'candidate' &&
+    reason === 'provider-verified-repository-backlink' &&
+    source.id !== 'yukiryou-curated' &&
+    packageTarget !== undefined &&
+    developerVerification === undefined;
+  const developerCandidate = state === 'candidate' &&
+    reason === 'developer-installed-and-reviewed' &&
+    source.id === 'yukiryou-curated' &&
+    packageTarget !== undefined &&
+    developerVerification !== undefined;
+  const candidate = providerCandidate || developerCandidate;
   const browseOnly = state === 'browse-only' && ['missing-exact-package-identity', 'incomplete-source-index', 'custom-source-unverified'].includes(reason) && raw.package === undefined;
   if (!candidate && !browseOnly) throw catalogError('invalid-cache', 'Cached installability is invalid');
   const media = validateInternalMedia(raw._media, mediaProxy);
@@ -190,6 +216,7 @@ function validateStoredItem(raw, source, observedAt, mediaProxy) {
     categories: Object.freeze([...categories]),
     publisher: Object.freeze({ name: publisher }),
     ...(packageTarget === undefined ? {} : { package: packageTarget }),
+    ...(developerVerification === undefined ? {} : { developerVerification }),
     installability: Object.freeze({ state, reason }),
     provenance: Object.freeze({ sourceId: source.id, providerId: source.providerId, observedAt }),
     ...(media === undefined ? {} : { _media: media }),
@@ -243,7 +270,7 @@ function normalizeDsh1024Store(raw, observedAt, availableSources) {
     items.push(item);
   }
   return snapshot({
-    source: SOURCES[1], availableSources,
+    source: builtInSource('dsh-1024store'), availableSources,
     observedAt,
     providerTotal,
     items,
@@ -306,7 +333,7 @@ function parseDshfindPage(raw, expectedPage) {
     !Number.isSafeInteger(page) || page !== expectedPage ||
     perPage !== 100 ||
     !Number.isSafeInteger(total) || total < 0 || total > MAX_CATALOG_ITEMS ||
-    !Number.isSafeInteger(totalPages) || totalPages < 0 || totalPages > 100 ||
+    !Number.isSafeInteger(totalPages) || totalPages < 0 || totalPages > MAX_DSHFIND_PAGES ||
     totalPages !== (total === 0 ? 0 : Math.ceil(total / 100)) ||
     typeof dataVersion !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(dataVersion)
   ) throw catalogError('invalid-response', 'dshfind page metadata is inconsistent');
@@ -328,7 +355,7 @@ function normalizeDshfind(scan, observedAt, availableSources) {
     }
   }
   return snapshot({
-    source: SOURCES[0], availableSources, observedAt, providerTotal: scan.total, providerRevision: scan.dataVersion, items, complete: true,
+    source: builtInSource('dshfind'), availableSources, observedAt, providerTotal: scan.total, providerRevision: scan.dataVersion, items, complete: true,
   });
 }
 
@@ -396,7 +423,7 @@ function normalizeGitHubSnapshot(raw, observedAt, availableSources, mediaProxy) 
     seen.add(item.id);
   }
   return snapshot({
-    source: SOURCES[2], availableSources,
+    source: builtInSource('github-topic-dsh-plugin'), availableSources,
     observedAt,
     providerTotal: raw.total_count,
     items,
@@ -433,6 +460,83 @@ function normalizeGitHubRepository(entry, observedAt, mediaProxy) {
     installability: Object.freeze({ state: 'browse-only', reason: 'incomplete-source-index' }),
     provenance: Object.freeze({ sourceId: 'github-topic-dsh-plugin', providerId: 'github-rest-search', observedAt }),
     ...(media === undefined ? {} : { _media: media }),
+  });
+}
+
+function normalizeYukiRyouSnapshot(raw, observedAt, availableSources, mediaProxy) {
+  if (!isRecord(raw) || raw.schemaVersion !== 1 || !Array.isArray(raw.items) || raw.items.length > 500) {
+    throw catalogError('invalid-response', 'Invalid YukiRyou curated catalog payload');
+  }
+  const revision = boundedString(raw.revision, 160);
+  if (!revision) throw catalogError('invalid-response', 'YukiRyou catalog revision is required');
+  const source = builtInSource('yukiryou-curated');
+  const items = [];
+  const seen = new Set();
+  for (const entry of raw.items) {
+    const item = normalizeYukiRyouItem(entry, source, observedAt, mediaProxy);
+    if (seen.has(item.id)) throw catalogError('duplicate-id', 'Duplicate curated catalog id');
+    seen.add(item.id);
+    items.push(item);
+  }
+  return snapshot({
+    source, availableSources, observedAt, providerTotal: items.length,
+    providerRevision: revision, items, complete: true,
+  });
+}
+
+function normalizeYukiRyouItem(entry, source, observedAt, mediaProxy) {
+  if (!isRecord(entry) || !isRecord(entry.package) || !isRecord(entry.verification)) {
+    throw catalogError('invalid-response', 'Invalid YukiRyou curated catalog item');
+  }
+  const providerItemId = boundedString(entry.id, 240);
+  const displayName = boundedString(entry.displayName, 160);
+  const summary = typeof entry.summary === 'string' && entry.summary.length <= 1_000 ? entry.summary : undefined;
+  const repository = canonicalGitHubRepository(entry.repository);
+  const publisher = isRecord(entry.publisher) ? boundedString(entry.publisher.name, 100) : undefined;
+  const packageName = boundedString(entry.package.name, 214);
+  const packageVersion = boundedString(entry.package.version, 100);
+  const categories = Array.isArray(entry.categories)
+    ? entry.categories.map((value) => boundedString(value, 50)).filter(Boolean)
+    : [];
+  const verification = normalizeDeveloperVerification(entry.verification);
+  if (
+    !providerItemId || !displayName || summary === undefined || !repository || !publisher ||
+    !packageName || !NPM_PACKAGE_PATTERN.test(packageName) ||
+    !packageVersion || !STABLE_VERSION_PATTERN.test(packageVersion) ||
+    categories.length > 12 || categories.length !== entry.categories?.length || verification === undefined
+  ) throw catalogError('invalid-response', 'Invalid YukiRyou curated catalog item identity');
+  const media = createInternalMedia(entry.icon, mediaProxy);
+  if (entry.icon !== undefined && media === undefined) throw catalogError('invalid-response', 'Invalid curated catalog icon');
+  return Object.freeze({
+    id: `${source.id}:${providerItemId}`,
+    displayName,
+    summary,
+    repository,
+    categories: Object.freeze([...new Set(categories)]),
+    publisher: Object.freeze({ name: publisher }),
+    package: Object.freeze({ name: packageName, version: packageVersion }),
+    developerVerification: verification,
+    installability: Object.freeze({ state: 'candidate', reason: 'developer-installed-and-reviewed' }),
+    provenance: Object.freeze({ sourceId: source.id, providerId: source.providerId, observedAt }),
+    ...(media === undefined ? {} : { _media: media }),
+  });
+}
+
+function normalizeDeveloperVerification(raw) {
+  if (!isRecord(raw) || raw.status !== 'installed') return undefined;
+  const testedAt = boundedIsoDate(raw.testedAt);
+  const harnessVersion = boundedString(raw.harnessVersion, 80);
+  const allowedPlatforms = new Set(['darwin-arm64', 'win32-x64']);
+  const platforms = Array.isArray(raw.platforms)
+    ? [...new Set(raw.platforms.filter((value) => allowedPlatforms.has(value)))]
+    : [];
+  const notes = raw.notes === undefined ? undefined : boundedString(raw.notes, 500);
+  if (!testedAt || !harnessVersion || platforms.length === 0 || platforms.length !== raw.platforms?.length ||
+    (raw.notes !== undefined && notes === undefined)) return undefined;
+  return Object.freeze({
+    status: 'installed', testedAt, harnessVersion,
+    platforms: Object.freeze(platforms),
+    ...(notes === undefined ? {} : { notes }),
   });
 }
 
@@ -520,6 +624,12 @@ async function resolveSources(sourceRegistry) {
       order: entry.order,
     })),
   ]);
+}
+
+function builtInSource(id) {
+  const source = SOURCES.find((entry) => entry.id === id);
+  if (source === undefined) throw catalogError('invalid-source', `Unknown built-in source ${id}`);
+  return source;
 }
 
 function snapshot({ source, availableSources, observedAt, providerTotal, providerRevision, items, complete }) {

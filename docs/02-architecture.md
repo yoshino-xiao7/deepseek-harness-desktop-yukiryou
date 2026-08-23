@@ -115,7 +115,7 @@ interface AppUpdater {
 1. 获取单实例锁并创建日志器。
 2. 初始化窗口并显示本地 Loading 页面。
 3. `RuntimePort` 优先复用持久 endpoint；进入旧日志迁移时，按轮转文件物理顺序选择最后 ready origin，同时枚举保留日志中的全部不同 ready 端口。任一端口在宽限期后仍被占用，都在写入 endpoint 状态、复制或打开 Runtime Home 前失败关闭。
-4. endpoint 所有权确认后，原子发布 rc.8 回退事务意图，在 Harness 打开 Runtime Home 前完成完整副本，再校验随包资源清单与架构。
+4. endpoint 所有权确认后，原子发布当前 Harness 版本的回退事务意图，在 Harness 打开 Runtime Home 前完成完整副本，再校验随包资源清单与架构。
 5. 生成每次启动的新 Companion secret 与 owner PID，以显式 `--host 127.0.0.1 --port <port>` 启动 dsh；设置独立 `DSH_HOME`，只传递明确白名单环境变量。
 6. 对预期 origin 做带超时和退避的首页探测与 HMAC nonce challenge，同时监控 child exit；错误响应、旧版 403 探针和伪造 proof 都不能就绪。
 7. 就绪后让 `DesktopWindow` 在本地顶栏下方的隔离 `WebContentsView` 中加载已验证的 Harness UI。
@@ -140,8 +140,9 @@ interface AppUpdater {
 ├── logs/                  # 轮转且脱敏的桌面壳/运行时日志
 ├── diagnostics/           # 用户显式导出的诊断包
 ├── runtime-endpoint.json  # 稳定 loopback host/port 与选择时间
-├── .dsh-0.1.0-rc.8-storage-v1.json # rc.8 回退副本事务意图
-└── runtime.pre-dsh-0.1.0-rc.8[.N]/ # 升级前 Runtime Home 回退副本
+├── .dsh-0.1.1-rc.2-storage-v1.json # rc.2 回退副本事务意图
+├── runtime.pre-dsh-0.1.1-rc.2[.N]/ # 本次升级前 Runtime Home 回退副本
+└── runtime.pre-dsh-0.1.0-rc.8[.N]/ # 保留的历史回退副本（若存在）
 ```
 
 缓存放入 `~/Library/Caches/<BundleId>/`，不与持久数据混放。应用升级不删除 `runtime/`；卸载说明必须明确数据不会随 `.app` 删除。

@@ -5,7 +5,10 @@ import {
   isReleaseSmokeTest,
   releaseSmokeMarker,
 } from './release-smoke.js';
-import { prepareUserDataLocation } from './user-data-location.js';
+import {
+  prepareDevelopmentUserDataLocation,
+  prepareUserDataLocation,
+} from './user-data-location.js';
 import {
   shouldConfigureWindowsApplicationIdentity,
   windowsAppUserModelId,
@@ -29,7 +32,10 @@ async function run(): Promise<void> {
     argument.startsWith('--user-data-dir='),
   );
   if (!hasExplicitUserData) {
-    const userData = await prepareUserDataLocation(app.getPath('appData'));
+    const appData = app.getPath('appData');
+    const userData = app.isPackaged
+      ? await prepareUserDataLocation(appData)
+      : await prepareDevelopmentUserDataLocation(appData);
     app.setPath('userData', userData);
   }
   const coordinator = new AppCoordinator();

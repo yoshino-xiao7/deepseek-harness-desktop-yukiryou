@@ -9,11 +9,14 @@ const ROUTE = '/plugins/@dsh-desktop/companion/rpc';
 const TOKEN_HEADER = 'x-dsh-desktop-companion-token';
 const MAX_REQUEST_BYTES = 4 * 1024;
 
-export const inject = ['webServer', 'credentials', 'workspaceRegistry'];
+export const inject = ['webServer', 'credentials', 'workspaceRegistry', 'sessionQuery'];
 
 export function apply(ctx) {
   const expectedToken = process.env.DSH_DESKTOP_COMPANION_TOKEN ?? '';
-  const accountBalance = createAccountBalance({ credentials: ctx.credentials });
+  const accountBalance = createAccountBalance({
+    credentials: ctx.credentials,
+    sessionQuery: ctx.sessionQuery,
+  });
   ctx.effect(
     () => monitorDesktopOwner(process.env.DSH_DESKTOP_OWNER_PID),
     'deepseek-yukiryou: desktop owner watchdog',

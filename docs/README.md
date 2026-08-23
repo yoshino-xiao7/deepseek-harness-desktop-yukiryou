@@ -14,6 +14,7 @@
 10. [GitHub 与 Apple 发布准备](09-github-and-apple-release.md)
 11. [Desktop Companion 完整实现方案](10-desktop-companion-plan.md)
 12. [一体化桌面框架与插件市场改造方案](11-integrated-desktop-shell-and-plugin-market.md)
+13. [开发者实机验证插件来源](13-developer-curated-plugin-source.md)
 
 关键且难以逆转的决策记录在 [`adr/`](adr/)；领域术语以仓库根目录的 [`CONTEXT.md`](../CONTEXT.md) 为准。
 
@@ -24,7 +25,7 @@
 - 分发方式：站外直接下载签名、公证后的 DMG/ZIP，不进入 Mac App Store。
 - 运行方式：桌面壳启动随包固定版本的官方 Harness，再加载其本地 Web UI。
 - 更新单位：整个应用原子更新；不单独在线升级 Harness。
-- 当前阶段：macOS arm64 已形成签名、公证、异机安装与更新发布链；当前正在准备包含 Harness rc.8、会话恢复修复和升级回退副本的 `v0.2.2-beta.1`。实时事实以 [`07-current-status.md`](07-current-status.md) 为准。
+- 当前阶段：macOS arm64 与 Windows x64 已形成候选构建和真机验证链；`yukiryou/v0.2.3-beta.3` 已完成 Harness 0.1.1-rc.2、账户概览与动态开发者实机验证来源集成，进入正式发行门禁。实时事实以 [`07-current-status.md`](07-current-status.md) 为准。
 - 下一阶段：按已接受的 [`11-integrated-desktop-shell-and-plugin-market.md`](11-integrated-desktop-shell-and-plugin-market.md) 推进一体化窗口、插件目录与 Windows 11 x64 发行适配。宠物实验已归档，不属于当前产品路线。
 
 ## 发行配置

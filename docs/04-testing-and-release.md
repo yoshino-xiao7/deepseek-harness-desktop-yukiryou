@@ -115,7 +115,7 @@ Windows 候选 CI 会同时生成并验证未签名的向导式 NSIS `Setup.exe`
 - 不自动降级 Harness 数据格式。若新版 dsh 写入不可逆格式，发布前必须提供备份/恢复策略，否则不升级该运行时。
 - 用户回滚应用时不得自动删除 Runtime Home。
 
-rc.8 首次启动时，桌面壳先完成 Runtime endpoint 所有权检查；只有轮转日志中保留的全部不同旧版 ready 端口均已释放，才在同级 `.dsh-0.1.0-rc.8-storage-v1.json` 原子记录本次回退事务选择的目标，并把非空的 `~/Library/Application Support/DeepSeek YukiRyou/runtime` 完整复制为 `runtime.pre-dsh-0.1.0-rc.8`；只有目标副本完整发布后才启动 Harness。若复制中断，下次启动复用同一目标继续，不会连续创建 `.1`、`.2` 耗尽磁盘。需要回滚时先完全退出应用，把当前 `runtime` 重命名保留为 `runtime.rc8-failed`，将备份复制回 `runtime`，删除同级事务标记，再安装旧版应用；不要让 rc.7 直接打开已经由 rc.8 写入的目录，也不要在确认恢复前删除任一副本。若之后再次升级 rc.8，桌面壳会创建新的编号回退副本，不覆盖最初备份；稳定 Runtime origin 会按日志物理顺序采用旧版最后一次 ready 记录，不依赖系统时钟，也无需手工编辑端口状态。
+rc.2 首次启动时，桌面壳先完成 Runtime endpoint 所有权检查；只有轮转日志中保留的全部不同旧版 ready 端口均已释放，才在同级 `.dsh-0.1.1-rc.2-storage-v1.json` 原子记录本次回退事务选择的目标，并把非空 Runtime Home 完整复制为 `runtime.pre-dsh-0.1.1-rc.2[.N]`；只有目标副本完整发布后才启动 Harness。若复制中断，下次启动复用同一目标继续，不会连续创建副本耗尽磁盘。rc.8 的历史 marker 与回退目录保持不动；回滚 rc.2 时也不得删除任一历史副本，直到恢复验证完成。
 
 规范支持的 `v0.2.1-beta.2 → rc.8` 路径要求先从应用菜单完整退出旧版。若旧版被强制退出、main 崩溃或 ready 日志被清理，必须先重启 macOS 再升级：beta.2 的 detached Runtime 没有 owner watchdog，且在日志也丢失时候选版无法安全识别它的端口。重启保证不存在两个 Runtime 并发写同一 Home；若最后 ready 记录已丢失，一次性 origin 迁移无法恢复原 localStorage，用户可能需要从 Harness 侧栏手动重新选择原会话。发布门禁覆盖保留日志的正常退出升级；强杀且日志丢失属于这条显式人工恢复合同，不宣称自动修复。
 

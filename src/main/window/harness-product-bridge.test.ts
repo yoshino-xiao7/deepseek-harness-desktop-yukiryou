@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ACCOUNT_BALANCE_REQUEST_CHANNEL,
   ACCOUNT_BALANCE_STATE_CHANNEL,
+  type AccountBalanceSnapshot,
 } from '../../shared/account-balance.js';
 import { HARNESS_CONTEXT_CHANNEL } from '../../shared/desktop-companion.js';
 import { DESKTOP_FRAME_HEALTH_CHANNEL } from '../../shared/desktop-frame-health.js';
@@ -159,7 +160,7 @@ describe('Harness product bridge', () => {
 
   it('replays update state and suppresses stale async balance results after disposal', async () => {
     const webContents = new FakeWebContents();
-    let resolveBalance: ((value: { status: 'unavailable'; reason: 'network' }) => void) | undefined;
+    let resolveBalance: ((value: AccountBalanceSnapshot) => void) | undefined;
     const bridge = createBridge(webContents, {
       onAccountBalanceRequest: () => new Promise((resolve) => {
         resolveBalance = resolve;
@@ -171,7 +172,7 @@ describe('Harness product bridge', () => {
     bridge.restoreAfterLoad();
     webContents.emit('ipc-message', {}, ACCOUNT_BALANCE_REQUEST_CHANNEL, true);
     bridge.dispose();
-    resolveBalance?.({ status: 'unavailable', reason: 'network' });
+    resolveBalance?.({ status: 'unavailable', reason: 'network', today: { status: 'unavailable' } });
     await Promise.resolve();
 
     expect(
@@ -429,7 +430,9 @@ function createBridge(
     onAppearance: vi.fn(),
     onLocale: vi.fn(),
     onUpdateCommand: vi.fn(),
-    onAccountBalanceRequest: async () => ({ status: 'unavailable', reason: 'network' }),
+    onAccountBalanceRequest: async () => ({
+      status: 'unavailable', reason: 'network', today: { status: 'unavailable' },
+    }),
     onHarnessContext: vi.fn(),
     onHarnessReviewIntent: async () => ({ kind: 'unavailable', reason: 'no-workspace' }),
     onHarnessReviewResponse: vi.fn(),

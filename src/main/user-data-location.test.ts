@@ -3,9 +3,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { prepareUserDataLocation } from './user-data-location.js';
+import {
+  prepareDevelopmentUserDataLocation,
+  prepareUserDataLocation,
+} from './user-data-location.js';
 
 describe('branded user data location', () => {
+  it('isolates development data from the installed application', async () => {
+    const appData = await mkdtemp(join(tmpdir(), 'deepseek-yukiryou-data-'));
+
+    const result = await prepareDevelopmentUserDataLocation(appData);
+
+    expect(result).toBe(join(appData, 'DeepSeek YukiRyou Development'));
+    await expect(mkdir(result)).rejects.toMatchObject({ code: 'EEXIST' });
+  });
+
   it('copies legacy application data without removing the backup', async () => {
     const appData = await mkdtemp(join(tmpdir(), 'deepseek-yukiryou-data-'));
     const legacy = join(appData, 'DSH Desktop');

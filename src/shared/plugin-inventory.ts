@@ -31,7 +31,7 @@ export interface ExplainedPluginInventoryItem {
 }
 
 /**
- * Phase 0 is deliberately a read-only projection of rc.8's authoritative
+ * Phase 0 is deliberately a read-only projection of the bundled Runtime's authoritative
  * Loader snapshot. Ownership is deployment provenance, not a security claim.
  */
 export function explainPluginInventoryEntry(

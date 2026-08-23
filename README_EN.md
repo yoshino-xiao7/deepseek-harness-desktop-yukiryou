@@ -77,7 +77,7 @@ DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe
 DeepSeek.YukiRyou-win32-x64-<version>-portable.zip
 ~~~
 
-The EXE is the Squirrel installer; the ZIP runs after extraction without registering an installation. Both contain the same pinned Runtime and are verified on a real Windows runner for packaged startup, session restoration, EXE install/repair/uninstall, and portable ZIP startup. Early Windows betas are intentionally not Authenticode-signed, so Windows may show a SmartScreen warning. Download only from this repository's Releases and verify `SHA256SUMS-Windows.txt`; an unsigned artifact does not carry Windows trust endorsement.
+The EXE is a guided NSIS installer that lets users choose the install directory; the ZIP runs after extraction without registering an installation. Both contain the same pinned Runtime and are verified on a real Windows runner for packaged startup, session restoration, EXE install/repair/uninstall, and portable ZIP startup. Early Windows betas are intentionally not Authenticode-signed, so Windows may show a SmartScreen warning. Download only from this repository's Releases and verify `SHA256SUMS-Windows.txt`; an unsigned artifact does not carry Windows trust endorsement.
 
 ## Available today
 
@@ -90,14 +90,14 @@ The EXE is the Squirrel installer; the ZIP runs after extraction without registe
 
 ### Account and workspace
 
-- **Account balance:** a compact row above Settings shows the balance of the account associated with the active DeepSeek credential. It does not claim a daily-spend value that the public API cannot provide precisely.
+- **Account overview:** hover the row above Settings to see a local today estimate and the active credential's account balance; click to refresh both. The estimate uses provider-reported session usage and Beijing peak/off-peak rates, and is never presented as an official bill.
 - **Desktop Companion:** a collapsible panel shows the current workspace tree, Git changes relative to HEAD, line statistics, and read-only diffs.
 - **Readable previews:** Markdown switches between rendered and source views; plain text and common image formats can be previewed in the app.
 - **Per-turn change entry:** confirmed changes appear below Harness's native artifact row and open directly in review mode.
 
 ### Settings, security, and releases
 
-- **Useful settings:** Appearance controls desktop styling; About exposes versions, developer details, and the update center.
+- **One appearance entry:** light, dark, and system modes live in General → Appearance; About exposes versions, developer details, and updates. Full UI styles can later ship as optional plugins.
 - **Quiet updates:** background checks do not add a main-window entry unless an installable update is available.
 - **Private diagnostics:** exported diagnostics contain bounded, redacted environment and log data—not source files, sessions, or credentials.
 - **Trusted release pipeline:** candidates are Developer ID signed, installed on a fresh runner, exercised in a real-app soak, Apple-notarized, and verified again before publication.
@@ -187,13 +187,13 @@ pnpm runtime:verify
 pnpm make:win
 ~~~
 
-The **Windows x64 candidate** workflow verifies both the installer EXE and portable ZIP, and installs, launches, repair-installs, and uninstalls the Squirrel candidate. The desktop release workflow adds only the versioned EXE, portable ZIP, and Windows SHA-256 list to the same GitHub Release as macOS; internal NUPKG and `RELEASES` files stay private to CI.
+The **Windows x64 candidate** workflow verifies both the guided NSIS installer EXE and portable ZIP, and installs, launches, repair-installs, and uninstalls the candidate. The desktop release workflow adds only the versioned EXE, portable ZIP, and Windows SHA-256 list to the same GitHub Release as macOS.
 
 ## Pinned runtime
 
 | Component | Current version | Policy |
 | --- | --- | --- |
-| DeepSeek Harness | <code>0.1.0-rc.8</code> | Pinned and verified with the app |
+| DeepSeek Harness | <code>0.1.1-rc.2</code> | Pinned and verified with the app |
 | Node.js | <code>24.19.0</code> | Bundled per <code>darwin-arm64</code> / <code>win32-x64</code> target |
 | pnpm | <code>10.34.5</code> | Used only by the bundled Harness |
 | Electron | <code>43.4.0</code> | Desktop shell runtime |

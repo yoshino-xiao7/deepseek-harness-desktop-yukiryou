@@ -1,11 +1,11 @@
 /**
- * Temporary downstream patch for DeepSeek Harness 0.1.0-rc.8.
+ * Temporary downstream patch for DeepSeek Harness 0.1.1-rc.2.
  *
- * rc.8 adds `inputModalities` to the direct DeepSeek adapter, but the pi-ai
+ * rc.2 adds the Vision model and image pipeline, but the pi-ai
  * Models settings editor still does not expose its existing `models[].input`
  * field. Keep this transformation exact and version-scoped.
  */
-export const MODEL_CAPABILITIES_PATCH_DSH_VERSION = '0.1.0-rc.8';
+export const MODEL_CAPABILITIES_PATCH_DSH_VERSION = '0.1.1-rc.2';
 export const MODEL_CAPABILITIES_PATCH_MARKER =
   'deepseek-yukiryou:model-capabilities-patch:v1';
 

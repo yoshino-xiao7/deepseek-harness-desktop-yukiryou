@@ -10,10 +10,23 @@ export interface AccountBalanceAmount {
   readonly toppedUp: string;
 }
 
+export type TodaySpendSnapshot =
+  | { readonly status: 'unavailable' }
+  | {
+      readonly status: 'ready';
+      readonly currency: 'CNY';
+      readonly amount: string;
+      readonly requestCount: number;
+      readonly unpricedRequestCount: number;
+      readonly partial: boolean;
+      readonly since: string;
+    };
+
 export type ReadyAccountBalanceSnapshot = {
   readonly status: 'ready';
   readonly isAvailable: boolean;
   readonly balances: readonly AccountBalanceAmount[];
+  readonly today: TodaySpendSnapshot;
   readonly fetchedAt: string;
   readonly stale: boolean;
 };
@@ -29,6 +42,7 @@ export type AccountBalanceSnapshot =
         | 'rate-limited'
         | 'network'
         | 'invalid-response';
+      readonly today: TodaySpendSnapshot;
       readonly lastGood?: ReadyAccountBalanceSnapshot;
     };
 
@@ -43,9 +57,11 @@ export function validatedAccountBalanceSnapshot(
   if (value.status !== 'unavailable' || !isReason(value.reason)) return undefined;
   const lastGood = value.lastGood === undefined ? undefined : validatedReady(value.lastGood);
   if (value.lastGood !== undefined && lastGood === undefined) return undefined;
+  const today = validatedToday(value.today);
+  if (today === undefined) return undefined;
   return lastGood === undefined
-    ? { status: 'unavailable', reason: value.reason }
-    : { status: 'unavailable', reason: value.reason, lastGood };
+    ? { status: 'unavailable', reason: value.reason, today }
+    : { status: 'unavailable', reason: value.reason, today, lastGood };
 }
 
 function validatedReady(value: unknown): ReadyAccountBalanceSnapshot | undefined {
@@ -55,6 +71,7 @@ function validatedReady(value: unknown): ReadyAccountBalanceSnapshot | undefined
     typeof value.fetchedAt !== 'string' ||
     !Number.isFinite(Date.parse(value.fetchedAt)) ||
     typeof value.stale !== 'boolean' ||
+    validatedToday(value.today) === undefined ||
     !Array.isArray(value.balances) ||
     value.balances.length > 2
   ) return undefined;
@@ -70,7 +87,34 @@ function validatedReady(value: unknown): ReadyAccountBalanceSnapshot | undefined
     currencies.add(amount.currency);
     balances.push({ currency: amount.currency, total, granted, toppedUp });
   }
-  return { status: 'ready', isAvailable: value.isAvailable, balances, fetchedAt: value.fetchedAt, stale: value.stale };
+  return {
+    status: 'ready',
+    isAvailable: value.isAvailable,
+    balances,
+    today: validatedToday(value.today) as TodaySpendSnapshot,
+    fetchedAt: value.fetchedAt,
+    stale: value.stale,
+  };
+}
+
+function validatedToday(value: unknown): TodaySpendSnapshot | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.status === 'unavailable') return { status: 'unavailable' };
+  if (
+    value.status !== 'ready' || value.currency !== 'CNY' ||
+    validatedDecimal(value.amount) === undefined ||
+    !Number.isSafeInteger(value.requestCount) || Number(value.requestCount) < 0 ||
+    !Number.isSafeInteger(value.unpricedRequestCount) || Number(value.unpricedRequestCount) < 0 ||
+    typeof value.partial !== 'boolean' ||
+    typeof value.since !== 'string' || !Number.isFinite(Date.parse(value.since))
+  ) return undefined;
+  const requestCount = Number(value.requestCount);
+  const unpricedRequestCount = Number(value.unpricedRequestCount);
+  if (unpricedRequestCount > requestCount || value.partial !== (unpricedRequestCount > 0)) return undefined;
+  return {
+    status: 'ready', currency: 'CNY', amount: value.amount as string,
+    requestCount, unpricedRequestCount, partial: value.partial, since: value.since,
+  };
 }
 
 function isReason(value: unknown): value is Extract<AccountBalanceSnapshot, {status:'unavailable'}>['reason'] {

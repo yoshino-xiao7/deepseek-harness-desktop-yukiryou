@@ -10,17 +10,11 @@ window.__ModuleLoader__.load({
     const namespace = 'settings.desktop';
     const dictionaries = {
       zh: {
-        'appearance.nav': '外观',
-        'appearance.title': '外观',
-        'appearance.description': '选择 DeepSeek YukiRyou 与 DeepSeek Harness 的显示方式。',
-        'appearance.light': '浅色',
-        'appearance.dark': '深色',
-        'appearance.system': '跟随系统',
         'plugins.tab': '管理说明',
         'plugins.title': '插件管理',
         'plugins.description': '基于当前 Harness Loader 的真实快照，说明每个插件的来源、状态和为什么不能操作。',
         'plugins.readonlyTitle': '当前版本为只读清单',
-        'plugins.readonlyDescription': 'Harness rc.8 只提供插件状态查询，没有安全的启用、停用或卸载接口。这里不会显示无效按钮；后续受管安装能力会在具备事务和恢复机制后开放。',
+        'plugins.readonlyDescription': 'Harness 0.1.1-rc.2 只提供插件状态查询，没有安全的启用、停用或卸载接口。这里不会显示无效按钮；后续受管安装能力会在具备事务和恢复机制后开放。',
         'plugins.securityNote': '插件与 Harness 运行在同一进程权限范围内；“系统”与“依赖”表示装配来源，不代表安全沙箱。',
         'plugins.loading': '正在读取插件…',
         'plugins.error': '暂时无法读取插件清单。',
@@ -78,18 +72,11 @@ window.__ModuleLoader__.load({
         'about.footer': 'Built with DeepSeek Harness · Designed by YukiRyou',
       },
       en: {
-        'appearance.nav': 'Appearance',
-        'appearance.title': 'Appearance',
-        'appearance.description':
-          'Choose how DeepSeek YukiRyou and DeepSeek Harness are displayed.',
-        'appearance.light': 'Light',
-        'appearance.dark': 'Dark',
-        'appearance.system': 'System',
         'plugins.tab': 'Management',
         'plugins.title': 'Plugin management',
         'plugins.description': 'A live Harness Loader snapshot that explains each plugin’s provenance, state, and available actions.',
         'plugins.readonlyTitle': 'This inventory is read-only',
-        'plugins.readonlyDescription': 'Harness rc.8 exposes plugin status but no safe enable, disable, or uninstall API. Invalid controls are not shown; managed installation will remain closed until transactions and recovery are available.',
+        'plugins.readonlyDescription': 'Harness 0.1.1-rc.2 exposes plugin status but no safe enable, disable, or uninstall API. Invalid controls are not shown; managed installation will remain closed until transactions and recovery are available.',
         'plugins.securityNote': 'Plugins share process privileges with Harness. System and dependency labels describe deployment provenance, not a security sandbox.',
         'plugins.loading': 'Reading plugins…',
         'plugins.error': 'The plugin inventory is temporarily unavailable.',
@@ -192,67 +179,6 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-label-secondary);
         font-size: 14px;
         line-height: 22px;
-      }
-      .dsh-desktop-theme-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-      }
-      .dsh-desktop-theme-option {
-        appearance: none;
-        box-sizing: border-box;
-        display: flex;
-        min-height: 132px;
-        padding: 14px;
-        flex-direction: column;
-        gap: 12px;
-        border: 1px solid var(--dsw-alias-border-l2);
-        border-radius: 14px;
-        color: var(--dsw-alias-label-primary);
-        background: var(--dsw-alias-bg-layer-1);
-        cursor: pointer;
-        font: inherit;
-        text-align: left;
-      }
-      .dsh-desktop-theme-option:hover {
-        background: var(--dsw-alias-interactive-bg-hover);
-      }
-      .dsh-desktop-theme-option[aria-pressed='true'] {
-        border-color: var(--dsw-static-deepseek-500, #4d6bfe);
-        box-shadow: 0 0 0 1px var(--dsw-static-deepseek-500, #4d6bfe);
-      }
-      .dsh-desktop-theme-preview {
-        display: grid;
-        height: 72px;
-        overflow: hidden;
-        grid-template-columns: 30% 70%;
-        border: 1px solid var(--dsw-alias-border-l2);
-        border-radius: 9px;
-        background: #fff;
-      }
-      .dsh-desktop-theme-preview::before {
-        content: '';
-        background: #f4f5f7;
-        border-right: 1px solid #e4e6ea;
-      }
-      .dsh-desktop-theme-preview-dark {
-        background: #15171c;
-      }
-      .dsh-desktop-theme-preview-dark::before {
-        background: #20232a;
-        border-right-color: #30343d;
-      }
-      .dsh-desktop-theme-preview-system {
-        position: relative;
-        background: linear-gradient(135deg, #fff 0 50%, #15171c 50% 100%);
-      }
-      .dsh-desktop-theme-preview-system::before {
-        background: linear-gradient(135deg, #f4f5f7 0 50%, #20232a 50% 100%);
-      }
-      .dsh-desktop-theme-label {
-        font-size: 14px;
-        font-weight: 500;
-        text-align: center;
       }
       .dsh-desktop-plugin-page {
         width: min(820px, 100%);
@@ -642,7 +568,6 @@ window.__ModuleLoader__.load({
         text-align: center;
       }
       @media (max-width: 760px) {
-        .dsh-desktop-theme-grid { grid-template-columns: 1fr; }
         .dsh-desktop-about-hero { align-items: flex-start; }
         .dsh-desktop-about-logo { width: 78px; height: 78px; border-radius: 19px; }
         .dsh-desktop-update-card { grid-template-columns: 38px minmax(0, 1fr); }
@@ -659,54 +584,6 @@ window.__ModuleLoader__.load({
       style.dataset.pluginCss = 'dsh-desktop-settings';
       style.textContent = css;
       document.head.appendChild(style);
-    }
-
-    function AppearanceSection({ t, themeStore, setTheme }) {
-      const snapshot = React.useSyncExternalStore(
-        themeStore.subscribe,
-        themeStore.getSnapshot,
-        themeStore.getSnapshot,
-      );
-      const choices = [
-        ['light', 'appearance.light'],
-        ['dark', 'appearance.dark'],
-        ['system', 'appearance.system'],
-      ];
-      return React.createElement(
-        'section',
-        { className: 'dsh-desktop-settings-page' },
-        React.createElement('h2', null, t('appearance.title')),
-        React.createElement(
-          'p',
-          { className: 'dsh-desktop-settings-description' },
-          t('appearance.description'),
-        ),
-        React.createElement(
-          'div',
-          { className: 'dsh-desktop-theme-grid' },
-          ...choices.map(([id, label]) =>
-            React.createElement(
-              'button',
-              {
-                key: id,
-                type: 'button',
-                className: 'dsh-desktop-theme-option',
-                'aria-pressed': snapshot.preference === id,
-                onClick: () => setTheme(id),
-              },
-              React.createElement('span', {
-                className: `dsh-desktop-theme-preview dsh-desktop-theme-preview-${id}`,
-                'aria-hidden': true,
-              }),
-              React.createElement(
-                'span',
-                { className: 'dsh-desktop-theme-label' },
-                t(label),
-              ),
-            ),
-          ),
-        ),
-      );
     }
 
     function pluginOwnership(moduleName) {
@@ -923,7 +800,7 @@ window.__ModuleLoader__.load({
       const update = updatePresentation(state, t);
       const rows = [
         ['about.application', state.currentVersion],
-        ['about.harness', '0.1.0-rc.8'],
+        ['about.harness', '0.1.1-rc.2'],
         ['about.node', '24.19.0'],
         ['about.pnpm', '10.34.5'],
         ['about.architecture', t('about.architectureValue')],
@@ -1054,18 +931,13 @@ window.__ModuleLoader__.load({
       );
     }
 
-    const inject = ['slots', 'locale', 'theme', 'remote', 'remote.pluginInventory'];
+    const inject = ['slots', 'locale', 'remote', 'remote.pluginInventory'];
     function apply(ctx) {
       ctx.effect(
         () => ctx.locale.register(namespace, dictionaries),
         'dsh-desktop: settings dictionaries',
       );
       const t = ctx.locale.bind(namespace);
-      const themeStore = {
-        getSnapshot: () => ctx.theme.getTheme(),
-        subscribe: (listener) =>
-          ctx.on('theme/change', () => listener()),
-      };
       const listPlugins = async () => {
         const result = await ctx.remote.pluginInventory.list();
         if (!result.ok) throw new Error('pluginInventory.list failed');
@@ -1082,22 +954,6 @@ window.__ModuleLoader__.load({
             inject: () => ({ list: listPlugins }),
           },
           PluginManagementTab,
-        ),
-      );
-      ctx.slots.inject('settings.section', () =>
-        ctx.slots.register(
-          {
-            name: 'settings.section',
-            id: 'desktop-appearance',
-            order: 30,
-            label: () => t('appearance.nav'),
-            locale: namespace,
-            inject: () => ({
-              themeStore,
-              setTheme: (id) => ctx.theme.setTheme(id),
-            }),
-          },
-          AppearanceSection,
         ),
       );
       ctx.slots.inject('settings.section', () =>

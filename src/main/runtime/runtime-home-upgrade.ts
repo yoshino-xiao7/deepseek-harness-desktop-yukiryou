@@ -12,25 +12,28 @@ import {
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 
-const RC8_UPGRADE_ID = 'dsh-0.1.0-rc.8-storage-v1';
+const RUNTIME_UPGRADE = {
+  id: 'dsh-0.1.1-rc.2-storage-v1',
+  version: '0.1.1-rc.2',
+} as const;
 
 export type RuntimeHomeUpgradeBackupResult =
   | { readonly status: 'already-prepared' | 'empty' }
   | { readonly status: 'created'; readonly backupPath: string };
 
 /**
- * Preserve the pre-rc.8 Runtime Home before Harness opens its incompatible
- * storage format. The marker lives outside Runtime Home so it is not included
+ * Preserve the previous Runtime Home before the bundled Harness opens it with
+ * the new storage format. The marker lives outside Runtime Home so it is not included
  * in, or modified by, the Harness migration.
  */
-export async function ensureRc8RuntimeHomeBackup(
+export async function ensureRuntimeHomeUpgradeBackup(
   runtimeHome: string,
 ): Promise<RuntimeHomeUpgradeBackupResult> {
   const userData = dirname(runtimeHome);
-  const markerPath = join(userData, `.${RC8_UPGRADE_ID}.json`);
+  const markerPath = join(userData, `.${RUNTIME_UPGRADE.id}.json`);
   const backupBasePath = join(
     userData,
-    `${basename(runtimeHome)}.pre-dsh-0.1.0-rc.8`,
+    `${basename(runtimeHome)}.pre-dsh-${RUNTIME_UPGRADE.version}`,
   );
 
   const intent = await readMarkerIntent(
@@ -76,7 +79,7 @@ async function resolveConcurrentMarker(
 ): Promise<RuntimeHomeUpgradeBackupResult> {
   const intent = await readMarkerIntent(markerPath, userData, backupBaseName);
   if (intent === undefined) {
-    throw new Error('Rc.8 Runtime Home upgrade marker disappeared during publication');
+    throw new Error('Runtime Home upgrade marker disappeared during publication');
   }
   if (
     intent.backupPath === undefined ||
@@ -87,7 +90,7 @@ async function resolveConcurrentMarker(
   // The winning process published its intent but has not atomically committed
   // the backup directory yet. Do not race its staging directory or let Harness
   // open Runtime Home before that copy completes.
-  throw new Error('Rc.8 Runtime Home upgrade preparation is already in progress');
+  throw new Error('Runtime Home upgrade preparation is already in progress');
 }
 
 async function createBackup(
@@ -117,7 +120,7 @@ async function nextAvailableBackupPath(basePath: string): Promise<string> {
     const candidate = `${basePath}.${String(index)}`;
     if (!(await pathExists(candidate))) return candidate;
   }
-  throw new Error('Too many rc.8 Runtime Home rollback copies');
+  throw new Error('Too many Runtime Home rollback copies');
 }
 
 async function writeMarker(
@@ -131,7 +134,7 @@ async function writeMarker(
     try {
       await temporaryFile.writeFile(
         `${JSON.stringify({
-          upgrade: RC8_UPGRADE_ID,
+          upgrade: RUNTIME_UPGRADE.id,
           backupName: backupPath === undefined ? null : basename(backupPath),
         }, null, 2)}\n`,
         { encoding: 'utf8' },
@@ -175,21 +178,21 @@ async function readMarkerIntent(
   try {
     value = JSON.parse(marker) as unknown;
   } catch (error) {
-    throw new Error('Invalid or incomplete rc.8 Runtime Home upgrade marker', {
+    throw new Error('Invalid or incomplete Runtime Home upgrade marker', {
       cause: error,
     });
   }
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Invalid rc.8 Runtime Home upgrade marker');
+    throw new Error('Invalid Runtime Home upgrade marker');
   }
   const record = value as Record<string, unknown>;
-  if (record.upgrade !== RC8_UPGRADE_ID) {
-    throw new Error('Unexpected rc.8 Runtime Home upgrade marker version');
+  if (record.upgrade !== RUNTIME_UPGRADE.id) {
+    throw new Error('Unexpected Runtime Home upgrade marker version');
   }
   const hasBackupName = Object.hasOwn(record, 'backupName');
   const hasBackupPath = Object.hasOwn(record, 'backupPath');
   if (hasBackupName === hasBackupPath) {
-    throw new Error('Invalid rc.8 Runtime Home backup target');
+    throw new Error('Invalid Runtime Home backup target');
   }
   const storedBackup = hasBackupName ? record.backupName : record.backupPath;
   if (storedBackup === null) {
@@ -203,7 +206,7 @@ async function readMarkerIntent(
     (backupName !== backupBaseName &&
       !new RegExp(`^${escapeRegExp(backupBaseName)}\\.[1-9][0-9]*$`).test(backupName))
   ) {
-    throw new Error('Invalid rc.8 Runtime Home backup target');
+    throw new Error('Invalid Runtime Home backup target');
   }
   return { backupPath: join(userData, backupName) };
 }

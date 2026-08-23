@@ -67,6 +67,10 @@ const runtimeNodeModules = join(runtimeDirectory, 'dsh', 'node_modules');
 const nodePtyDirectory = join(runtimeNodeModules, 'node-pty');
 const sharpDirectory = join(runtimeNodeModules, 'sharp');
 const koffiDirectory = join(runtimeNodeModules, 'koffi');
+const deepSeekAdapter = await readFile(
+  join(runtimeNodeModules, '@deepseek-ai', 'dsh-llm-deepseek', 'lib', 'index.js'),
+  'utf8',
+);
 const desktopFrameManifest = await readJson<DependencyPackageJson>(
   join(runtimeNodeModules, '@dsh-desktop', 'frame-prototype', 'package.json'),
 );
@@ -204,6 +208,13 @@ expectValue('desktop frame prototype version', desktopFrameManifest.version, '0.
 expectValue('desktop market version', desktopMarketManifest.version, '0.1.0');
 if (!clientRuntime.includes(SESSION_SELECTION_PATCH_MARKER)) {
   throw new Error('Harness session-selection startup patch is missing');
+}
+if (
+  !deepSeekAdapter.includes('deepseek-v4-flash-vision-exp') ||
+  !deepSeekAdapter.includes('inputModalities: ["text", "image"]') ||
+  !deepSeekAdapter.includes('llm-deepseek", "files-v3.json')
+) {
+  throw new Error('Harness rc.2 Vision catalog or Files API image pipeline is missing');
 }
 if (!desktopMarketCache.includes('createCatalogSnapshotStore')) {
   throw new Error('Desktop market persistent cache adapter is missing');
