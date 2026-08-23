@@ -112,6 +112,30 @@ describe('macOS release workflow contract', () => {
     );
   });
 
+  it('does not mistake a residual LockApp process for a locked remote desktop', async () => {
+    const [candidateWorkflow, publishedWorkflow] = await Promise.all([
+      readFile(
+        join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
+        'utf8',
+      ),
+      readFile(
+        join(
+          process.cwd(),
+          '.github',
+          'workflows',
+          'windows-published-diagnostics.yml',
+        ),
+        'utf8',
+      ),
+    ]);
+
+    for (const workflow of [candidateWorkflow, publishedWorkflow]) {
+      expect(workflow).toContain('Get-Process LogonUI');
+      expect(workflow).toContain('Residual LockApp processes:');
+      expect(workflow).not.toContain('Get-Process LockApp, LogonUI');
+    }
+  });
+
   it('exercises guided NSIS install, repair, and uninstall in an isolated directory', async () => {
     const [lifecycleScript, electronCleanup, windowsCandidate] = await Promise.all([
       readFile(
