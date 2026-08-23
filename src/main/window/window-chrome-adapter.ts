@@ -43,7 +43,7 @@ export function createMacWindowChromeAdapter(): WindowChromeAdapter {
     createOptions: (base) => ({
       ...baseWindowOptions(base),
       titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 16, y: 16 },
+      trafficLightPosition: { x: 14, y: 14 },
       transparent: true,
       backgroundColor: '#00000000',
       vibrancy: 'sidebar',
@@ -60,7 +60,7 @@ export function createWindowsWindowChromeAdapter(
   const material = micaAvailable ? 'mica' : 'opaque';
   const descriptor: WindowChromeDescriptor = {
     platform: 'win32',
-    captionHeight: 32,
+    captionHeight: 44,
     leadingSafeWidth: 0,
     trailingSafeWidth: 138,
     material,

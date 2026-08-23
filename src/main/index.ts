@@ -1,5 +1,4 @@
 import { app } from 'electron';
-import squirrelStartup from 'electron-squirrel-startup';
 
 import { AppCoordinator } from './app-coordinator.js';
 import {
@@ -9,7 +8,7 @@ import {
 import { prepareUserDataLocation } from './user-data-location.js';
 import {
   shouldConfigureWindowsApplicationIdentity,
-  windowsSquirrelAppUserModelId,
+  windowsAppUserModelId,
 } from './windows-release.js';
 
 async function run(): Promise<void> {
@@ -38,11 +37,7 @@ async function run(): Promise<void> {
 }
 
 if (shouldConfigureWindowsApplicationIdentity(process.platform)) {
-  app.setAppUserModelId(windowsSquirrelAppUserModelId);
+  app.setAppUserModelId(windowsAppUserModelId);
 }
 
-if (squirrelStartup) {
-  app.quit();
-} else {
-  void run();
-}
+void run();

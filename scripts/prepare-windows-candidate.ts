@@ -14,8 +14,7 @@ import { basename, join, resolve } from 'node:path';
 import {
   createWindowsCandidateManifest,
   resolveWindowsPortableArtifactName,
-  resolveWindowsSquirrelArtifactNames,
-  validateWindowsReleases,
+  resolveWindowsInstallerArtifactName,
   type WindowsCandidateArtifact,
 } from '../src/main/windows-candidate.ts';
 
@@ -24,7 +23,7 @@ if (process.platform !== 'win32' || process.arch !== 'x64') {
 }
 
 const sourceDirectory = resolve(
-  readArgument('--source') ?? join('out', 'make', 'squirrel.windows', 'x64'),
+  readArgument('--source') ?? join('out', 'make', 'nsis.windows', 'x64'),
 );
 const outputDirectory = resolve(
   readArgument('--output') ?? join('out', 'windows-candidate'),
@@ -40,22 +39,14 @@ if (version === undefined || version === '') {
   throw new Error('package.json must contain a version');
 }
 
-const names = resolveWindowsSquirrelArtifactNames(await readdir(sourceDirectory));
+const setupName = resolveWindowsInstallerArtifactName(await readdir(sourceDirectory));
 const portableSourceName = resolveWindowsPortableArtifactName(
   await readdir(portableSourceDirectory),
   version,
 );
-const packagePath = join(sourceDirectory, names.package);
-const packageBytes = (await stat(packagePath)).size;
-validateWindowsReleases(
-  await readFile(join(sourceDirectory, names.releases), 'utf8'),
-  names.package,
-  packageBytes,
-);
-
 await mkdir(outputDirectory, { recursive: true });
 const artifacts: WindowsCandidateArtifact[] = [];
-for (const file of [names.setup, names.package, names.releases]) {
+for (const file of [setupName]) {
   const source = join(sourceDirectory, file);
   const destination = join(outputDirectory, basename(file));
   await copyFile(source, destination);

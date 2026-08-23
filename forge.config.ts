@@ -1,16 +1,11 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerDMG } from '@electron-forge/maker-dmg';
-import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { execFile } from 'node:child_process';
 import { closeSync, openSync, readSync } from 'node:fs';
 import path from 'node:path';
 
-import {
-  windowsExecutableName,
-  windowsSquirrelPackageId,
-} from './src/main/windows-release.js';
 
 const signingIdentity = process.env.MACOS_SIGN_IDENTITY?.trim();
 const machOMagicNumbers = new Set([
@@ -114,13 +109,6 @@ const config: ForgeConfig = {
   makers: [
     new MakerDMG({ format: 'ULFO' }),
     new LongPathWindowsMakerZIP({}, ['darwin', 'win32']),
-    new MakerSquirrel({
-      name: windowsSquirrelPackageId,
-      exe: `${windowsExecutableName}.exe`,
-      setupExe: 'DeepSeek-YukiRyou-Setup.exe',
-      setupIcon: 'resources/icons/deepseek-yukiryou.ico',
-      noMsi: true,
-    }, ['win32']),
   ],
   plugins: [
     new VitePlugin({

@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { release } from 'node:os';
@@ -88,6 +88,11 @@ import type {
   ManagedPluginRollbackRequest,
   ManagedPluginRollbackResult,
 } from '../shared/managed-plugin-inventory.js';
+import {
+  WINDOW_MENU_CHANNEL,
+  validatedWindowMenuRequest,
+} from '../shared/window-menu.js';
+import { type DesktopLocale, validatedDesktopLocale } from '../shared/locale-sync.js';
 
 const moduleDirectory = __dirname;
 const RELEASE_DOWNLOAD_URL =
@@ -173,6 +178,7 @@ export class AppCoordinator {
       onUpdateCommand: (command) => void this.#handleUpdateCommand(command),
       onAccountBalanceRequest: (force) => this.#readAccountBalance(force),
       onHarnessContext: (snapshot) => void this.#handleHarnessContext(snapshot),
+      onLocale: (locale) => this.#installMenu(logDirectory, locale),
       onWorkspaceReviewRequest: (request) => this.#handleWorkspaceReviewRequest(request),
       onHarnessReviewIntent: (intent) =>
         this.#workspaceInspector?.previewChangedPath(intent.path, intent.historicalDiff) ??
@@ -303,7 +309,10 @@ export class AppCoordinator {
         }
       }
     });
-    this.#installMenu(logDirectory);
+    this.#installMenu(
+      logDirectory,
+      validatedDesktopLocale(app.getLocale()) ?? 'zh-CN',
+    );
     await this.#startRuntime();
     this.#updater.startAutomaticChecks();
   }
@@ -893,7 +902,9 @@ export class AppCoordinator {
         },
         available: {
           message: '发现新版本',
-          detail: '更新正在后台下载，完成后会提示你重启安装。',
+          detail: process.platform === 'win32'
+            ? '请在“关于”中打开 GitHub Releases，下载新版安装 EXE。'
+            : '更新正在后台下载，完成后会提示你重启安装。',
         },
       } as const;
       await dialog.showMessageBox({
@@ -1164,9 +1175,13 @@ export class AppCoordinator {
     }
   }
 
-  #installMenu(logDirectory: string): void {
+  #installMenu(logDirectory: string, locale: DesktopLocale): void {
+    const labels = locale === 'en-US'
+      ? { edit: 'Edit', view: 'View', window: 'Window', help: 'Help' }
+      : { edit: '编辑', view: '视图', window: '窗口', help: '帮助' };
     const menu = Menu.buildFromTemplate([
       {
+        id: 'file',
         label: app.name,
         submenu: [
           { role: 'about' },
@@ -1200,11 +1215,36 @@ export class AppCoordinator {
           { role: 'quit' },
         ],
       },
-      { role: 'editMenu' },
-      { role: 'viewMenu' },
-      { role: 'windowMenu' },
+      { id: 'edit', role: 'editMenu', label: labels.edit },
+      { id: 'view', role: 'viewMenu', label: labels.view },
+      { role: 'windowMenu', label: labels.window },
+      {
+        id: 'help',
+        label: labels.help,
+        submenu: [
+          {
+            label: locale === 'en-US' ? 'Check for Updates…' : '检查更新…',
+            click: () => void this.#checkForUpdates(),
+          },
+          {
+            label: locale === 'en-US' ? 'Open Logs' : '打开日志',
+            click: () => void shell.openPath(logDirectory),
+          },
+        ],
+      },
     ]);
     Menu.setApplicationMenu(menu);
+    ipcMain.removeAllListeners(WINDOW_MENU_CHANNEL);
+    ipcMain.on(WINDOW_MENU_CHANNEL, (event, value: unknown) => {
+      if (process.platform !== 'win32') return;
+      const request = validatedWindowMenuRequest(value);
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const submenu = request === undefined
+        ? undefined
+        : menu.getMenuItemById(request.id)?.submenu;
+      if (request === undefined || window === null || submenu === undefined) return;
+      submenu.popup({ window, x: request.x, y: request.y });
+    });
   }
 }
 

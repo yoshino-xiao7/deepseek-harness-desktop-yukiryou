@@ -41,6 +41,42 @@ body {
   user-select: none;
 }
 
+.windows-menu {
+  display: none;
+  height: 100%;
+  padding-left: 12px;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+:root[data-desktop-platform="win32"] .windows-menu:not([hidden]) {
+  display: flex;
+}
+
+.windows-menu button {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  color: color-mix(in srgb, currentColor 78%, transparent);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+}
+
+.windows-menu button:hover,
+.windows-menu button:focus-visible {
+  color: currentColor;
+  background: rgb(127 127 127 / 11%);
+  outline: none;
+}
+
+:root[data-desktop-platform="win32"] .companion-toggle {
+  right: 148px;
+}
+
 .companion-toggle {
   position: absolute;
   z-index: 4;

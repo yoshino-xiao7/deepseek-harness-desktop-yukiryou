@@ -86,58 +86,41 @@ describe('macOS release workflow contract', () => {
     );
   });
 
-  it('waits for Squirrel background cleanup before enforcing an empty install root', async () => {
+  it('exercises guided NSIS install, repair, and uninstall in an isolated directory', async () => {
     const [lifecycleScript, electronCleanup] = await Promise.all([
       readFile(
-        join(process.cwd(), 'scripts', 'windows-squirrel-lifecycle.ps1'),
+        join(process.cwd(), 'scripts', 'windows-nsis-lifecycle.ps1'),
         'utf8',
       ),
       readFile(join(process.cwd(), 'tests', 'e2e', 'electron-cleanup.ts'), 'utf8'),
     ]);
 
-    expect(lifecycleScript).toContain(
-      "Wait-Until -FailureMessage 'Unexpected files remained after Squirrel uninstall'",
-    );
-    expect(lifecycleScript).toContain(
-      '$script:unexpectedEntries = @(Get-UnexpectedInstallEntries)',
-    );
-    expect(lifecycleScript).not.toContain('vk_swiftshader.dll');
-    expect(lifecycleScript).not.toContain('vk_swiftshader_icd.json');
+    expect(lifecycleScript).toContain("@('/S', \"/D=$installRoot\")");
+    expect(lifecycleScript).toContain("'Uninstall DeepSeek YukiRyou.exe'");
+    expect(lifecycleScript).toContain('NSIS install, repair, and uninstall checks passed');
     expect(electronCleanup).toContain("'taskkill.exe'");
     expect(electronCleanup).toContain("'/t', '/f'");
     expect(electronCleanup).toContain('applicationProcess.exitCode !== null');
   });
 
-  it('only recovers persistent-runner installs carrying the lifecycle marker', async () => {
+  it('only recovers the isolated NSIS lifecycle directory', async () => {
     const [workflowSource, lifecycleScript] = await Promise.all([
       readFile(
         join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
         'utf8',
       ),
       readFile(
-        join(process.cwd(), 'scripts', 'windows-squirrel-lifecycle.ps1'),
+        join(process.cwd(), 'scripts', 'windows-nsis-lifecycle.ps1'),
         'utf8',
       ),
     ]);
 
     expect(workflowSource).toContain(
-      './scripts/windows-squirrel-lifecycle.ps1 -Action Recover',
+      './scripts/windows-nsis-lifecycle.ps1 -Action Recover',
     );
-    expect(lifecycleScript).toContain(
-      'Refusing to remove an unmarked pre-existing Squirrel installation',
-    );
-    expect(lifecycleScript).toContain(
-      "Where-Object { $_.DisplayName -eq 'DeepSeek YukiRyou' }",
-    );
-    expect(lifecycleScript).toContain(
-      "Write-Output 'Removed unregistered Squirrel self-cleanup tombstones'",
-    );
-    expect(lifecycleScript).toContain(
-      '[string]$marker.version -ne [string]$manifest.version',
-    );
-    expect(lifecycleScript).toContain(
-      "Remove-Item -LiteralPath $installRoot -Recurse -Force",
-    );
+    expect(lifecycleScript).toContain("Join-Path $stateRoot 'install'");
+    expect(lifecycleScript).toContain('Lifecycle state points outside the isolated install directory');
+    expect(lifecycleScript).toContain("Remove-Item -LiteralPath $stateRoot -Recurse -Force");
   });
 
   it('vendors the bundled runtime before running integration tests', async () => {
