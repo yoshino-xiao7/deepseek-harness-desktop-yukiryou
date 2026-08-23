@@ -455,17 +455,22 @@ describe('packaged desktop application', () => {
                 return;
               }
               const buttons = [...dialog.querySelectorAll('button')];
-              const appearance = buttons.find((button) =>
-                /^(外观|Appearance)$/.test(button.textContent?.trim() ?? ''),
+              const general = buttons.find((button) =>
+                /^(通用设置|General settings)$/.test(button.textContent?.trim() ?? ''),
               );
-              appearance?.click();
-              const appearancePage = await waitFor(() =>
-                dialog.querySelector('.dsh-desktop-theme-grid'),
-              );
-              if (!(appearancePage instanceof HTMLElement)) {
+              general?.click();
+              const themeButtons = await waitFor(() => {
+                const candidates = [...dialog.querySelectorAll('button')].filter((button) =>
+                  /^(浅色|Light|深色|Dark|跟随系统|System)$/.test(
+                    button.textContent?.trim() ?? '',
+                  ),
+                );
+                return candidates.length >= 3 ? candidates : undefined;
+              });
+              if (!Array.isArray(themeButtons)) {
                 resolve({
-                  error: 'appearance page did not render',
-                  appearanceFound: Boolean(appearance),
+                  error: 'general settings theme controls did not render',
+                  generalFound: Boolean(general),
                   navLabels: [...dialog.querySelectorAll('nav button')]
                     .map((button) => button.textContent?.trim()),
                   dialogText: dialog.textContent,
@@ -475,7 +480,21 @@ describe('packaged desktop application', () => {
                 });
                 return;
               }
-              const themeButtons = [...appearancePage.querySelectorAll('button')];
+              const appearance = [...dialog.querySelectorAll('nav button')].find((button) =>
+                /^(外观|Appearance)$/.test(button.textContent?.trim() ?? ''),
+              );
+              if (appearance instanceof HTMLButtonElement) {
+                resolve({
+                  error: 'duplicate appearance navigation is still present',
+                  navLabels: [...dialog.querySelectorAll('nav button')]
+                    .map((button) => button.textContent?.trim()),
+                  dialogText: dialog.textContent,
+                  pluginStyleLoaded: Boolean(document.querySelector(
+                    'style[data-plugin-css="dsh-desktop-settings"]',
+                  )),
+                });
+                return;
+              }
               const dark = themeButtons.find((button) =>
                 /^(深色|Dark)$/.test(button.textContent?.trim() ?? ''),
               );
@@ -539,8 +558,13 @@ describe('packaged desktop application', () => {
       }
       expect(settingsResult?.navLabels).toEqual(
         expect.arrayContaining([
-          expect.stringMatching(/^(外观|Appearance)$/),
+          expect.stringMatching(/^(通用设置|General settings)$/),
           expect.stringMatching(/^(关于|About)$/),
+        ]),
+      );
+      expect(settingsResult?.navLabels).not.toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^(外观|Appearance)$/),
         ]),
       );
       expect(settingsResult?.themeLabels).toEqual(
