@@ -17,6 +17,12 @@ import {
 import { runtimeStartupTimeoutMs } from './runtime/runtime-startup-policy.js';
 import { createRuntimeRecoveryPolicy } from './runtime/runtime-recovery-policy.js';
 import { createHarnessRuntimeCommand } from './runtime/runtime-command.js';
+import {
+  type DistributionRegion,
+  desktopUpdateSources,
+  distributionRegion,
+  releaseDownloadPageUrl,
+} from './distribution/distribution-routing.js';
 import { createRuntimeCompanionClient } from './runtime/runtime-companion-client.js';
 import { ensureRuntimeHomeUpgradeBackup } from './runtime/runtime-home-upgrade.js';
 import {
@@ -95,9 +101,6 @@ import {
 import { type DesktopLocale, validatedDesktopLocale } from '../shared/locale-sync.js';
 
 const moduleDirectory = __dirname;
-const RELEASE_DOWNLOAD_URL =
-  'https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest';
-
 export class AppCoordinator {
   #window: DesktopWindow | undefined;
   #runtime: RuntimeSupervisor | undefined;
@@ -123,6 +126,7 @@ export class AppCoordinator {
   #pluginRestartScheduled = false;
   #runtimeRoot = '';
   #carrierMode: ReturnType<typeof resolveDesktopCarrierMode> = 'legacy';
+  #distributionRegion: DistributionRegion = 'global';
 
   async run(): Promise<void> {
     if (!app.requestSingleInstanceLock()) {
@@ -145,6 +149,12 @@ export class AppCoordinator {
       process.env.DSH_DESKTOP_INTEGRATED_PROTOTYPE,
     );
     this.#carrierMode = carrierMode;
+    this.#distributionRegion = distributionRegion({
+      countryCode: app.getLocaleCountryCode(),
+      ...(process.env.DSH_DESKTOP_DISTRIBUTION_REGION === undefined
+        ? {}
+        : { override: process.env.DSH_DESKTOP_DISTRIBUTION_REGION }),
+    });
     const userData = app.getPath('userData');
     const runtimeHome = join(userData, 'runtime');
     const logDirectory = join(userData, 'logs');
@@ -162,6 +172,11 @@ export class AppCoordinator {
       currentVersion: app.getVersion(),
       platform: process.platform,
       architecture: process.arch,
+      updateSources: desktopUpdateSources({
+        region: this.#distributionRegion,
+        platform: process.platform,
+        architecture: process.arch,
+      }),
       onError: (error) => this.#handleUpdaterError(error),
     });
 
@@ -275,6 +290,7 @@ export class AppCoordinator {
       shutdownTimeoutMs: 5_000,
       port: runtimePort.port,
       developmentPluginFixture: developmentPluginFixtureEnabled(app.isPackaged),
+      distributionRegion: this.#distributionRegion,
       createCompanionToken: () => {
         const companionToken = randomBytes(32).toString('base64url');
         this.#runtimeStderr.rotateCompanionSecret(companionToken);
@@ -906,9 +922,7 @@ export class AppCoordinator {
         },
         available: {
           message: '发现新版本',
-          detail: process.platform === 'win32'
-            ? '请在“关于”中打开 GitHub Releases，下载新版安装 EXE。'
-            : '更新正在后台下载，完成后会提示你重启安装。',
+          detail: '更新正在后台下载，完成后会提示你重启安装。',
         },
       } as const;
       await dialog.showMessageBox({
@@ -924,7 +938,7 @@ export class AppCoordinator {
         type: 'error',
         title: '软件更新',
         message: '暂时无法检查更新',
-        detail: '请检查网络连接，或稍后通过 GitHub Releases 手动下载。',
+        detail: '国内源与 GitHub 备用源均不可用，请检查网络连接后重试。',
         buttons: ['好'],
       });
     }
@@ -936,7 +950,10 @@ export class AppCoordinator {
 
   async #handleUpdateCommand(command: UpdateCommand): Promise<void> {
     if (command === 'download') {
-      await shell.openExternal(RELEASE_DOWNLOAD_URL);
+      await shell.openExternal(
+        this.#updater?.getDownloadUrl() ??
+          releaseDownloadPageUrl(),
+      );
       return;
     }
     if (command === 'install') {

@@ -326,6 +326,14 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v5
         with:
           name: macos-notarized-artifacts
@@ -341,6 +349,14 @@ jobs:
           cp windows-assets/DeepSeek-YukiRyou-Setup.exe "release-assets/${ARTIFACT_NAME}-${RELEASE_VERSION}-win32-x64-Setup.exe"
           cp "windows-assets/${ARTIFACT_NAME}-win32-x64-${RELEASE_VERSION}-portable.zip" release-assets/
           (cd release-assets && shasum -a 256 "${ARTIFACT_NAME}-${RELEASE_VERSION}-win32-x64-Setup.exe" "${ARTIFACT_NAME}-win32-x64-${RELEASE_VERSION}-portable.zip" > SHA256SUMS-Windows.txt)
+      - name: Generate cross-platform auto-update metadata
+        run: |
+          node scripts/prepare-update-metadata.ts \
+            --assets=release-assets \
+            --output=update-metadata \
+            --version="${RELEASE_VERSION}"
+          cp update-metadata/darwin-arm64/latest-mac.yml release-assets/
+          cp update-metadata/win32-x64/latest.yml release-assets/
       - name: Create immutable draft release
         env:
           GH_TOKEN: ${{ github.token }}

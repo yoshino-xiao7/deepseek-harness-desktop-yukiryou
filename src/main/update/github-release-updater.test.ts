@@ -47,6 +47,31 @@ describe('Windows GitHub release updater', () => {
       status: 'manual',
       releaseName: 'v0.2.3-beta.3',
     });
+    expect(updater.getDownloadUrl()).toBe(
+      'https://github.com/example/releases/tag/v0.2.3-beta.3',
+    );
+  });
+
+  it('falls back to GitHub when the China release manifest is unavailable', async () => {
+    const request = vi.fn(async (input: string | URL | Request) =>
+      String(input).includes('download-cn.suzuki.ink')
+        ? new Response('blocked', { status: 503 })
+        : releaseResponse('v0.2.3-beta.3'));
+    const updater = new GitHubReleaseAppUpdater({
+      enabled: true,
+      currentVersion: '0.2.3-beta.2',
+      platform: 'win32',
+      architecture: 'x64',
+      onError: vi.fn(),
+      releaseMetadataUrls: [
+        'https://download-cn.suzuki.ink/updates/win32-x64/latest.json',
+        'https://api.github.com/example/releases/latest',
+      ],
+      fetchLatestRelease: request as typeof fetch,
+    });
+
+    await expect(updater.checkForUpdates()).resolves.toEqual({ status: 'available' });
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it('orders prerelease identifiers without treating beta.10 as beta.1', () => {

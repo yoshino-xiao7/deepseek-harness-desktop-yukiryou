@@ -101,6 +101,14 @@ jobs:
         run: |
           shasum -a 256 -c SHA256SUMS.txt
           shasum -a 256 -c SHA256SUMS-Windows.txt
+      - name: Generate cross-platform auto-update metadata
+        run: |
+          node scripts/prepare-update-metadata.ts \
+            --assets=out/release \
+            --output=update-metadata \
+            --version="${RELEASE_VERSION}"
+          cp update-metadata/darwin-arm64/latest-mac.yml out/release/
+          cp update-metadata/win32-x64/latest.yml out/release/
       - name: Verify ZIP through Applications
         run: |
           pnpm verify:distribution -- \

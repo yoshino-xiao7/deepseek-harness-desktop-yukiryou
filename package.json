@@ -78,6 +78,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
+    "electron-updater": "6.8.9",
     "yaml": "2.9.0"
   }
 }
