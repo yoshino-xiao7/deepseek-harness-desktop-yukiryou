@@ -199,9 +199,11 @@ describe('packaged desktop application', () => {
             if (harness === undefined) return undefined;
             return harness.executeJavaScript(`(() => {
               const bridge = window.deepSeekYukiRyouBalance;
-              const card = document.querySelector('[data-testid="desktop-account-balance"]');
+              const card = document.querySelector('[data-testid="desktop-account-overview"]');
               const value = card?.querySelector('.dsh-balance-value');
               const balanceIcon = card?.querySelector('.dsh-balance-icon');
+              const accountState = card?.querySelector('.dsh-balance-account');
+              const todayState = card?.querySelector('.dsh-balance-today');
               const settings = [...document.querySelectorAll('button')].find(
                 (button) => /^(设置|Settings)$/.test(button.textContent?.trim() ?? ''),
               );
@@ -213,7 +215,14 @@ describe('packaged desktop application', () => {
               return {
                 text: card?.textContent,
                 hasCard: card !== null,
+                hasPopup: document.querySelector('[role="tooltip"]') !== null,
                 hasStyle: document.querySelector('style[data-dsh-balance-style]') !== null,
+                accountDisplay: accountState === null
+                  ? undefined
+                  : getComputedStyle(accountState).display,
+                todayDisplay: todayState === null
+                  ? undefined
+                  : getComputedStyle(todayState).display,
                 valueClipped: value instanceof HTMLElement
                   ? value.scrollWidth > value.clientWidth
                   : undefined,
@@ -238,8 +247,11 @@ describe('packaged desktop application', () => {
         )
         .toMatchObject({
           hasCard: true,
+          hasPopup: false,
           hasStyle: true,
           text: expect.stringMatching(/账户余额|Account balance/),
+          accountDisplay: 'block',
+          todayDisplay: 'none',
           valueClipped: false,
           valueBelowLabel: true,
           leadingOffset: 0,
