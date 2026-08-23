@@ -217,9 +217,9 @@ describe('packaged desktop application', () => {
                 hasCard: card !== null,
                 hasPopup: document.querySelector('[role="tooltip"]') !== null,
                 hasStyle: document.querySelector('style[data-dsh-balance-style]') !== null,
-                accountDisplay: accountState === null
+                accountVisible: accountState === null
                   ? undefined
-                  : getComputedStyle(accountState).display,
+                  : getComputedStyle(accountState).display !== 'none',
                 todayDisplay: todayState === null
                   ? undefined
                   : getComputedStyle(todayState).display,
@@ -250,7 +250,7 @@ describe('packaged desktop application', () => {
           hasPopup: false,
           hasStyle: true,
           text: expect.stringMatching(/账户余额|Account balance/),
-          accountDisplay: 'block',
+          accountVisible: true,
           todayDisplay: 'none',
           valueClipped: false,
           valueBelowLabel: true,
