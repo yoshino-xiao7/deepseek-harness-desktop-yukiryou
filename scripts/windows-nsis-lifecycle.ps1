@@ -5,8 +5,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$candidateRoot = Join-Path $PSScriptRoot '..\out\windows-candidate'
-$stateRoot = Join-Path $PSScriptRoot '..\out\windows-lifecycle'
+$candidateRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\out\windows-candidate'))
+$stateRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\out\windows-lifecycle'))
 $statePath = Join-Path $stateRoot 'state.json'
 $installRoot = Join-Path $stateRoot 'install'
 $setupPath = Join-Path $candidateRoot 'DeepSeek-YukiRyou-Setup.exe'

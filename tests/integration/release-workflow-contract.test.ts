@@ -87,19 +87,26 @@ describe('macOS release workflow contract', () => {
   });
 
   it('exercises guided NSIS install, repair, and uninstall in an isolated directory', async () => {
-    const [lifecycleScript, electronCleanup] = await Promise.all([
+    const [lifecycleScript, electronCleanup, windowsCandidate] = await Promise.all([
       readFile(
         join(process.cwd(), 'scripts', 'windows-nsis-lifecycle.ps1'),
         'utf8',
       ),
       readFile(join(process.cwd(), 'tests', 'e2e', 'electron-cleanup.ts'), 'utf8'),
+      readFile(
+        join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
+        'utf8',
+      ),
     ]);
 
     expect(lifecycleScript).toContain("@('/S', '/currentuser', \"/D=$installRoot\")");
     expect(lifecycleScript).toContain("'Uninstall DeepSeek YukiRyou.exe'");
     expect(lifecycleScript).toContain('$process.WaitForExit(15000)');
     expect(lifecycleScript).toContain('.AddMinutes(10)');
+    expect(lifecycleScript).toContain('[System.IO.Path]::GetFullPath');
     expect(lifecycleScript).toContain('NSIS install, repair, and uninstall checks passed');
+    expect(windowsCandidate).toContain("Get-Process -Name 'DeepSeek YukiRyou'");
+    expect(windowsCandidate).toContain('windows-installed-diagnostics');
     expect(electronCleanup).toContain("'taskkill.exe'");
     expect(electronCleanup).toContain("'/t', '/f'");
     expect(electronCleanup).toContain('applicationProcess.exitCode !== null');
