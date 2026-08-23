@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import process from 'node:process';
 import { URL } from 'node:url';
 
-import { requestNpmManifest } from './catalog-network.js';
+import { requestNpmManifest, requestNpmPackument } from './catalog-network.js';
 import { createArtifactVerifier } from './artifact-verifier.js';
 import { createDependencyGraphResolver } from './dependency-graph.js';
 
@@ -16,6 +16,7 @@ const LIFECYCLE_SCRIPTS = Object.freeze(['preinstall', 'install', 'postinstall']
 export function createInstallInspector(options) {
   const catalog = options.catalog;
   const requestManifest = options.requestManifest ?? requestNpmManifest;
+  const requestPackument = options.requestPackument ?? requestNpmPackument;
   const now = options.now ?? (() => Date.now());
   const platform = options.platform ?? process.platform;
   const architecture = options.architecture ?? process.arch;
@@ -26,11 +27,14 @@ export function createInstallInspector(options) {
   const cache = new Map();
   const inFlight = new Map();
 
-  async function inspectVerified({ sourceRecordId, itemId } = {}) {
+  async function inspectVerified({ sourceRecordId, itemId, versionPreference = 'latest' } = {}) {
       if (typeof sourceRecordId !== 'string' || sourceRecordId.length > 100 || typeof itemId !== 'string' || itemId.length > 320) {
         throw inspectionError('invalid-request', 'Invalid catalog identity');
       }
-      const key = `${sourceRecordId}\0${itemId}`;
+      if (versionPreference !== 'catalog' && versionPreference !== 'latest') {
+        throw inspectionError('invalid-request', 'Invalid version preference');
+      }
+      const key = `${sourceRecordId}\0${itemId}\0${versionPreference}`;
       const timestamp = now();
       const cached = cache.get(key);
       if (cached !== undefined && timestamp - cached.storedAt < CACHE_MS) return cached.value;
@@ -46,8 +50,12 @@ export function createInstallInspector(options) {
           !NPM_PACKAGE_PATTERN.test(item.package.name ?? '') ||
           !STABLE_VERSION_PATTERN.test(item.package.version ?? '')
         ) throw inspectionError('not-candidate', 'Catalog item is not eligible for inspection');
-        const manifest = await requestManifest(item.package.name, item.package.version);
-        const value = await inspectManifest(item, manifest, {
+        const resolved = versionPreference === 'latest'
+          ? await resolveLatestCandidate(item, requestPackument)
+          : Object.freeze({ item, catalogVersion: item.package.version });
+        const manifest = await requestManifest(resolved.item.package.name, resolved.item.package.version);
+        const value = await inspectManifest(resolved.item, manifest, {
+          catalogVersion: resolved.catalogVersion,
           observedAt: new Date(now()).toISOString(), platform, architecture,
         }, graphResolver, artifactVerifier);
         cache.set(key, { value, storedAt: now() });
@@ -67,6 +75,38 @@ export function createInstallInspector(options) {
     },
     inspectVerified,
   });
+}
+
+async function resolveLatestCandidate(item, requestPackument) {
+  const catalogVersion = item.package.version;
+  if (item.provenance?.sourceId === 'desktop-development-fixture') {
+    return Object.freeze({ item, catalogVersion });
+  }
+  const packument = await requestPackument(item.package.name);
+  const tags = isRecord(packument) && isRecord(packument['dist-tags']) ? packument['dist-tags'] : undefined;
+  const latest = tags?.latest;
+  if (typeof latest !== 'string' || !STABLE_VERSION_PATTERN.test(latest)) {
+    throw inspectionError('invalid-metadata', 'npm latest version is unavailable');
+  }
+  if (compareStableVersions(latest, catalogVersion) <= 0) {
+    return Object.freeze({ item, catalogVersion });
+  }
+  return Object.freeze({
+    catalogVersion,
+    item: Object.freeze({
+      ...item,
+      package: Object.freeze({ ...item.package, version: latest }),
+    }),
+  });
+}
+
+function compareStableVersions(left, right) {
+  const leftParts = left.split('.').map(Number);
+  const rightParts = right.split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) return leftParts[index] - rightParts[index];
+  }
+  return 0;
 }
 
 async function inspectManifest(item, manifest, environment, graphResolver, artifactVerifier) {
@@ -176,6 +216,7 @@ async function inspectManifest(item, manifest, environment, graphResolver, artif
       itemId: item.id,
       packageName: item.package.name,
       version: item.package.version,
+      catalogVersion: environment.catalogVersion,
       repository: item.repository,
     }),
     environment: Object.freeze({ platform: environment.platform, architecture: environment.architecture }),

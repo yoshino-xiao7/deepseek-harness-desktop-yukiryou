@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Existing verified draft version, for example 0.1.1-beta.1
+        description: Existing verified draft version, for example 1.0.0
         required: true
         type: string
 
@@ -29,13 +29,13 @@ jobs:
     name: Download, install, verify, then publish
     runs-on: macos-15
     steps:
-      - name: Require an unpublished prerelease draft
+      - name: Require an unpublished matching draft
         id: draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           release_json=$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,isPrerelease,tagName,targetCommitish)
-          target=$(node -e "const r=JSON.parse(process.argv[1]); if (!r.isDraft || !r.isPrerelease || r.tagName !== process.env.RELEASE_TAG) throw new Error('Release must be the matching prerelease draft'); if (!/^[0-9a-f]{40}$/.test(r.targetCommitish)) throw new Error('Draft must target an immutable commit SHA'); process.stdout.write(r.targetCommitish)" "${release_json}")
+          target=$(node -e "const r=JSON.parse(process.argv[1]); const expectedPrerelease=process.env.RELEASE_VERSION.includes('-'); if (!r.isDraft || r.isPrerelease !== expectedPrerelease || r.tagName !== process.env.RELEASE_TAG) throw new Error('Release must be the matching draft with the correct stable/prerelease channel'); if (!/^[0-9a-f]{40}$/.test(r.targetCommitish)) throw new Error('Draft must target an immutable commit SHA'); process.stdout.write(r.targetCommitish)" "${release_json}")
           echo "target=${target}" >> "${GITHUB_OUTPUT}"
       - uses: actions/checkout@v6
         with:
@@ -92,14 +92,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release edit "${RELEASE_TAG}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --draft=false \
-            --prerelease=false
+          if [[ "${RELEASE_VERSION}" == *-* ]]; then
+            gh release edit "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --draft=false \
+              --prerelease
+          else
+            gh release edit "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --draft=false \
+              --prerelease=false \
+              --latest
+          fi
 
   sync_china_mirror:
     name: Mirror the public verified release to China
     needs: verify_and_publish
+    if: ${{ !contains(inputs.version, '-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

@@ -48,8 +48,9 @@ describe('managed plugin preview contract', () => {
         requestId,
         sourceRecordId: 'dshfind',
         itemId: 'example',
+        versionPreference: 'latest',
       }),
-    ).toEqual({ requestId, sourceRecordId: 'dshfind', itemId: 'example' });
+    ).toEqual({ requestId, sourceRecordId: 'dshfind', itemId: 'example', versionPreference: 'latest' });
     expect(
       validatedManagedPluginPreviewRequest({
         requestId: '../bad',
@@ -62,8 +63,15 @@ describe('managed plugin preview contract', () => {
         requestId,
         sourceRecordId: '',
         itemId: 'y',
+        versionPreference: 'latest',
       }),
     ).toBeUndefined();
+    expect(validatedManagedPluginPreviewRequest({
+      requestId, sourceRecordId: 'dshfind', itemId: 'example', versionPreference: 'newest',
+    })).toBeUndefined();
+    expect(validatedManagedPluginPreviewRequest({
+      requestId, sourceRecordId: 'dshfind', itemId: 'example',
+    })).toBeUndefined();
   });
 
   it('projects Host inspection without timestamps, repository data, or frozen plans', () => {

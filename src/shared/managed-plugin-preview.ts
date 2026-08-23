@@ -15,6 +15,7 @@ export interface ManagedPluginPreviewRequest {
   readonly requestId: string;
   readonly sourceRecordId: string;
   readonly itemId: string;
+  readonly versionPreference: 'catalog' | 'latest';
 }
 
 export interface ManagedPluginExecuteRequest {
@@ -87,8 +88,10 @@ export function validatedManagedPluginPreviewRequest(
   if (!isRecord(value) || !validRequestId(value.requestId)) return undefined;
   const sourceRecordId = boundedString(value.sourceRecordId, 100);
   const itemId = boundedString(value.itemId, 320);
-  if (sourceRecordId === undefined || itemId === undefined) return undefined;
-  return { requestId: value.requestId as string, sourceRecordId, itemId };
+  const versionPreference = value.versionPreference;
+  if (sourceRecordId === undefined || itemId === undefined ||
+    (versionPreference !== 'catalog' && versionPreference !== 'latest')) return undefined;
+  return { requestId: value.requestId as string, sourceRecordId, itemId, versionPreference };
 }
 
 export function validatedManagedPluginPreviewResult(

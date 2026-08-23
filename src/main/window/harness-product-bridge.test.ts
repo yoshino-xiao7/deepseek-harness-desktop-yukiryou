@@ -198,13 +198,13 @@ describe('Harness product bridge', () => {
     bridge.setTrustedOrigin(createTrustedHarnessOrigin('http://127.0.0.1:51234'));
 
     webContents.emit('ipc-message', {}, MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL, {
-      requestId, sourceRecordId: 'dshfind', itemId: 'example', ignored: 'field',
+      requestId, sourceRecordId: 'dshfind', itemId: 'example', versionPreference: 'latest', ignored: 'field',
     });
     await Promise.resolve();
     await Promise.resolve();
 
     expect(onManagedPluginPreview).toHaveBeenCalledWith({
-      requestId, sourceRecordId: 'dshfind', itemId: 'example',
+      requestId, sourceRecordId: 'dshfind', itemId: 'example', versionPreference: 'latest',
     });
     expect(webContents.sent).toContainEqual({
       channel: MANAGED_PLUGIN_PREVIEW_RESULT_CHANNEL,
@@ -221,7 +221,7 @@ describe('Harness product bridge', () => {
     for (const suffix of ['1', '2', '3']) {
       webContents.emit('ipc-message', {}, MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL, {
         requestId: `request-00000000-0000-4000-8000-00000000000${suffix}`,
-        sourceRecordId: 'dshfind', itemId: suffix,
+        sourceRecordId: 'dshfind', itemId: suffix, versionPreference: 'latest',
       });
     }
 
@@ -243,7 +243,7 @@ describe('Harness product bridge', () => {
     });
     bridge.setTrustedOrigin(createTrustedHarnessOrigin('http://127.0.0.1:51234'));
     webContents.emit('ipc-message', {}, MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL, {
-      requestId, sourceRecordId: 'dshfind', itemId: 'example',
+      requestId, sourceRecordId: 'dshfind', itemId: 'example', versionPreference: 'latest',
     });
     bridge.setTrustedOrigin(undefined);
     resolvePreview?.({ requestId, status: 'unavailable', reason: 'not-installable' });
@@ -298,6 +298,7 @@ describe('Harness product bridge', () => {
       currentGeneration: generation,
       entries: [{
         packageName: '@example/dsh-tool',
+        sourceId: 'dshfind',
         version: '1.2.3',
         generation,
         installedAt: '2026-08-21T12:41:40.475Z',

@@ -31,6 +31,24 @@ describe.skipIf(process.platform !== 'win32')(
       });
       shellPage = await electronApp.firstWindow();
 
+      await shellPage.emulateMedia({ reducedMotion: 'reduce' });
+      const motionSamples = await shellPage.evaluate(async () => {
+        const shell = document.querySelector<HTMLElement>('.loading-shell');
+        const progress = document.querySelector<HTMLElement>('.progress-track span');
+        if (shell === null || progress === null) return [];
+        const previousDisplay = shell.style.display;
+        shell.style.display = 'block';
+        const samples: string[] = [];
+        for (let index = 0; index < 8; index += 1) {
+          samples.push(window.getComputedStyle(progress).opacity);
+          await new Promise((resolve) => window.setTimeout(resolve, 150));
+        }
+        shell.style.display = previousDisplay;
+        return samples;
+      });
+      expect(new Set(motionSamples).size).toBeGreaterThan(2);
+      await shellPage.emulateMedia({ reducedMotion: 'no-preference' });
+
       await expect
         .poll(() => readPublishedStartupState(electronApp), {
           interval: 500,

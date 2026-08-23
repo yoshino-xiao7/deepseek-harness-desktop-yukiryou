@@ -6,6 +6,25 @@
 
 ## [未发布]
 
+## [1.0.0] - 2026-08-23
+
+### 正式版
+
+- 结束 Beta 版本号，macOS Apple Silicon 与 Windows 11 x64 进入同一套稳定版 `1.0.0` 发布、更新和回退链。
+- 稳定版 Release 由工作流创建为正式发布并标记为 GitHub Latest；只有 GitHub 全部门禁和公开发布成功后，才同步中国大陆 OSS/ESA 镜像。
+
+### 修复
+
+- 修复本机今日估算消耗始终显示 `¥0`：Harness 的官方 DeepSeek 路由实际记录为 `deepseek-official`，现与兼容路由 `deepseek` 一并计费；Flash、Vision Exp 与 Pro 均按各自价格及北京时间峰谷区间计算。
+- 修复 Windows 开启“减少动态效果”时启动页看起来完全卡住的问题：保留低强度、无位移的进度脉冲，同时继续尊重系统减少动态效果偏好。
+- 修复已安装受管插件无法查看市场简介和来源的问题；详情会按安装收据中的来源读取对应目录，并保留本机版本、运行状态和安装类型作为失败回退信息。
+- 修复插件目录长期未更新时把旧版本误当最新版的问题：安装前可明确选择“安装目录版本”或“安装最新版本”，两者分别执行完整安全预检并使用独立缓存。
+
+### 插件市场
+
+- 已安装受管插件新增“检查更新”，可对账 npm `latest`；若目录版本与最新版不同，会同时显示二者和最终精确安装包。
+- 选择其他版本、更新或有意回退均复用现有冻结依赖图、真实包体验证、原生确认、试运行和失败自动恢复链，不新增安装旁路。
+
 ## [0.2.3-beta.3] - 2026-08-23
 
 ### 新增
@@ -192,6 +211,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[1.0.0]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.0
 [0.2.3-beta.3]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.3
 [0.2.3-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.2
 [0.2.3-beta.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.1

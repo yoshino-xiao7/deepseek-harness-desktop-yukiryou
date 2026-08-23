@@ -46,7 +46,11 @@ jobs:
           if ($sessionId -eq 0) { throw 'Runner is executing in non-interactive Session 0' }
           $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
           if ($explorer.Count -eq 0) { throw "No logged-in desktop was found in Session $sessionId" }
-          $lockUi = @(Get-Process LockApp, LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          # A residual/suspended LockApp process is not proof that an active
+          # remote desktop is locked. Log it, but gate only on LogonUI.
+          $lockApp = @(Get-Process LockApp -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          "Residual LockApp processes: $($lockApp.Count)"
+          $lockUi = @(Get-Process LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
           if ($lockUi.Count -ne 0) { throw "Windows desktop Session $sessionId is locked" }
       - uses: actions/setup-node@v6
         with:

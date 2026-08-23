@@ -13,6 +13,7 @@ interface WorkflowStep {
 
 interface WorkflowJob {
   needs?: string | string[];
+  if?: string;
   'timeout-minutes'?: number;
   steps?: WorkflowStep[];
 }
@@ -64,6 +65,8 @@ describe('macOS release workflow contract', () => {
     expect(commands).toContain('-win32-x64-Setup.exe');
     expect(commands).toContain('-portable.zip');
     expect(commands).toContain('SHA256SUMS-Windows.txt');
+    expect(commands).toContain('release_flags=(--draft)');
+    expect(commands).toContain('release_flags+=(--prerelease)');
   });
 
   it('publishes updater metadata for the notarized macOS ZIP and Windows installer', async () => {
@@ -107,6 +110,30 @@ describe('macOS release workflow contract', () => {
     expect(command.indexOf('$env:DSH_E2E_EXECUTABLE_PATH')).toBeLessThan(
       command.indexOf('pnpm exec vitest run'),
     );
+  });
+
+  it('does not mistake a residual LockApp process for a locked remote desktop', async () => {
+    const [candidateWorkflow, publishedWorkflow] = await Promise.all([
+      readFile(
+        join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
+        'utf8',
+      ),
+      readFile(
+        join(
+          process.cwd(),
+          '.github',
+          'workflows',
+          'windows-published-diagnostics.yml',
+        ),
+        'utf8',
+      ),
+    ]);
+
+    for (const workflow of [candidateWorkflow, publishedWorkflow]) {
+      expect(workflow).toContain('Get-Process LogonUI');
+      expect(workflow).toContain('Residual LockApp processes:');
+      expect(workflow).not.toContain('Get-Process LockApp, LogonUI');
+    }
   });
 
   it('exercises guided NSIS install, repair, and uninstall in an isolated directory', async () => {
@@ -233,6 +260,8 @@ describe('macOS release workflow contract', () => {
     expect(commands).toContain('tag_sha=');
     expect(commands).toContain('"${tag_sha}" != "${source_sha}"');
     expect(commands).not.toContain('--target "${SOURCE_SHA}"');
+    expect(commands).toContain('release_flags=(--draft)');
+    expect(commands).toContain('release_flags+=(--prerelease)');
     expect(verifyDmgIndex).toBeGreaterThan(-1);
     expect(createDraftIndex).toBeGreaterThan(verifyDmgIndex);
   });
@@ -257,12 +286,11 @@ describe('macOS release workflow contract', () => {
   });
 
   it('gates notarization on candidate restart and previous-release upgrade checks', async () => {
-    const workflow = parse(
-      await readFile(
+    const workflowSource = await readFile(
         join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
         'utf8',
-      ),
-    ) as ReleaseWorkflow;
+      );
+    const workflow = parse(workflowSource) as ReleaseWorkflow;
     const steps = workflow.jobs?.verify_candidate?.steps ?? [];
     const restartIndex = steps.findIndex((step) =>
       step.run?.includes('tests/e2e/session-selection-restart.test.ts'),
@@ -280,6 +308,7 @@ describe('macOS release workflow contract', () => {
     expect(steps[downloadIndex]?.run).toContain(
       '${ARTIFACT_NAME}-darwin-arm64-${UPGRADE_FROM_VERSION}.zip',
     );
+    expect(workflowSource).toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
     expect(workflow.jobs?.soak_candidate?.needs).toBe('verify_candidate');
     expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
   });
@@ -311,7 +340,7 @@ describe('macOS release workflow contract', () => {
     ) as ReleaseWorkflow;
     const steps = workflow.jobs?.verify_and_publish?.steps ?? [];
     const requireDraft = steps.find(
-      (step) => step.name === 'Require an unpublished prerelease draft',
+      (step) => step.name === 'Require an unpublished matching draft',
     );
     const checkout = steps.find((step) =>
       step.uses?.startsWith('actions/checkout@'),
@@ -322,10 +351,12 @@ describe('macOS release workflow contract', () => {
     );
 
     expect(requireDraft?.run).toContain('targetCommitish');
+    expect(requireDraft?.run).toContain("RELEASE_VERSION.includes('-')");
     expect(requireDraft?.run).not.toContain('/git/ref/tags/');
     expect(checkout?.with?.ref).toBe('${{ steps.draft.outputs.target }}');
     expect(publish?.run).toContain('--draft=false');
     expect(publish?.run).toContain('--prerelease=false');
+    expect(publish?.run).toContain('--latest');
     expect(metadataVerification?.run).toContain('verify-update-metadata.ts');
   });
 
@@ -348,6 +379,7 @@ describe('macOS release workflow contract', () => {
     );
 
     expect(mirror?.needs).toBe('verify_and_publish');
+    expect(mirror?.if).toBe("${{ !contains(inputs.version, '-') }}");
     expect(commands).toContain('r.isDraft || r.isPrerelease');
     expect(commands).toContain('sha256sum -c SHA256SUMS-Windows.txt');
     expect(commands).toContain('china-mirror/downloads/latest.json');

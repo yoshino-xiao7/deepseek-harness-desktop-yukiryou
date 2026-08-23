@@ -53,7 +53,11 @@ jobs:
           if ($explorer.Count -eq 0) {
             throw "No logged-in Windows desktop was found in Session $sessionId"
           }
-          $lockUi = @(Get-Process LockApp, LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          # LockApp is commonly left suspended after an interactive or remote
+          # session is unlocked. Keep it as diagnostics, not as a lock signal.
+          $lockApp = @(Get-Process LockApp -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          "Residual LockApp processes: $($lockApp.Count)"
+          $lockUi = @(Get-Process LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
           if ($lockUi.Count -ne 0) {
             throw "Windows desktop Session $sessionId is locked"
           }
@@ -96,7 +100,11 @@ jobs:
           if ($explorer.Count -eq 0) {
             throw "No logged-in Windows desktop was found in Session $sessionId"
           }
-          $lockUi = @(Get-Process LockApp, LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          # LockApp is commonly left suspended after an interactive or remote
+          # session is unlocked. Keep it as diagnostics, not as a lock signal.
+          $lockApp = @(Get-Process LockApp -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
+          "Residual LockApp processes: $($lockApp.Count)"
+          $lockUi = @(Get-Process LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
           if ($lockUi.Count -ne 0) {
             throw "Windows desktop Session $sessionId is locked"
           }

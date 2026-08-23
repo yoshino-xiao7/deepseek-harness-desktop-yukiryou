@@ -10,10 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
-  <img alt="Windows 11 x64 beta" src="https://img.shields.io/badge/Windows%2011-x64%20beta-3157a4?style=flat-square&logo=windows11">
+  <img alt="Windows 11 x64" src="https://img.shields.io/badge/Windows%2011-x64-3157a4?style=flat-square&logo=windows11">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
 </p>
 
@@ -43,7 +43,7 @@
 
 它不是 Harness 的重写版本，也不会改变 Agent 的工作方式。它专注于把 Harness 稳定、安全、可恢复地交付到桌面，并在官方界面之外补足账户状态、工作区文件和变更审核等桌面能力。
 
-> 当前产品支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 提供签名、公证的 DMG 与 ZIP；Windows Beta 提供未签名安装 EXE 与便携 ZIP，并在下载说明中明确展示来源、SHA-256 与 SmartScreen 风险。
+> 当前产品支持 Apple Silicon macOS 14+ 与 Windows 11 x64。macOS 提供签名、公证的 DMG 与 ZIP；Windows 提供未签名安装 EXE 与便携 ZIP，并在下载说明中明确展示来源、SHA-256 与 SmartScreen 风险。
 
 | 打开即用 | 原生体验 | 可诊断 | 安全更新 |
 | --- | --- | --- | --- |
@@ -77,7 +77,7 @@ DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe
 DeepSeek.YukiRyou-win32-x64-<version>-portable.zip
 ```
 
-EXE 是可修改安装目录的向导式 NSIS 安装版；ZIP 解压后可直接运行，不写入安装注册项。两份产物使用同一固定 Runtime，并在真实 Windows runner 验证打包启动、会话恢复、EXE 首装/修复/卸载和便携 ZIP 启动。当前早期 Windows Beta 暂不做 Authenticode 签名，系统可能显示 SmartScreen 警告；请只从本仓库 Release 下载并核对 `SHA256SUMS-Windows.txt`，不要把未签名产物当作已获得 Windows 信任背书。
+EXE 是可修改安装目录的向导式 NSIS 安装版；ZIP 解压后可直接运行，不写入安装注册项。两份产物使用同一固定 Runtime，并在真实 Windows runner 验证打包启动、会话恢复、EXE 首装/修复/卸载和便携 ZIP 启动。Windows 版本暂不做 Authenticode 签名，系统可能显示 SmartScreen 警告；请只从本仓库 Release 下载并核对 `SHA256SUMS-Windows.txt`，不要把未签名产物当作已获得 Windows 信任背书。
 
 ## 当前可用功能
 
@@ -90,7 +90,7 @@ EXE 是可修改安装目录的向导式 NSIS 安装版；ZIP 解压后可直接
 
 ### 账户与工作区
 
-- **账户概览**：悬浮“设置”上方的按钮可查看本机今日估算与当前凭据所属账户余额；点击同时刷新两项。今日金额依据会话中的官方 usage 和北京时间峰谷费率估算，不冒充官方账单。
+- **账户概览**：“设置”上方默认显示当前凭据所属账户余额，悬浮时在同一行切换为本机今日估算，不弹出额外面板；点击同时刷新两项。今日金额依据会话中的官方 usage 和北京时间峰谷费率估算，不冒充官方账单。
 - **Desktop Companion**：可收起右栏提供当前工作区文件树、相对 HEAD 的 Git 变更、增删行统计和只读 diff。
 - **适合阅读的预览**：Markdown 可在排版与源码之间切换，纯文本和常见图片也可在应用内预览。
 - **逐轮变更入口**：在 Harness 原生“产物”行下方展示本轮确认变更，点击即可进入对应文件审核。
@@ -122,7 +122,7 @@ EXE 是可修改安装目录的向导式 NSIS 安装版；ZIP 解压后可直接
 | --- | --- | --- |
 | 手机远程控制 | **规划中** | 通过明确配对和权限边界，在手机端查看任务状态、接收必要提醒，并在用户确认后继续任务；不会直接暴露本机 Harness 端口。 |
 | 插件生态完善 | **持续开发** | 在现有发现、预检和受管生命周期上继续补齐可信发布者信号、权限可见性和更完整的兼容性信息。 |
-| Windows x64 发行 | **Beta** | 同一 Release 提供未签名安装 EXE 与便携 ZIP；安装版支持国内外自动下载并确认重启安装，继续进行独立 Windows 11 客户端验收，用户规模需要时再接入 Authenticode。 |
+| Windows x64 发行 | **稳定版** | 同一 Release 提供未签名安装 EXE 与便携 ZIP；安装版支持国内外自动下载并确认重启安装，每版继续执行独立 Windows 11 真机验收，用户规模需要时再接入 Authenticode。 |
 
 路线图表示产品方向，不承诺具体发布日期。安全模型、上游 Harness 接口或素材准备不足时，相关功能会继续保持不可用，而不是通过不稳定的 DOM 注入或降低系统安全要求提前上线。
 

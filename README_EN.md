@@ -10,10 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?include_prereleases&style=flat-square&color=3157a4"></a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/yoshino-xiao7/deepseek-harness-desktop-yukiryou?style=flat-square&color=3157a4"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?style=flat-square&logo=apple">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-3157a4?style=flat-square">
-  <img alt="Windows 11 x64 beta" src="https://img.shields.io/badge/Windows%2011-x64%20beta-3157a4?style=flat-square&logo=windows11">
+  <img alt="Windows 11 x64" src="https://img.shields.io/badge/Windows%2011-x64-3157a4?style=flat-square&logo=windows11">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6b7280?style=flat-square"></a>
 </p>
 
@@ -43,7 +43,7 @@ DeepSeek Harness provides a local Web UI, but routine use still involves prepari
 
 This is not a rewrite of Harness and does not change how the agent works. Its job is to deliver Harness to the desktop with predictable startup, recovery, isolation, and updates, while adding desktop capabilities for account status, workspace files, and change review.
 
-> The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS ships signed and notarized DMG and ZIP assets. The Windows beta ships an unsigned installer EXE and portable ZIP with explicit provenance, SHA-256 checksums, and SmartScreen disclosure.
+> The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS ships signed and notarized DMG and ZIP assets. Windows ships an unsigned installer EXE and portable ZIP with explicit provenance, SHA-256 checksums, and SmartScreen disclosure.
 
 | Ready to open | Native desktop | Inspectable | Trusted releases |
 | --- | --- | --- | --- |
@@ -77,7 +77,7 @@ DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe
 DeepSeek.YukiRyou-win32-x64-<version>-portable.zip
 ~~~
 
-The EXE is a guided NSIS installer that lets users choose the install directory; the ZIP runs after extraction without registering an installation. Both contain the same pinned Runtime and are verified on a real Windows runner for packaged startup, session restoration, EXE install/repair/uninstall, and portable ZIP startup. Early Windows betas are intentionally not Authenticode-signed, so Windows may show a SmartScreen warning. Download only from this repository's Releases and verify `SHA256SUMS-Windows.txt`; an unsigned artifact does not carry Windows trust endorsement.
+The EXE is a guided NSIS installer that lets users choose the install directory; the ZIP runs after extraction without registering an installation. Both contain the same pinned Runtime and are verified on a real Windows runner for packaged startup, session restoration, EXE install/repair/uninstall, and portable ZIP startup. Windows builds are not Authenticode-signed yet, so Windows may show a SmartScreen warning. Download only from this repository's Releases and verify `SHA256SUMS-Windows.txt`; an unsigned artifact does not carry Windows trust endorsement.
 
 ## Available today
 
@@ -90,7 +90,7 @@ The EXE is a guided NSIS installer that lets users choose the install directory;
 
 ### Account and workspace
 
-- **Account overview:** hover the row above Settings to see a local today estimate and the active credential's account balance; click to refresh both. The estimate uses provider-reported session usage and Beijing peak/off-peak rates, and is never presented as an official bill.
+- **Account overview:** the row above Settings shows the active credential's balance by default and swaps to today's local estimate in place on hover, without opening a popover; click to refresh both. The estimate uses provider-reported session usage and Beijing peak/off-peak rates, and is never presented as an official bill.
 - **Desktop Companion:** a collapsible panel shows the current workspace tree, Git changes relative to HEAD, line statistics, and read-only diffs.
 - **Readable previews:** Markdown switches between rendered and source views; plain text and common image formats can be previewed in the app.
 - **Per-turn change entry:** confirmed changes appear below Harness's native artifact row and open directly in review mode.
@@ -122,7 +122,7 @@ The EXE is a guided NSIS installer that lets users choose the install directory;
 | --- | --- | --- |
 | Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
 | Plugin ecosystem | **Ongoing** | Extend the existing discovery, inspection, and managed lifecycle with stronger publisher signals, clearer permissions, and richer compatibility information. |
-| Windows x64 distribution | **Beta** | The same Release ships an unsigned installer EXE and portable ZIP. The installed build supports automatic download and confirmed restart-to-install through both regional channels; independent Windows 11 acceptance continues and Authenticode can be added when distribution scale warrants it. |
+| Windows x64 distribution | **Stable** | The same Release ships an unsigned installer EXE and portable ZIP. The installed build supports automatic download and confirmed restart-to-install through both regional channels; independent Windows 11 acceptance remains a per-release gate, and Authenticode can be added when distribution scale warrants it. |
 
 The roadmap describes direction, not committed dates. If the security model, upstream Harness contracts, or required assets are not ready, the feature remains unavailable instead of shipping through brittle DOM injection or weakened system protections.
 

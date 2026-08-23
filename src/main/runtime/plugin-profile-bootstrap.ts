@@ -110,6 +110,7 @@ export interface ManagedPluginProfileInventory {
   readonly currentGeneration: string | null;
   readonly entries: readonly {
     readonly packageName: string;
+    readonly sourceId: string;
     readonly version: string;
     readonly generation: string;
     readonly installedAt: string;
@@ -269,6 +270,7 @@ export function createPluginProfileBootstrap(
           const blocked = blockedByPackage.get(receipt.packageName);
           return {
             packageName: receipt.packageName,
+            sourceId: receipt.sourceId,
             version: receipt.version,
             generation: receipt.generation,
             installedAt: receipt.installedAt,
