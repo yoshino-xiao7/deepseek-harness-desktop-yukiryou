@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "revision": "2026-08-23.1",
+  "items": [
+    {
+      "id": "dsh-context",
+      "displayName": "dsh-context",
+      "summary": "Example only: add an entry after installing and testing this exact version.",
+      "repository": "https://github.com/bowenliang123/dsh-context",
+      "publisher": {
+        "name": "bowenliang123"
+      },
+      "categories": [
+        "agent"
+      ],
+      "package": {
+        "name": "dsh-context",
+        "version": "0.25.3"
+      },
+      "verification": {
+        "status": "installed",
+        "testedAt": "2026-08-23T03:00:00.000Z",
+        "harnessVersion": "0.1.1-rc.2",
+        "platforms": [
+          "darwin-arm64"
+        ],
+        "notes": "Example only; do not publish until the exact package passes a real install and smoke test."
+      }
+    }
+  ]
+}

@@ -1,23 +1,15 @@
 import type { BrowserWindowConstructorOptions } from 'electron';
+import { createWindowChromeAdapter } from './window-chrome-adapter.js';
 
 export function createDesktopWindowOptions(
   shellPreloadPath: string,
+  platform: NodeJS.Platform = process.platform,
 ): BrowserWindowConstructorOptions {
-  return {
+  return createWindowChromeAdapter(platform).createOptions({
     width: 1440,
     height: 900,
     minWidth: 820,
     minHeight: 600,
-    backgroundColor: '#f5f7fb',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 14 },
-    show: false,
-    webPreferences: {
-      preload: shellPreloadPath,
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-    },
-  };
+    preloadPath: shellPreloadPath,
+  });
 }

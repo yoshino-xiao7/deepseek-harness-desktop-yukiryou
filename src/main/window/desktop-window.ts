@@ -93,6 +93,7 @@ import type {
   ManagedPluginRollbackRequest,
   ManagedPluginRollbackResult,
 } from '../../shared/managed-plugin-inventory.js';
+import { TOOLBAR_LOCALE_CHANNEL, type DesktopLocale } from '../../shared/locale-sync.js';
 
 const PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS = 15_000;
 
@@ -121,6 +122,7 @@ export interface DesktopWindowOptions {
     force: boolean,
   ) => Promise<AccountBalanceSnapshot>;
   readonly onHarnessContext: (snapshot: HarnessContextSnapshot) => void;
+  readonly onLocale: (locale: DesktopLocale) => void;
   readonly onWorkspaceReviewRequest: (
     request: WorkspaceReviewRequest,
   ) => Promise<WorkspaceReviewResponse>;
@@ -165,6 +167,7 @@ class ElectronDesktopWindow implements DesktopWindow {
   #showingHarness = false;
   #sidebarWidth: number | undefined;
   #appearance: DesktopAppearanceSnapshot | undefined;
+  #locale: DesktopLocale | undefined;
   #companionState: DesktopCompanionSnapshot = {
     active: false,
     open: true,
@@ -202,6 +205,11 @@ class ElectronDesktopWindow implements DesktopWindow {
       onAppearance: (appearance) => {
         this.#appearance = appearance;
         this.#window.webContents.send(TOOLBAR_APPEARANCE_CHANNEL, appearance);
+      },
+      onLocale: (locale) => {
+        this.#locale = locale;
+        this.#window.webContents.send(TOOLBAR_LOCALE_CHANNEL, locale);
+        options.onLocale(locale);
       },
       onUpdateCommand: options.onUpdateCommand,
       onAccountBalanceRequest: options.onAccountBalanceRequest,
@@ -428,6 +436,9 @@ class ElectronDesktopWindow implements DesktopWindow {
         TOOLBAR_APPEARANCE_CHANNEL,
         this.#appearance,
       );
+    }
+    if (this.#locale !== undefined) {
+      this.#window.webContents.send(TOOLBAR_LOCALE_CHANNEL, this.#locale);
     }
     this.#sendCompanionState();
   }

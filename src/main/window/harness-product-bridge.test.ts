@@ -6,12 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ACCOUNT_BALANCE_REQUEST_CHANNEL,
   ACCOUNT_BALANCE_STATE_CHANNEL,
+  type AccountBalanceSnapshot,
 } from '../../shared/account-balance.js';
 import { HARNESS_CONTEXT_CHANNEL } from '../../shared/desktop-companion.js';
 import { DESKTOP_FRAME_HEALTH_CHANNEL } from '../../shared/desktop-frame-health.js';
 import { HARNESS_REVIEW_INTENT_CHANNEL } from '../../shared/workspace-review.js';
 import { HARNESS_SIDEBAR_WIDTH_CHANNEL } from '../../shared/sidebar-width-sync.js';
 import { UPDATE_COMMAND_CHANNEL, UPDATE_STATE_CHANNEL } from '../../shared/update-bridge.js';
+import { HARNESS_LOCALE_CHANNEL } from '../../shared/locale-sync.js';
 import {
   MANAGED_PLUGIN_PREVIEW_REQUEST_CHANNEL,
   MANAGED_PLUGIN_PREVIEW_RESULT_CHANNEL,
@@ -64,6 +66,19 @@ class FakeWebContents extends EventEmitter {
 }
 
 describe('Harness product bridge', () => {
+  it('synchronizes only supported Harness locale changes to the desktop menu', () => {
+    const webContents = new FakeWebContents();
+    const onLocale = vi.fn();
+    const bridge = createBridge(webContents, { onLocale });
+
+    webContents.emit('ipc-message', {}, HARNESS_LOCALE_CHANNEL, 'en-GB');
+    webContents.emit('ipc-message', {}, HARNESS_LOCALE_CHANNEL, 'ja-JP');
+
+    expect(onLocale).toHaveBeenCalledTimes(1);
+    expect(onLocale).toHaveBeenCalledWith('en-US');
+    bridge.dispose();
+  });
+
   it('centralizes trusted navigation, permissions and downloads', () => {
     const webContents = new FakeWebContents();
     const openExternal = vi.fn();
@@ -145,7 +160,7 @@ describe('Harness product bridge', () => {
 
   it('replays update state and suppresses stale async balance results after disposal', async () => {
     const webContents = new FakeWebContents();
-    let resolveBalance: ((value: { status: 'unavailable'; reason: 'network' }) => void) | undefined;
+    let resolveBalance: ((value: AccountBalanceSnapshot) => void) | undefined;
     const bridge = createBridge(webContents, {
       onAccountBalanceRequest: () => new Promise((resolve) => {
         resolveBalance = resolve;
@@ -157,7 +172,7 @@ describe('Harness product bridge', () => {
     bridge.restoreAfterLoad();
     webContents.emit('ipc-message', {}, ACCOUNT_BALANCE_REQUEST_CHANNEL, true);
     bridge.dispose();
-    resolveBalance?.({ status: 'unavailable', reason: 'network' });
+    resolveBalance?.({ status: 'unavailable', reason: 'network', today: { status: 'unavailable' } });
     await Promise.resolve();
 
     expect(
@@ -413,8 +428,11 @@ function createBridge(
     openExternal: vi.fn(),
     onSidebarWidth: vi.fn(),
     onAppearance: vi.fn(),
+    onLocale: vi.fn(),
     onUpdateCommand: vi.fn(),
-    onAccountBalanceRequest: async () => ({ status: 'unavailable', reason: 'network' }),
+    onAccountBalanceRequest: async () => ({
+      status: 'unavailable', reason: 'network', today: { status: 'unavailable' },
+    }),
     onHarnessContext: vi.fn(),
     onHarnessReviewIntent: async () => ({ kind: 'unavailable', reason: 'no-workspace' }),
     onHarnessReviewResponse: vi.fn(),

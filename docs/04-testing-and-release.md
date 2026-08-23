@@ -76,7 +76,7 @@ pnpm test:soak:app:extended # 独立工作流 5 小时扩展 soak
 | 数据 | 全新、上一版本升级、损坏的桌面偏好 |
 | 端口 | 默认空闲、默认占用、竞争失败 |
 
-Windows 候选 CI 会同时生成并验证未签名 `Setup.exe` 与便携 ZIP：先从解压后的精确 ZIP 启动应用并验证会话恢复，再用冻结的 EXE 在干净 runner 完成静默首装，确认桌面或开始菜单快捷方式与安装目录，启动实际安装路径中的应用，执行同版本修复安装、再次启动和 Squirrel 卸载。卸载必须移除可运行主程序、更新包、快捷方式和“程序与功能”注册项，同时保留应用用户数据。旧 Squirrel 可能保留 `.dead`、`Update.exe`、`squirrel.exe` 和 V8 snapshot 自清理墓碑；门禁只允许这组精确残留，任何产品文件或其他残留仍失败。该门禁不把同版本修复安装表述为“覆盖升级”；跨版本升级、自动更新和 Windows 11 客户端实机验收在首个公开 Windows Beta 后继续补齐。
+Windows 候选 CI 会同时生成并验证未签名的向导式 NSIS `Setup.exe` 与便携 ZIP。安装向导按当前用户安装，允许用户修改安装目录；CI 另以静默参数把冻结 EXE 安装到隔离目录，启动实际安装路径中的应用，执行同版本修复安装并验证 NSIS 卸载。便携 ZIP 仍从解压后的精确产物启动并验证会话恢复。卸载必须移除可运行主程序和隔离安装目录，同时保留应用用户数据。该门禁不把同版本修复安装表述为“覆盖升级”；跨版本升级和独立 Windows 11 客户端实机验收继续补齐。
 
 ## CI 流水线
 
@@ -94,7 +94,7 @@ Windows 候选 CI 会同时生成并验证未签名 `Setup.exe` 与便携 ZIP：
 2. 第二台全新 runner 下载候选与上一公开版、复制候选到 `/Applications`，执行签名/证书链/架构、包内原生模块验证；随后用同一临时用户目录在上一版创建并完成真实非空 Session、持久化 `dsh.sessions.current`，再启动候选，验证相同 origin、当前 Session ID、精确 Session 集合与 rc.8 回退副本，不得新增空白 Session；最后真实启动精确候选直到 Harness 就绪并产生绑定 SHA-256 与 commit 的回执。
 3. 只有回执与候选完全匹配，第三台 runner 才提交 Apple 一次；Accepted 后检查公证日志、staple 并生成最终 DMG/ZIP。
 4. 第四台全新 runner 分别安装最终 DMG/ZIP，执行 `codesign`、`spctl`、ticket、架构、校验和，并再次启动精确的最终应用直到 Harness 就绪。
-5. 同一提交还必须在 Windows x64 runner 通过 Runtime/ConPTY、安装 EXE、便携 ZIP、会话恢复和 Squirrel 生命周期门禁；只选择版本化 EXE、便携 ZIP 与 Windows SHA-256 清单作为公开资产，内部 NUPKG/RELEASES 不发布。
+5. 同一提交还必须在 Windows x64 runner 通过 Runtime/ConPTY、向导式 NSIS 安装 EXE、便携 ZIP、会话恢复和安装/修复/卸载生命周期门禁；公开资产仍只有版本化 EXE、便携 ZIP 与 Windows SHA-256 清单。
 6. 全部通过后创建包含 macOS DMG/ZIP 与 Windows EXE/ZIP 的同一 Draft；独立发布工作流从 Draft 重新下载并再次安装 macOS 产物，通过后才发布 prerelease。任何失败都不得创建公开 Release。
 
 正式发布必须从干净 commit 构建。CI 不允许在签名后修改 `.app` 内容，也不允许覆盖已经存在的版本或 tag。
@@ -115,7 +115,7 @@ Windows 候选 CI 会同时生成并验证未签名 `Setup.exe` 与便携 ZIP：
 - 不自动降级 Harness 数据格式。若新版 dsh 写入不可逆格式，发布前必须提供备份/恢复策略，否则不升级该运行时。
 - 用户回滚应用时不得自动删除 Runtime Home。
 
-rc.8 首次启动时，桌面壳先完成 Runtime endpoint 所有权检查；只有轮转日志中保留的全部不同旧版 ready 端口均已释放，才在同级 `.dsh-0.1.0-rc.8-storage-v1.json` 原子记录本次回退事务选择的目标，并把非空的 `~/Library/Application Support/DeepSeek YukiRyou/runtime` 完整复制为 `runtime.pre-dsh-0.1.0-rc.8`；只有目标副本完整发布后才启动 Harness。若复制中断，下次启动复用同一目标继续，不会连续创建 `.1`、`.2` 耗尽磁盘。需要回滚时先完全退出应用，把当前 `runtime` 重命名保留为 `runtime.rc8-failed`，将备份复制回 `runtime`，删除同级事务标记，再安装旧版应用；不要让 rc.7 直接打开已经由 rc.8 写入的目录，也不要在确认恢复前删除任一副本。若之后再次升级 rc.8，桌面壳会创建新的编号回退副本，不覆盖最初备份；稳定 Runtime origin 会按日志物理顺序采用旧版最后一次 ready 记录，不依赖系统时钟，也无需手工编辑端口状态。
+rc.2 首次启动时，桌面壳先完成 Runtime endpoint 所有权检查；只有轮转日志中保留的全部不同旧版 ready 端口均已释放，才在同级 `.dsh-0.1.1-rc.2-storage-v1.json` 原子记录本次回退事务选择的目标，并把非空 Runtime Home 完整复制为 `runtime.pre-dsh-0.1.1-rc.2[.N]`；只有目标副本完整发布后才启动 Harness。若复制中断，下次启动复用同一目标继续，不会连续创建副本耗尽磁盘。rc.8 的历史 marker 与回退目录保持不动；回滚 rc.2 时也不得删除任一历史副本，直到恢复验证完成。
 
 规范支持的 `v0.2.1-beta.2 → rc.8` 路径要求先从应用菜单完整退出旧版。若旧版被强制退出、main 崩溃或 ready 日志被清理，必须先重启 macOS 再升级：beta.2 的 detached Runtime 没有 owner watchdog，且在日志也丢失时候选版无法安全识别它的端口。重启保证不存在两个 Runtime 并发写同一 Home；若最后 ready 记录已丢失，一次性 origin 迁移无法恢复原 localStorage，用户可能需要从 Harness 侧栏手动重新选择原会话。发布门禁覆盖保留日志的正常退出升级；强杀且日志丢失属于这条显式人工恢复合同，不宣称自动修复。
 

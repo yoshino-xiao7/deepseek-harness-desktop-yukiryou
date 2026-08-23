@@ -29,7 +29,7 @@ describe('window chrome adapters', () => {
     });
     expect(options).toMatchObject({
       titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 16, y: 16 },
+      trafficLightPosition: { x: 14, y: 14 },
       transparent: true,
       vibrancy: 'sidebar',
       visualEffectState: 'followWindow',
@@ -42,14 +42,14 @@ describe('window chrome adapters', () => {
 
     expect(adapter.describe()).toEqual({
       platform: 'win32',
-      captionHeight: 32,
+      captionHeight: 44,
       leadingSafeWidth: 0,
       trailingSafeWidth: 138,
       material: 'mica',
     });
     expect(options).toMatchObject({
       titleBarStyle: 'hidden',
-      titleBarOverlay: { height: 32 },
+      titleBarOverlay: { height: 44 },
       backgroundMaterial: 'mica',
       roundedCorners: true,
       thickFrame: true,

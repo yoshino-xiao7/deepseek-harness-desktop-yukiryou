@@ -174,6 +174,72 @@ describe('desktop community plugin catalog', () => {
     expect(JSON.stringify(await catalog.read())).not.toContain('must never be copied');
   });
 
+  it('keeps the complete dshfind index when the provider grows beyond one hundred pages', async () => {
+    const createCatalog = await loadCatalogFactory();
+    const total = 10_001;
+    const totalPages = 101;
+    const dataVersion = `sha256:${'c'.repeat(64)}`;
+    const requestPage = vi.fn(async (page = 1) => {
+      const count = page < totalPages ? 100 : 1;
+      const offset = (page - 1) * 100;
+      return {
+        page, per_page: 100, total, total_pages: totalPages, data_version: dataVersion,
+        data: Array.from({ length: count }, (_, index) => ({
+          full_name: `community/plugin-${offset + index}`,
+          name: `plugin-${offset + index}`,
+          owner: 'community',
+          repository_url: `https://github.com/community/plugin-${offset + index}`,
+          description: 'Plugin.',
+        })),
+      };
+    });
+
+    const result = await createCatalog({
+      requests: requests('dshfind', requestPage),
+      wait: async () => undefined,
+    }).read();
+
+    expect(result.source).toMatchObject({ complete: true, indexedTotal: total, providerTotal: total });
+    expect(requestPage).toHaveBeenCalledTimes(totalPages);
+    expect(requestPage).toHaveBeenLastCalledWith(totalPages, dataVersion);
+  });
+
+  it('publishes remotely maintained developer-installed versions without bypassing inspection', async () => {
+    const createCatalog = await loadCatalogFactory();
+    const testedAt = '2026-08-23T03:00:00.000Z';
+    const catalog = createCatalog({
+      now: () => Date.parse(testedAt),
+      requests: requests('yukiryou-curated', async () => ({
+        schemaVersion: 1,
+        revision: '2026-08-23.1',
+        items: [{
+          id: 'dsh-context', displayName: 'dsh-context', summary: 'Installed on real hardware.',
+          repository: 'https://github.com/bowenliang123/dsh-context', categories: ['agent'],
+          publisher: { name: 'bowenliang123' }, package: { name: 'dsh-context', version: '0.25.3' },
+          verification: {
+            status: 'installed', testedAt, harnessVersion: '0.1.1-rc.2',
+            platforms: ['darwin-arm64', 'win32-x64'], notes: 'Desktop profile smoke passed.',
+          },
+        }],
+      })),
+    });
+
+    await expect(catalog.listSources()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'yukiryou-curated', curated: true, builtIn: true }),
+    ]));
+    await expect(catalog.read({ sourceId: 'yukiryou-curated' })).resolves.toMatchObject({
+      source: { id: 'yukiryou-curated', complete: true, indexedTotal: 1 },
+      items: [{
+        package: { name: 'dsh-context', version: '0.25.3' },
+        developerVerification: {
+          status: 'installed', testedAt, harnessVersion: '0.1.1-rc.2',
+          platforms: ['darwin-arm64', 'win32-x64'],
+        },
+        installability: { state: 'candidate', reason: 'developer-installed-and-reviewed' },
+      }],
+    });
+  });
+
   it('fails the full scan when a later page changes the provider data version', async () => {
     const createCatalog = await loadCatalogFactory();
     const firstItems = Array.from({ length: 100 }, (_, index) => ({
@@ -451,6 +517,10 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain("['installable', 'installable', installable.length]");
     expect(source).toContain("['installed', 'installed', inventory.entries.length]");
     expect(source).toContain("['sources', 'sources', sourceRecords.entries.length]");
+    expect(source).toContain('const filteredInstallable = installable.filter');
+    expect(source).toContain('const filteredInstalled = inventory.entries.filter');
+    expect(source).toContain('...visibleInstalled.map((entry) =>');
+    expect(source).toContain('dsh-market-toolbar-search-only');
     expect(source).toContain("'x-dsh-desktop-market-mutation': '1'");
     expect(source).toContain("kind: 'set-enabled'");
     expect(source).toContain("role: 'dialog'");

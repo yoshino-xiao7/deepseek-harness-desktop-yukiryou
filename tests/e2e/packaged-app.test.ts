@@ -199,9 +199,11 @@ describe('packaged desktop application', () => {
             if (harness === undefined) return undefined;
             return harness.executeJavaScript(`(() => {
               const bridge = window.deepSeekYukiRyouBalance;
-              const card = document.querySelector('[data-testid="desktop-account-balance"]');
+              const card = document.querySelector('[data-testid="desktop-account-overview"]');
               const value = card?.querySelector('.dsh-balance-value');
               const balanceIcon = card?.querySelector('.dsh-balance-icon');
+              const accountState = card?.querySelector('.dsh-balance-account');
+              const todayState = card?.querySelector('.dsh-balance-today');
               const settings = [...document.querySelectorAll('button')].find(
                 (button) => /^(设置|Settings)$/.test(button.textContent?.trim() ?? ''),
               );
@@ -213,7 +215,14 @@ describe('packaged desktop application', () => {
               return {
                 text: card?.textContent,
                 hasCard: card !== null,
+                hasPopup: document.querySelector('[role="tooltip"]') !== null,
                 hasStyle: document.querySelector('style[data-dsh-balance-style]') !== null,
+                accountVisible: accountState === null
+                  ? undefined
+                  : getComputedStyle(accountState).display !== 'none',
+                todayDisplay: todayState === null
+                  ? undefined
+                  : getComputedStyle(todayState).display,
                 valueClipped: value instanceof HTMLElement
                   ? value.scrollWidth > value.clientWidth
                   : undefined,
@@ -238,8 +247,11 @@ describe('packaged desktop application', () => {
         )
         .toMatchObject({
           hasCard: true,
+          hasPopup: false,
           hasStyle: true,
           text: expect.stringMatching(/账户余额|Account balance/),
+          accountVisible: true,
+          todayDisplay: 'none',
           valueClipped: false,
           valueBelowLabel: true,
           leadingOffset: 0,
@@ -443,17 +455,22 @@ describe('packaged desktop application', () => {
                 return;
               }
               const buttons = [...dialog.querySelectorAll('button')];
-              const appearance = buttons.find((button) =>
-                /^(外观|Appearance)$/.test(button.textContent?.trim() ?? ''),
+              const general = buttons.find((button) =>
+                /^(通用设置|General settings)$/.test(button.textContent?.trim() ?? ''),
               );
-              appearance?.click();
-              const appearancePage = await waitFor(() =>
-                dialog.querySelector('.dsh-desktop-theme-grid'),
-              );
-              if (!(appearancePage instanceof HTMLElement)) {
+              general?.click();
+              const themeButtons = await waitFor(() => {
+                const candidates = [...dialog.querySelectorAll('button')].filter((button) =>
+                  /^(浅色|Light|深色|Dark|跟随系统|System)$/.test(
+                    button.textContent?.trim() ?? '',
+                  ),
+                );
+                return candidates.length >= 3 ? candidates : undefined;
+              });
+              if (!Array.isArray(themeButtons)) {
                 resolve({
-                  error: 'appearance page did not render',
-                  appearanceFound: Boolean(appearance),
+                  error: 'general settings theme controls did not render',
+                  generalFound: Boolean(general),
                   navLabels: [...dialog.querySelectorAll('nav button')]
                     .map((button) => button.textContent?.trim()),
                   dialogText: dialog.textContent,
@@ -463,7 +480,21 @@ describe('packaged desktop application', () => {
                 });
                 return;
               }
-              const themeButtons = [...appearancePage.querySelectorAll('button')];
+              const appearance = [...dialog.querySelectorAll('nav button')].find((button) =>
+                /^(外观|Appearance)$/.test(button.textContent?.trim() ?? ''),
+              );
+              if (appearance instanceof HTMLButtonElement) {
+                resolve({
+                  error: 'duplicate appearance navigation is still present',
+                  navLabels: [...dialog.querySelectorAll('nav button')]
+                    .map((button) => button.textContent?.trim()),
+                  dialogText: dialog.textContent,
+                  pluginStyleLoaded: Boolean(document.querySelector(
+                    'style[data-plugin-css="dsh-desktop-settings"]',
+                  )),
+                });
+                return;
+              }
               const dark = themeButtons.find((button) =>
                 /^(深色|Dark)$/.test(button.textContent?.trim() ?? ''),
               );
@@ -527,8 +558,13 @@ describe('packaged desktop application', () => {
       }
       expect(settingsResult?.navLabels).toEqual(
         expect.arrayContaining([
-          expect.stringMatching(/^(外观|Appearance)$/),
+          expect.stringMatching(/^(通用设置|General settings)$/),
           expect.stringMatching(/^(关于|About)$/),
+        ]),
+      );
+      expect(settingsResult?.navLabels).not.toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^(外观|Appearance)$/),
         ]),
       );
       expect(settingsResult?.themeLabels).toEqual(
@@ -559,12 +595,46 @@ describe('packaged desktop application', () => {
         getSnapshot: 'function',
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
-      expect(settingsResult?.aboutText).toContain('0.1.0-rc.8');
+      expect(settingsResult?.aboutText).toContain('0.1.1-rc.2');
       expect(settingsResult?.aboutText).toMatch(
         process.platform === 'win32'
           ? /Windows.*x64/
           : /Apple Silicon.*arm64/,
       );
+
+      const selectHarnessLocale = async (locale: 'en-US' | 'zh-CN') => {
+        await electronApp!.evaluate(async ({ webContents }, nextLocale) => {
+          const harness = webContents
+            .getAllWebContents()
+            .find((contents) =>
+              contents.getURL().startsWith('http://127.0.0.1:'),
+            );
+          await harness?.executeJavaScript(
+            `document.documentElement.lang = ${JSON.stringify(nextLocale)}`,
+          );
+        }, locale);
+      };
+      const readDesktopLocale = async () => ({
+        toolbar: await shellPage!
+          .locator('[data-window-menu]')
+          .allTextContents(),
+        menu: await electronApp!.evaluate(({ Menu }) => {
+          const menu = Menu.getApplicationMenu();
+          return ['edit', 'view', 'window', 'help'].map(
+            (id) => menu?.getMenuItemById(id)?.label,
+          );
+        }),
+      });
+      await selectHarnessLocale('en-US');
+      await expect.poll(readDesktopLocale).toEqual({
+        toolbar: ['File', 'Edit', 'View', 'Help'],
+        menu: ['Edit', 'View', 'Window', 'Help'],
+      });
+      await selectHarnessLocale('zh-CN');
+      await expect.poll(readDesktopLocale).toEqual({
+        toolbar: ['文件', '编辑', '视图', '帮助'],
+        menu: ['编辑', '视图', '窗口', '帮助'],
+      });
       if (process.platform === 'win32') {
         await captureApplicationWindow(electronApp, 'settings-dark');
       }
@@ -738,6 +808,9 @@ describe('packaged desktop application', () => {
               .locator('[data-testid="window-drag-region"]')
               .evaluate(() => ({
                 scheme: document.documentElement.dataset.appearanceScheme,
+                menuColor: window.getComputedStyle(
+                  document.querySelector('[data-window-menu]')!,
+                ).color,
                 sidebar: document.documentElement.style.getPropertyValue(
                   '--toolbar-sidebar-background',
                 ),
@@ -749,6 +822,7 @@ describe('packaged desktop application', () => {
         )
         .toMatchObject({
           scheme: 'dark',
+          menuColor: 'rgb(242, 244, 250)',
           sidebar: expect.stringMatching(/^rgb/),
           content: expect.stringMatching(/^rgb/),
         });

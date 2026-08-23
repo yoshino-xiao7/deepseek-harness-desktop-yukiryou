@@ -1,28 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
 
 import {
   shouldConfigureWindowsApplicationIdentity,
+  windowsAppUserModelId,
   windowsExecutableName,
-  windowsSquirrelAppUserModelId,
-  windowsSquirrelPackageId,
 } from './windows-release.js';
 
 describe('Windows release identity', () => {
-  it('matches the Squirrel package id and packaged executable', () => {
-    expect(windowsSquirrelPackageId).toBe('DeepSeekYukiRyou');
+  it('uses a stable product identity and packaged executable', () => {
     expect(windowsExecutableName).toBe('DeepSeek YukiRyou');
-    expect(windowsSquirrelAppUserModelId).toBe(
-      'com.squirrel.DeepSeekYukiRyou.DeepSeek YukiRyou',
-    );
+    expect(windowsAppUserModelId).toBe('com.yukiryou.deepseek.yukiryou');
   });
 
-  it('only applies the Squirrel identity on Windows', () => {
+  it('only applies the Windows identity on Windows', () => {
     expect(shouldConfigureWindowsApplicationIdentity('win32')).toBe(true);
     expect(shouldConfigureWindowsApplicationIdentity('darwin')).toBe(false);
     expect(shouldConfigureWindowsApplicationIdentity('linux')).toBe(false);
   });
 
-  it('keeps macOS and Windows makers separated in Forge', async () => {
+  it('keeps macOS makers in Forge and delegates Windows setup to a guided NSIS installer', async () => {
     const { default: config } = await import('../../forge.config.js');
     const packager = config.packagerConfig as {
       readonly icon?: string;
@@ -46,6 +43,18 @@ describe('Windows release identity', () => {
       name: 'zip',
       platforms: ['darwin', 'win32'],
     });
-    expect(makers).toContainEqual({ name: 'squirrel', platforms: ['win32'] });
+    expect(makers).not.toContainEqual({ name: 'squirrel', platforms: ['win32'] });
+
+    const builder = await readFile('electron-builder.yml', 'utf8');
+    expect(builder).toContain('target: nsis');
+    expect(builder).toContain('oneClick: false');
+    expect(builder).toContain('allowToChangeInstallationDirectory: true');
+    expect(builder).toContain('perMachine: false');
+    expect(builder).toContain('runAfterFinish: false');
+
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.['make:win']).toContain('--publish never');
   });
 });

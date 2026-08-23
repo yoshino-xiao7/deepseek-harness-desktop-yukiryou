@@ -1,7 +1,5 @@
-export const windowsSquirrelPackageId = 'DeepSeekYukiRyou';
 export const windowsExecutableName = 'DeepSeek YukiRyou';
-export const windowsSquirrelAppUserModelId =
-  `com.squirrel.${windowsSquirrelPackageId}.${windowsExecutableName}`;
+export const windowsAppUserModelId = 'com.yukiryou.deepseek.yukiryou';
 
 export function shouldConfigureWindowsApplicationIdentity(
   platform: NodeJS.Platform,

@@ -154,5 +154,6 @@ describe('desktop plugin management tab', () => {
     })();
     management?.component({ t: (key: string) => key, ...injected });
     expect(list).toHaveBeenCalledOnce();
+    expect(registrations.has('settings.section:desktop-appearance')).toBe(false);
   });
 });

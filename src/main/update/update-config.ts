@@ -1,12 +1,14 @@
 const UPDATE_SERVER = 'https://update.electronjs.org';
 const REPOSITORY_OWNER = 'yoshino-xiao7';
 const REPOSITORY_NAME = 'deepseek-harness-desktop-yukiryou';
+const WINDOWS_RELEASE_API = `https://api.github.com/repos/${REPOSITORY_OWNER}/${REPOSITORY_NAME}/releases/latest`;
 
 export function updateFeedUrl(options: {
   readonly currentVersion: string;
   readonly platform: NodeJS.Platform;
   readonly architecture: string;
 }): string {
+  if (options.platform === 'win32') return WINDOWS_RELEASE_API;
   const target = `${options.platform}-${options.architecture}`;
   return [
     UPDATE_SERVER,

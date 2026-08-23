@@ -2,6 +2,26 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('workspace review UI contract', () => {
+  it('provides a Windows-only localized menu inside the draggable 44px caption', async () => {
+    const [html, styles, renderer] = await Promise.all([
+      readFile(new URL('./index.html', import.meta.url), 'utf8'),
+      readFile(new URL('./styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('./index.ts', import.meta.url), 'utf8'),
+    ]);
+
+    expect(html).toMatch(/data-testid="windows-menu"[^>]+hidden/);
+    expect(html).toMatch(/data-window-menu="file">文件/);
+    expect(styles).toMatch(/\.window-toolbar\s*\{[^}]*height:\s*44px/s);
+    expect(styles).toMatch(/\.windows-menu\s*\{[^}]*-webkit-app-region:\s*no-drag/s);
+    expect(styles).toMatch(
+      /:root\[data-appearance-scheme="dark"\]\s*\{[^}]*--toolbar-foreground:\s*#f2f4fa/s,
+    );
+    expect(styles).toMatch(
+      /\.windows-menu button\s*\{[^}]*var\(--toolbar-foreground\)/s,
+    );
+    expect(renderer).toContain("windowBridge?.openMenu");
+  });
+
   it('uses a semantic SVG refresh icon instead of a CSS-drawn control', async () => {
     const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
 

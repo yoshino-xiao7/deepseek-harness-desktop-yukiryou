@@ -33,7 +33,8 @@ webPreferences: {
 - 外观与关于页使用 Harness 官方插件插槽。桌面扩展随应用离线打包，只获得 Harness 的 slots、locale 和 theme 服务，不暴露 Electron/Node API，也不通过任意用户路径加载代码。外观同步 IPC 只接受 `light|dark` 和浏览器归一化的 `rgb/rgba` 颜色，拒绝选择器、CSS 代码、URL 与任意属性。
 - 启动恢复只检查 Runtime Home 根目录下的常规文件 `settings.yaml`，使用与 Harness 相同的结构化 YAML 解析器。仅语法损坏或根节点不是映射时触发恢复；原文件以原权限重命名保存，新的空设置文件使用 `0600`，会话、凭据、工作区缓存和符号链接均不在自动恢复范围内。
 - macOS 更新器仅在打包的 arm64 应用启用，feed 固定为公开仓库在 `update.electronjs.org` 上的架构专属 HTTPS 端点。Squirrel.Mac 要求当前应用和下载的更新均通过代码签名验证；开发包不会进入安装流程，更新安装前先停止本应用拥有的 Harness 进程。
-- `contextBridge` 只向 Harness 暴露更新状态快照、订阅和 `check|install` 两个无参数命令。主进程再次校验固定命令枚举；`install` 仅在状态为 `downloaded` 时生效，不接受 URL、路径、shell 命令或任意参数。
+- Windows 更新检查仅访问固定仓库的 GitHub Releases API，校验非草稿 Release 的版本字段并在本地做语义版本比较。Windows 不执行远程返回的 URL 或命令；发现新版本后只把应用切换到手动下载状态，用户通过固定的仓库 Release 页面获取安装 EXE。
+- `contextBridge` 只向 Harness 暴露更新状态快照、订阅和 `check|install|download` 三个无参数命令。主进程再次校验固定命令枚举；`install` 仅在 macOS 状态为 `downloaded` 时生效，`download` 只打开编译期固定的 Release 页面，不接受 URL、路径、shell 命令或任意参数。
 - 使用 `will-navigate` 拒绝非当前可信 origin。
 - `setWindowOpenHandler` 默认 deny；允许的 `https:` 外链交给系统浏览器。
 - 拒绝新窗口、下载和权限请求，除非有明确产品场景与测试。

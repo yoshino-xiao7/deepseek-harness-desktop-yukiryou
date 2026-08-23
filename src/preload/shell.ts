@@ -36,6 +36,14 @@ import {
   WORKSPACE_REFERENCE_FROM_SHELL_CHANNEL,
   validatedWorkspaceConversationReference,
 } from '../shared/workspace-conversation-reference.js';
+import {
+  WINDOW_MENU_CHANNEL,
+  validatedWindowMenuRequest,
+} from '../shared/window-menu.js';
+import {
+  TOOLBAR_LOCALE_CHANNEL,
+  validatedDesktopLocale,
+} from '../shared/locale-sync.js';
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
@@ -108,6 +116,16 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
   },
 });
 
+contextBridge.exposeInMainWorld('deepSeekYukiRyouWindow', {
+  platform: process.platform,
+  openMenu: (value: unknown): boolean => {
+    const request = validatedWindowMenuRequest(value);
+    if (request === undefined) return false;
+    ipcRenderer.send(WINDOW_MENU_CHANNEL, request);
+    return true;
+  },
+});
+
 function applyToolbarWidth(): void {
   document.documentElement?.style.setProperty(
     '--harness-sidebar-width',
@@ -146,7 +164,23 @@ ipcRenderer.on(TOOLBAR_APPEARANCE_CHANNEL, (_event, value: unknown) => {
   applyToolbarAppearance();
 });
 
+ipcRenderer.on(TOOLBAR_LOCALE_CHANNEL, (_event, value: unknown) => {
+  const locale = validatedDesktopLocale(value);
+  if (locale === undefined) return;
+  document.documentElement.lang = locale;
+  const labels = locale === 'en-US'
+    ? { file: 'File', edit: 'Edit', view: 'View', help: 'Help' }
+    : { file: '文件', edit: '编辑', view: '视图', help: '帮助' };
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-window-menu]')) {
+    const id = button.dataset.windowMenu as keyof typeof labels | undefined;
+    if (id !== undefined && labels[id] !== undefined) button.textContent = labels[id];
+  }
+});
+
 window.addEventListener('DOMContentLoaded', () => {
+  document.documentElement.dataset.desktopPlatform = process.platform;
+  const windowsMenu = document.querySelector<HTMLElement>('[data-testid="windows-menu"]');
+  if (windowsMenu !== null) windowsMenu.hidden = process.platform !== 'win32';
   applyToolbarWidth();
   applyToolbarAppearance();
 });

@@ -102,7 +102,7 @@ describe('bundled Harness runtime', () => {
         ),
         '--version',
       ]);
-      expect(dshVersion.stdout.trim()).toBe('0.1.0-rc.8');
+      expect(dshVersion.stdout.trim()).toBe('0.1.1-rc.2');
       supervisor = createRuntimeSupervisor({
         command: runtimeCommand.command,
         args: runtimeCommand.args,
@@ -180,9 +180,10 @@ describe('bundled Harness runtime', () => {
         },
       );
       expect(balance.status).toBe(200);
-      await expect(balance.json()).resolves.toEqual({
+      await expect(balance.json()).resolves.toMatchObject({
         status: 'unavailable',
         reason: 'credential-unconfigured',
+        today: { status: 'ready', currency: 'CNY', amount: '0' },
       });
     },
     75_000,

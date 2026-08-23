@@ -1,8 +1,10 @@
-# 外观扩展契约
+# 外观与 UI 风格插件契约
 
 ## 目标
 
-“设置 → 外观”是整个桌面产品的视觉入口，不只控制 Harness 页面。任一后续风格必须同时覆盖：
+内置的浅色、深色和跟随系统只保留一个入口：Harness 官方“通用设置 → 外观”。桌面插件不得再注册内容相同的独立“外观”设置页；官方主题状态是整个产品的唯一事实来源。
+
+更换配色、圆角、密度和其他 UI 风格属于可选产品能力，后续以 UI 风格插件提供。任一风格插件必须同时覆盖：
 
 1. DeepSeek Harness 的组件、页面和状态色。
 2. Electron 本地 44px 顶栏的侧栏区域与内容区域。
@@ -13,7 +15,7 @@
 ## 数据流
 
 ```text
-Desktop settings extension
+Harness official theme / optional UI style plugin
         │
         ├─ ctx.theme / Harness token overrides ──► Harness UI
         │
@@ -32,7 +34,7 @@ Desktop settings extension
 
 ## 风格定义规则
 
-新增风格时，在 `runtime/desktop-settings-plugin` 内完成定义，并通过 Harness 官方主题接口应用 Harness 令牌。禁止从桌面主进程修改 Harness DOM。
+新增风格时，创建独立的声明式 UI 风格插件，通过 Harness 官方主题接口应用令牌，并只向桌面桥发布下列稳定 chrome 令牌。禁止把风格继续堆入 `desktop-settings-plugin`，也禁止从桌面主进程修改 Harness DOM。
 
 顶栏使用两个稳定令牌：
 
@@ -65,7 +67,7 @@ interface DesktopStyleDefinition {
 }
 ```
 
-`harnessTokens` 通过 `ctx.theme.overrideTokens()` 进入 Harness；`chrome` 映射到上述两个稳定 CSS 令牌。选择状态需要由桌面设置扩展持久化，切换风格时一次性更新两部分，不能让调用方分别操作。
+`harnessTokens` 通过 `ctx.theme.overrideTokens()` 进入 Harness；`chrome` 映射到上述两个稳定 CSS 令牌。选择状态由风格插件持久化，切换时一次性更新 Harness 与桌面 chrome，不能让调用方分别操作。插件未安装或被停用时，应用直接回到官方主题，不保留隐藏的产品级覆盖。
 
 ## 验证门槛
 

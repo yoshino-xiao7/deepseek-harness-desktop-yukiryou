@@ -1,7 +1,7 @@
 {
   "name": "deepseek-harness-desktop-yukiryou",
   "productName": "DeepSeek YukiRyou",
-  "version": "0.2.3-beta.2",
+  "version": "0.2.3-beta.3",
   "description": "An independent DeepSeek Harness desktop workspace for macOS and Windows",
   "author": "YukiRyou <https://github.com/yoshino-xiao7>",
   "homepage": "https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou",
@@ -19,7 +19,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "electron-winstaller",
+      "app-builder-bin",
       "fs-xattr",
       "macos-alias"
     ],
@@ -57,20 +57,19 @@
     "package:mac": "electron-forge package --platform=darwin",
     "make:mac": "electron-forge make --platform=darwin",
     "package:win": "electron-forge package --platform=win32 --arch=x64",
-    "make:win": "electron-forge make --platform=win32 --arch=x64",
+    "make:win": "electron-forge make --platform=win32 --arch=x64 && electron-builder --win nsis --x64 --prepackaged \"out/DeepSeek YukiRyou-win32-x64\" --publish never",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-dmg": "7.11.2",
-    "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
     "@electron-forge/plugin-vite": "7.11.2",
     "@electron-forge/shared-types": "7.11.2",
     "@eslint/js": "10.0.1",
-    "@types/electron-squirrel-startup": "1.0.2",
     "@types/node": "26.2.0",
     "electron": "43.4.0",
+    "electron-builder": "26.0.12",
     "eslint": "10.8.1",
     "playwright": "1.62.1",
     "typescript": "6.0.2",
@@ -79,7 +78,6 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "electron-squirrel-startup": "1.0.1",
     "yaml": "2.9.0"
   }
 }

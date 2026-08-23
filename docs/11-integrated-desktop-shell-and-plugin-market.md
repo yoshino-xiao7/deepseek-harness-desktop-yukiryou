@@ -612,8 +612,8 @@ Windows
 
 ### Windows 发行
 
-- 产物：同一 GitHub Release 公开版本化的 Squirrel `Setup.exe` 与便携 ZIP；`-full.nupkg` 和 `RELEASES` 只留给 CI 安装生命周期验证，不作为用户下载入口。
-- 生命周期：main 入口在 `app.ready` 前处理 Squirrel install/update/uninstall/obsolete 事件，事件处理期间不启动 Harness Runtime。
+- 产物：同一 GitHub Release 公开版本化的向导式 NSIS `Setup.exe` 与便携 ZIP；不再生成或依赖 Squirrel `-full.nupkg`/`RELEASES`。
+- 生命周期：NSIS 安装器按当前用户安装并允许修改目录；CI 以指定隔离目录验证安装、修复和卸载，主应用入口无需处理 Squirrel 启动事件。
 - 签名：早期 Beta 不接入 Authenticode；Release Notes 必须明确未签名和 SmartScreen 风险，并提供独立 SHA-256。用户规模需要时再把签名作为附加发行门，不追溯覆盖旧资产。
 - 安装验证：全新 Windows runner 验证 EXE 首装、同版本修复、卸载、用户数据保留、开始菜单入口和实际启动；便携 ZIP 解压后也必须从精确产物启动并恢复会话。
 - 安全验证：检查来源 commit、安装包/ZIP hash、可执行文件和原生 `.node` 架构；未签名状态不得被描述为 Windows 信任背书。
@@ -724,17 +724,17 @@ Integrated 传输原型已完成直接加载 Harness 的 `ProductWindow`、独�
 - 完成升级、长期运行、renderer crash、Runtime crash 和恶意插件 fixture 验证。
 - 完成 Windows 11 x64 的安装 EXE、便携 ZIP、卸载和 packaged smoke 流水线；跨版本升级与自动更新作为后续门禁，Authenticode 按实际分发规模接入。
 - 将 `isUpdaterSupported()` 扩展为显式支持 `darwin-arm64 | win32-x64`，并分别验证 feed URL 与资产选择。
-- Forge 配置按平台选择 `.icns`/`.ico`、DMG/ZIP/Squirrel maker 和签名参数，macOS 专用 `extendInfo` 不进入 Windows 包。
+- Forge 配置按平台选择 `.icns`/`.ico`、DMG/ZIP 和签名参数；Windows 安装 EXE 由 electron-builder 从 Forge 的同一预打包目录生成，macOS 专用 `extendInfo` 不进入 Windows 包。
 - 删除 `LegacyDesktopProductCarrier`、其 `WebContentsView` 产品路径和环境开关。
 - 同步架构、安全、开发、测试、当前状态和发布说明。
 
-当前增量：发行壳的首个 Windows seam 已建立。Forge 的图标基址不带扩展名，由 Electron Packager 针对 macOS/Windows 分别解析 `.icns`/`.ico`；Squirrel.Windows Maker 与 Windows ZIP Maker 都只在 `win32` 生成对应产物，DMG 继续只属于 macOS。Windows 使用固定的 `DeepSeekYukiRyou` Squirrel package ID、`DeepSeek YukiRyou.exe` 与匹配的 AppUserModelID，主进程在正常启动前消费 Squirrel 生命周期事件。更新器目标白名单已从单一 `darwin-arm64` 扩展为 `darwin-arm64 | win32-x64`，Linux、macOS x64、Windows arm64 和开发态仍关闭。七尺寸 Windows ICO 由现有品牌 PNG 通过仓库脚本生成；Packager 对目标目录使用覆盖语义。
+当前增量：发行壳的 Windows seam 已建立。Forge 的图标基址不带扩展名，由 Electron Packager 针对 macOS/Windows 分别解析 `.icns`/`.ico`；Windows ZIP Maker 生成便携包，electron-builder NSIS 从同一预打包目录生成允许选择安装位置的向导式 EXE，DMG 继续只属于 macOS。Windows 使用稳定的 `com.yukiryou.deepseek.yukiryou` AppUserModelID 与 `DeepSeek YukiRyou.exe`。更新器目标白名单为 `darwin-arm64 | win32-x64`：macOS 保持签名更新链，Windows 读取 GitHub 正式 Release 并提供安装 EXE 下载入口。Linux、macOS x64、Windows arm64 和开发态仍关闭。七尺寸 Windows ICO 由现有品牌 PNG 通过仓库脚本生成；Packager 对目标目录使用覆盖语义。
 
 Runtime 门禁现已完成代码侧扩展。schema 2 manifest 用 `darwin-arm64 | darwin-x64 | win32-x64` 完整 target 绑定 Node 归档和 SHA-256，不再让同一个 `x64` 键含糊代表宿主平台。`RuntimePlatformLayout` 统一提供 Node executable、npm CLI、PATH 根、node-pty prebuild/native files 和 PTY smoke command；应用启动也从该合同解析 Windows 的 `node/node.exe`。vendor 强制目标平台等于执行主机，Windows runner 使用锁定 Node ZIP、`npm_config_os=win32` 与 `npm_config_cpu=x64` 进行真实原生依赖装配，保留 ConPTY 所需的两个 `.node`、DLL 与 OpenConsole，裁剪其他平台及 PDB。verify 在 Windows 读取 PE header 确认 x64，并用目标 Node 实际加载 DSH、pnpm、node-pty、Sharp 和 Koffi；Darwin 的 lipo、spawn-helper execute bit 和 zsh smoke 保持原样。macOS arm64 与 Windows x64 都由各自宿主验证，跨主机装配会在网络和写盘前失败关闭。
 
-Windows CI 候选门禁现已落地为可复用工作流。它在 `windows-latest` x64 runner 上先执行 lint、typecheck、完整单元与集成测试，再由全新的干净 job 执行 host-native Runtime vendor/verify，并同时生成 Squirrel EXE 与便携 ZIP；随后分别从打包目录和解压后的精确 ZIP 启动/重启应用。候选冻结器要求品牌 `Setup.exe`、一个 `-full.nupkg`、`RELEASES` 和精确版本 portable ZIP，验证 `RELEASES` 绑定后生成带 package version、`win32-x64` target、Git commit、逐文件字节数和 SHA-256 的 manifest。普通 PR 只上传短期候选；桌面发行工作流复用同一门禁，只选择版本化 EXE、便携 ZIP 和独立 SHA-256 清单加入与 macOS 相同的 Draft Release。
+Windows CI 候选门禁现已落地为可复用工作流。它在 `windows-latest` x64 runner 上先执行 lint、typecheck、完整单元与集成测试，再由干净 job 执行 host-native Runtime vendor/verify，并同时生成 NSIS EXE 与便携 ZIP；随后分别从打包目录和解压后的精确 ZIP 启动/重启应用。候选冻结器要求唯一品牌 `Setup.exe` 和精确版本 portable ZIP，并生成带 package version、`win32-x64` target、Git commit、逐文件字节数和 SHA-256 的 manifest。普通 PR 只上传短期候选；桌面发行工作流复用同一门禁，把版本化 EXE、便携 ZIP 和独立 SHA-256 清单加入与 macOS 相同的 Draft Release。
 
-冻结候选之后，CI 还会运行真实 Squirrel 生命周期门禁：执行 `Setup.exe --silent`，等待安装目录和快捷方式出现，从实际安装路径启动应用并复跑会话恢复测试，然后执行同版本修复安装、再次启动和 `Update.exe --uninstall --silent`。卸载必须移除可运行主程序、更新包、快捷方式和“程序与功能”注册项，同时保留带随机 nonce 的应用用户数据标记。旧 Squirrel 会在部分 Windows 环境留下 `.dead`、`Update.exe`、`squirrel.exe` 和 V8 snapshot 自清理墓碑；门禁只接受这组精确残留，任何产品文件或额外条目均失败。这个门禁刻意把当前能力称为“修复安装”而非“覆盖升级”；跨版本升级、自动更新和独立 Windows 11 客户端验收继续作为后续质量工作，不阻塞明确标注未签名的早期 Beta。
+冻结候选之后，CI 还会运行真实 NSIS 生命周期门禁：以 `/S /D=<隔离目录>` 执行 `Setup.exe`，从实际安装路径启动应用并复跑会话恢复测试，然后执行同版本修复安装、再次启动和静默卸载。状态文件只允许指向工作区内的隔离安装目录，恢复步骤不会清理任意系统安装位置。这个门禁刻意把当前能力称为“修复安装”而非“覆盖升级”；跨版本升级和独立 Windows 11 客户端验收继续作为后续质量工作，不阻塞明确标注未签名的早期 Beta。
 
 ## 测试与验收
 
@@ -767,7 +767,7 @@ Windows CI 候选门禁现已落地为可复用工作流。它在 `windows-lates
 | --- | --- | --- |
 | 首发架构 | arm64 | x64 |
 | 最低系统 | macOS 14 | Windows 11 |
-| 安装 | DMG、ZIP | Squirrel Setup.exe、便携 ZIP |
+| 安装 | DMG、ZIP | 向导式 NSIS Setup.exe、便携 ZIP |
 | 原生 chrome | hiddenInset、traffic lights、vibrancy | titleBarOverlay、caption buttons、Mica/opaque |
 | 签名 | Developer ID + notarization | 早期 Beta 未签名并披露；后续可选 Authenticode |
 | 必测升级 | 上一公开版本覆盖安装 | 首版验证同版本修复；跨版本升级后续补齐 |
@@ -804,7 +804,7 @@ Windows CI 候选门禁现已落地为可复用工作流。它在 `windows-lates
 ## 官方技术依据
 
 - [Electron BrowserWindow：title bar overlay、background material 与窗口参数](https://www.electronjs.org/docs/latest/api/browser-window)
-- [Electron Forge Squirrel.Windows maker](https://js.electronforge.io/modules/_electron_forge_maker_squirrel.html)
+- [electron-builder NSIS configuration](https://www.electron.build/nsis.html)
 - [Electron Forge Windows 代码签名](https://www.electronforge.io/guides/code-signing/code-signing-windows)
 - [Electron Forge TypeScript maker 配置](https://www.electronforge.io/config/typescript-configuration)
 

@@ -100,6 +100,23 @@ const companionBridge = (
     };
   }
 ).deepSeekYukiRyouCompanion;
+const windowBridge = (
+  window as unknown as {
+    deepSeekYukiRyouWindow?: {
+      platform: string;
+      openMenu(request: { id: 'file' | 'edit' | 'view' | 'help'; x: number; y: number }): boolean;
+    };
+  }
+).deepSeekYukiRyouWindow;
+
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-window-menu]')) {
+  button.addEventListener('click', () => {
+    const id = button.dataset.windowMenu;
+    if (id !== 'file' && id !== 'edit' && id !== 'view' && id !== 'help') return;
+    const bounds = button.getBoundingClientRect();
+    windowBridge?.openMenu({ id, x: bounds.left, y: bounds.bottom });
+  });
+}
 
 function applyCompanionPanelWidth(width: number, persist = true): number {
   const normalized = normalizedCompanionPanelWidth(width);

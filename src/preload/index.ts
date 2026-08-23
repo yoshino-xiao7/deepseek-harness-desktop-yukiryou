@@ -78,6 +78,7 @@ import {
 } from '../shared/managed-plugin-inventory.js';
 import { runWhenDocumentReady } from './document-readiness.js';
 import { resolvedHarnessAppearance } from './harness-appearance.js';
+import { HARNESS_LOCALE_CHANNEL, validatedDesktopLocale } from '../shared/locale-sync.js';
 
 let updateState: DesktopUpdateState = {
   status: 'disabled',
@@ -548,6 +549,22 @@ function installHarnessAppearanceObserver(): void {
   schedule();
 }
 
+function installHarnessLocaleObserver(): void {
+  let previous: string | undefined;
+  const report = (): void => {
+    const locale = validatedDesktopLocale(document.documentElement.lang);
+    if (locale !== undefined && locale !== previous) {
+      previous = locale;
+      ipcRenderer.send(HARNESS_LOCALE_CHANNEL, locale);
+    }
+  };
+  new MutationObserver(report).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['lang'],
+  });
+  report();
+}
+
 function reconcileHarnessUpdateButton(): void {
   const existing = document.querySelector<HTMLElement>(
     '[data-dsh-desktop-update-button]',
@@ -701,6 +718,7 @@ function installHarnessUpdateButton(): void {
 
 runWhenDocumentReady(document, () => {
   installHarnessAppearanceObserver();
+  installHarnessLocaleObserver();
   installHarnessSidebarObserver();
   installHarnessUpdateButton();
 });

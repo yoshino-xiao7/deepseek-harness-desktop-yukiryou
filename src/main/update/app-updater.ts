@@ -25,10 +25,119 @@ export interface AppUpdaterOptions {
   readonly onError: (error: Error) => void;
   readonly automaticCheckDelayMs?: number;
   readonly automaticCheckIntervalMs?: number;
+  readonly fetchLatestRelease?: typeof fetch;
 }
 
 export function createAppUpdater(options: AppUpdaterOptions): AppUpdater {
+  if (options.enabled && options.platform === 'win32') {
+    return new GitHubReleaseAppUpdater(options);
+  }
   return new ElectronAppUpdater(options);
+}
+
+interface GitHubRelease {
+  readonly tag_name: string;
+  readonly name?: string | null;
+  readonly body?: string | null;
+  readonly html_url: string;
+  readonly draft: boolean;
+}
+
+export class GitHubReleaseAppUpdater implements AppUpdater {
+  readonly #options: AppUpdaterOptions;
+  readonly #listeners = new Set<(state: DesktopUpdateState) => void>();
+  #checking = false;
+  #state: DesktopUpdateState;
+  #initialTimer: ReturnType<typeof setTimeout> | undefined;
+  #intervalTimer: ReturnType<typeof setInterval> | undefined;
+
+  constructor(options: AppUpdaterOptions) {
+    this.#options = options;
+    this.#state = {
+      status: options.enabled ? 'idle' : 'disabled',
+      currentVersion: options.currentVersion,
+    };
+  }
+
+  async checkForUpdates(): Promise<UpdateCheckResult> {
+    if (!this.#options.enabled) return { status: 'disabled' };
+    if (this.#checking) return { status: 'busy' };
+    this.#checking = true;
+    this.#setState({ status: 'checking', currentVersion: this.#options.currentVersion });
+    try {
+      const response = await (this.#options.fetchLatestRelease ?? fetch)(
+        updateFeedUrl({
+          currentVersion: this.#options.currentVersion,
+          platform: this.#options.platform,
+          architecture: this.#options.architecture,
+        }),
+        {
+          headers: {
+            Accept: 'application/vnd.github+json',
+            'User-Agent': `DeepSeek-YukiRyou/${this.#options.currentVersion}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      if (!response.ok) throw new Error(`GitHub update check failed (${String(response.status)})`);
+      const release = validatedGitHubRelease(await response.json());
+      const checkedAt = new Date().toISOString();
+      if (compareVersions(release.tag_name, this.#options.currentVersion) <= 0) {
+        this.#setState({ status: 'latest', currentVersion: this.#options.currentVersion, checkedAt });
+        return { status: 'not-available' };
+      }
+      this.#setState({
+        status: 'manual',
+        currentVersion: this.#options.currentVersion,
+        releaseName: (release.name ?? release.tag_name).slice(0, 80),
+        releaseNotes: (release.body ?? '').slice(0, 2_000),
+        checkedAt,
+      });
+      return { status: 'available' };
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      this.#setState({
+        status: 'error',
+        currentVersion: this.#options.currentVersion,
+        message: safeErrorMessage(failure),
+      });
+      this.#options.onError(failure);
+      throw failure;
+    } finally {
+      this.#checking = false;
+    }
+  }
+
+  getState(): DesktopUpdateState { return this.#state; }
+
+  subscribe(listener: (state: DesktopUpdateState) => void): () => void {
+    this.#listeners.add(listener);
+    listener(this.#state);
+    return () => this.#listeners.delete(listener);
+  }
+
+  startAutomaticChecks(): void {
+    if (!this.#options.enabled || this.#initialTimer !== undefined) return;
+    const check = (): void => { void this.checkForUpdates().catch(() => undefined); };
+    this.#initialTimer = setTimeout(check, this.#options.automaticCheckDelayMs ?? 15_000);
+    this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
+  }
+
+  quitAndInstall(): void {}
+
+  dispose(): void {
+    clearTimeout(this.#initialTimer);
+    clearInterval(this.#intervalTimer);
+    this.#initialTimer = undefined;
+    this.#intervalTimer = undefined;
+    this.#listeners.clear();
+  }
+
+  #setState(state: DesktopUpdateState): void {
+    this.#state = state;
+    for (const listener of this.#listeners) listener(state);
+  }
 }
 
 class ElectronAppUpdater implements AppUpdater {
@@ -208,4 +317,52 @@ class ElectronAppUpdater implements AppUpdater {
 
 function safeErrorMessage(error: Error): string {
   return (error.message.trim() || 'Unable to check for updates').slice(0, 240);
+}
+
+function validatedGitHubRelease(value: unknown): GitHubRelease {
+  if (typeof value !== 'object' || value === null) throw new Error('GitHub returned an invalid release');
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.tag_name !== 'string' ||
+    typeof candidate.html_url !== 'string' ||
+    typeof candidate.draft !== 'boolean' ||
+    candidate.draft
+  ) {
+    throw new Error('GitHub returned an invalid release');
+  }
+  return candidate as unknown as GitHubRelease;
+}
+
+export function compareVersions(left: string, right: string): number {
+  const parse = (value: string): { core: number[]; prerelease: string[] } => {
+    const normalized = value.trim().replace(/^v/i, '').split('+', 1)[0] ?? '';
+    const [core = '', prerelease = ''] = normalized.split('-', 2);
+    const numbers = core.split('.').map((part) => Number(part));
+    if (numbers.length !== 3 || numbers.some((part) => !Number.isSafeInteger(part) || part < 0)) {
+      throw new Error(`Invalid release version: ${value}`);
+    }
+    return { core: numbers, prerelease: prerelease === '' ? [] : prerelease.split('.') };
+  };
+  const a = parse(left);
+  const b = parse(right);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (a.core[index] ?? 0) - (b.core[index] ?? 0);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1;
+  }
+  const length = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let index = 0; index < length; index += 1) {
+    const x = a.prerelease[index];
+    const y = b.prerelease[index];
+    if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? -1 : 1;
+    if (x === y) continue;
+    const xNumber = /^\d+$/.test(x) ? Number(x) : undefined;
+    const yNumber = /^\d+$/.test(y) ? Number(y) : undefined;
+    if (xNumber !== undefined && yNumber !== undefined) return Math.sign(xNumber - yNumber);
+    if (xNumber !== undefined || yNumber !== undefined) return xNumber !== undefined ? -1 : 1;
+    return x.localeCompare(y);
+  }
+  return 0;
 }

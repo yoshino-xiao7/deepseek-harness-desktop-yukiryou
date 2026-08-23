@@ -52,6 +52,7 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       openExternal: (url) => void shell.openExternal(url),
       onSidebarWidth: () => {},
       onAppearance: () => {},
+      onLocale: options.onLocale,
       onUpdateCommand: options.onUpdateCommand,
       onAccountBalanceRequest: options.onAccountBalanceRequest,
       onHarnessContext: options.onHarnessContext,

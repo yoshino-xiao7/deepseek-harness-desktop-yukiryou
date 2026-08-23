@@ -60,15 +60,13 @@ describe('application updater configuration', () => {
     ).toBe(false);
   });
 
-  it('uses the Squirrel.Windows feed target for Windows x64', () => {
+  it('uses the GitHub Releases API instead of a missing Squirrel RELEASES feed on Windows', () => {
     expect(
       updateFeedUrl({
         currentVersion: '0.2.3-beta.1',
         platform: 'win32',
         architecture: 'x64',
       }),
-    ).toBe(
-      'https://update.electronjs.org/yoshino-xiao7/deepseek-harness-desktop-yukiryou/win32-x64/0.2.3-beta.1',
-    );
+    ).toBe('https://api.github.com/repos/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest');
   });
 });

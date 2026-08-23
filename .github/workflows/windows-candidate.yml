@@ -145,7 +145,7 @@ jobs:
           $env:DSH_E2E_EXECUTABLE_PATH = $executables[0].FullName
           "DSH_E2E_EXECUTABLE_PATH=$($executables[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts --no-file-parallelism
-      - name: Validate and freeze Squirrel artifacts
+      - name: Validate and freeze NSIS artifacts
         run: pnpm release:win:candidate
       - name: Verify candidate provenance
         env:
@@ -154,33 +154,67 @@ jobs:
           node -e "const fs=require('node:fs');
           const p=require('./package.json');
           const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
-          if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==4||!m.artifacts.some(a=>a.file.endsWith('-portable.zip')))
+          if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==2||!m.artifacts.some(a=>a.file.endsWith('-portable.zip')))
           throw new Error('Windows candidate provenance mismatch')"
       - name: Recover an interrupted lifecycle test installation
         shell: pwsh
-        run: ./scripts/windows-squirrel-lifecycle.ps1 -Action Recover
-      - name: Install the frozen Squirrel candidate
+        run: ./scripts/windows-nsis-lifecycle.ps1 -Action Recover
+      - name: Install the frozen guided NSIS candidate
         shell: pwsh
         run: |
-          ./scripts/windows-squirrel-lifecycle.ps1 -Action Install
+          ./scripts/windows-nsis-lifecycle.ps1 -Action Install
           $state = Get-Content 'out/windows-lifecycle/state.json' -Raw | ConvertFrom-Json
           "DSH_E2E_EXECUTABLE_PATH=$($state.executable)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Start the installed application
+        shell: pwsh
+        run: |
+          # The interactive runner may still have a manually opened release or
+          # a process started by Windows after installer registration. A stale
+          # app-wide single-instance lock would redirect Playwright's launch.
+          Get-Process -Name 'DeepSeek YukiRyou' -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 1
+          pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts --no-file-parallelism
+      - name: Collect installed startup diagnostics
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:GITHUB_WORKSPACE 'out/windows-installed-diagnostics'
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          Get-Process -Name 'DeepSeek YukiRyou' -ErrorAction SilentlyContinue |
+            Select-Object Id, Path, StartTime, Responding |
+            ConvertTo-Json | Set-Content (Join-Path $destination 'processes.json') -Encoding utf8
+          Get-ChildItem $env:TEMP -Directory -Filter 'dsh-*-e2e-*' -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $logs = Join-Path $_.FullName 'logs'
+              if (Test-Path -LiteralPath $logs) {
+                Copy-Item -LiteralPath $logs -Destination (Join-Path $destination $_.Name) -Recurse -Force
+              }
+            }
+      - name: Stop failed installed application before cleanup
+        if: ${{ failure() }}
+        shell: pwsh
         run: >-
-          pnpm exec vitest run
-          tests/e2e/packaged-startup.test.ts
-          tests/e2e/session-selection-restart.test.ts
-          --no-file-parallelism
+          Get-Process -Name 'DeepSeek YukiRyou' -ErrorAction SilentlyContinue |
+          Stop-Process -Force
       - name: Repair-install the same candidate and restart it
         shell: pwsh
         run: |
-          ./scripts/windows-squirrel-lifecycle.ps1 -Action Repair
+          ./scripts/windows-nsis-lifecycle.ps1 -Action Repair
           pnpm exec vitest run tests/e2e/packaged-startup.test.ts --no-file-parallelism
       - name: Uninstall and verify shortcuts and user-data retention
         if: ${{ always() && hashFiles('out/windows-lifecycle/state.json') != '' }}
         shell: pwsh
-        run: ./scripts/windows-squirrel-lifecycle.ps1 -Action Uninstall
+        run: ./scripts/windows-nsis-lifecycle.ps1 -Action Uninstall
+      - name: Upload installed startup diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installed-startup-diagnostics
+          path: out/windows-installed-diagnostics/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
         with:
           name: windows-x64-unsigned-exe-and-portable
           path: out/windows-candidate/

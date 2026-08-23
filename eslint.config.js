@@ -5,6 +5,7 @@ export default tseslint.config(
   {
     ignores: [
       '.cache/**',
+      '.pnpm-store/**',
       '.vite/**',
       'node_modules/**',
       'out/**',

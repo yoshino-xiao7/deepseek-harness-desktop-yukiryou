@@ -11,6 +11,11 @@ import {
   validatedAppearanceSnapshot,
 } from '../../shared/appearance-sync.js';
 import {
+  HARNESS_LOCALE_CHANNEL,
+  type DesktopLocale,
+  validatedDesktopLocale,
+} from '../../shared/locale-sync.js';
+import {
   HARNESS_CONTEXT_CHANNEL,
   type HarnessContextSnapshot,
   validatedHarnessContext,
@@ -88,6 +93,7 @@ export interface HarnessProductBridgeOptions {
   readonly openExternal: (url: string) => void;
   readonly onSidebarWidth: (width: number) => void;
   readonly onAppearance: (appearance: DesktopAppearanceSnapshot) => void;
+  readonly onLocale: (locale: DesktopLocale) => void;
   readonly onUpdateCommand: (command: UpdateCommand) => void;
   readonly onAccountBalanceRequest: (
     force: boolean,
@@ -241,6 +247,11 @@ export function createHarnessProductBridge(
     if (channel === HARNESS_APPEARANCE_CHANNEL) {
       const appearance = validatedAppearanceSnapshot(value);
       if (appearance !== undefined) options.onAppearance(appearance);
+      return;
+    }
+    if (channel === HARNESS_LOCALE_CHANNEL) {
+      const locale = validatedDesktopLocale(value);
+      if (locale !== undefined) options.onLocale(locale);
       return;
     }
     if (channel === UPDATE_COMMAND_CHANNEL) {

@@ -16,7 +16,7 @@ updated: 2026-08-21
 
 ## 已确认的产品决定
 
-1. Harness 左侧栏“设置”上方只显示**当前凭据所属账户余额**，不显示今日消费，不把账户余额称为“Key 余额”。
+1. Harness 左侧栏“设置”上方显示**账户概览**：悬浮展示本机“今日估算”与当前凭据所属账户余额，点击同步刷新；不把账户余额称为“Key 余额”。
 2. Desktop Shell 增加可展开的 Desktop Companion，承载变更、文件树和预览入口。
 3. 文件、Git 变更和预览已实现；已归档的宠物实验不再属于本方案的目标。
 4. 第一版变更语义是“当前工作区相对 HEAD 的变更”。没有可靠证据时，不得写成“本轮编辑”。
@@ -97,7 +97,7 @@ updated: 2026-08-21
 
 ### 余额留在 Harness Runtime，结果通过受限桥显示
 
-DeepSeek Key 只在 Harness Runtime 的 credential Module 内临时解析。Runtime 的 `AccountBalance` 调用固定官方 endpoint，Desktop Shell 只接收经过 schema 校验的余额 snapshot，再通过 Harness preload 的只读桥交给余额卡。
+DeepSeek Key 只在 Harness Runtime 的 credential Module 内临时解析。Runtime 的 `AccountBalance` 调用固定官方 endpoint；同一 deep Module 通过 `sessionQuery` 聚合本机当日官方 usage，并按北京时间峰谷价格逐请求估算。Desktop Shell 只接收经过 schema 校验的聚合 snapshot，再通过 Harness preload 的只读桥交给账户概览卡。
 
 浏览器、Electron IPC 和 Desktop Shell 永远不接收 Key、Authorization header、原始 Provider response 或 Provider error body。
 
@@ -207,14 +207,14 @@ Interface 保证：
 - 自动刷新最短间隔 5 分钟，手动刷新最短间隔 30 秒。
 - 网络刷新 5 秒超时；Provider response body 最大 32 KiB。
 - 401/403 不重试，429/网络/5xx 使用有界退避。
-- 刷新失败时保留 last-good snapshot 并标记 stale，不显示猜测值或 `0`。
+- 刷新失败时保留 last-good 余额 snapshot 并标记 stale；本地今日估算可独立更新，不把缺失数据显示为 `0`。
 - 余额不持久化，日志只记录成功/失败类别，不记录金额。
 - 请求目标固定为 `https://api.deepseek.com/user/balance`，禁止重定向和 caller 自定义 URL。
 
-余额卡文案：
+账户概览文案：
 
-- 宽侧栏：`账户余额` + 各币种金额。
-- 折叠 rail：钱包图标，tooltip 展示余额。
+- 宽侧栏：`账户概览` + `今日 ≈¥… · ¥… CNY`。
+- 折叠 rail：人民币图标，悬浮层展示今日估算、余额与刷新提示。
 - 未配置：`尚未配置 DeepSeek API Key`。
 - 凭据无效：`当前凭据无效，请前往设置检查`。
 - 账户返回不可用：保留金额并展示 `账户当前不可用`。
@@ -224,7 +224,7 @@ Interface 保证：
 
 ### `RuntimeCompanionPort`
 
-这是 Harness Runtime 与 Desktop Shell 之间的 owned seam。它只提供账户余额和 Workspace Authority，不提供通用 RPC 或文件内容读取。
+这是 Harness Runtime 与 Desktop Shell 之间的 owned seam。它只提供聚合后的账户概览和 Workspace Authority，不提供通用 RPC、原始会话事件或文件内容读取。
 
 ```ts
 type RuntimeCompanionRequest =
@@ -536,12 +536,12 @@ type InspectorDocument =
 
 ## Desktop Companion UI
 
-### 余额卡
+### 账户概览卡
 
 - 注册到官方 `sidebar.footer.action`，视觉上位于 Settings 上方。
 - wide 模式占满 footer action 行；rail 模式为单图标。
 - loading 使用稳定 skeleton，不把未加载误显示成零。
-- 点击卡片展开轻量详情：币种分项、赠金/充值余额、上次更新时间与刷新。
+- 悬浮卡片展示今日估算与账户余额；点击同时刷新本地当日聚合和远程余额。
 - 点击卡片不打开网页、不暴露 Key，也不进入 Desktop Companion 右栏。
 - Runtime extension/slot 契约不可用时卡片不注册，Settings 保持原样。
 
@@ -860,7 +860,7 @@ src/renderer/companion/
 
 ### Phase 1：账户余额
 
-状态：**已实现并随 `v0.2.0-beta.1` 发布**。官方 `sidebar.footer.action` 卡片、宽栏/rail、缺少凭据与失败状态、手动刷新、single-flight、TTL、超时、body/schema 上限、last-good stale 以及打包 E2E 已落地；不包含今日消费。
+状态：**已实现，当前版本扩展为账户概览**。官方 `sidebar.footer.action` 卡片、宽栏/rail、缺少凭据与失败状态、手动刷新、single-flight、TTL、超时、body/schema 上限和 last-good stale 已落地；今日估算使用本机会话的官方 usage，按北京时间峰谷价格逐请求计算。
 
 目标：独立交付设置上方账户余额，不依赖右栏。
 
@@ -872,7 +872,7 @@ src/renderer/companion/
 
 退出条件：
 
-- UI 只写“账户余额”或“当前凭据所属账户余额”，不存在今日消费。
+- UI 明确写“今日估算”，并说明只覆盖本机仍存在的 Harness 会话；不得伪装成官方账单。
 - Key 在 browser、IPC、URL、日志、诊断、缓存和错误正文中的泄露测试为零。
 - 余额查询不延长 Harness 首次可交互路径。
 - 请求合并、timeout、限频、response size 和 schema hard limit 生效。

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  RC8_DESKTOP_SLOT_CONTRACT,
+  RUNTIME_DESKTOP_SLOT_CONTRACT,
   runtimeSlotContract,
 } from './runtime-slot-contract.js';
 
-describe('rc.8 desktop slot contract', () => {
+describe('Runtime desktop slot contract', () => {
   it('locks the root ownership tree instead of guessing from slot names', () => {
     const root = runtimeSlotContract('root');
     expect(root).toMatchObject({
@@ -48,7 +48,7 @@ describe('rc.8 desktop slot contract', () => {
   });
 
   it('keeps every declared child addressable by the fixed contract', () => {
-    const keys = new Set(RC8_DESKTOP_SLOT_CONTRACT.map((entry) => entry.key));
+    const keys = new Set(RUNTIME_DESKTOP_SLOT_CONTRACT.map((entry) => entry.key));
     expect(keys).toEqual(
       new Set([
         'root',
@@ -65,7 +65,7 @@ describe('rc.8 desktop slot contract', () => {
       ]),
     );
     expect(() => runtimeSlotContract('conversation.input.left')).toThrow(
-      'Unknown rc.8 desktop slot',
+      'Unknown Runtime desktop slot',
     );
   });
 });

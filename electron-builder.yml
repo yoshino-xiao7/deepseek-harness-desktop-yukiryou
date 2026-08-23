@@ -1,0 +1,19 @@
+appId: com.yukiryou.deepseek.yukiryou
+productName: DeepSeek YukiRyou
+artifactName: DeepSeek-YukiRyou-Setup.${ext}
+directories:
+  output: out/make/nsis.windows/x64
+win:
+  target: nsis
+  icon: resources/icons/deepseek-yukiryou.ico
+  executableName: DeepSeek YukiRyou
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DeepSeek YukiRyou
+  uninstallDisplayName: DeepSeek YukiRyou
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false

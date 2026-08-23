@@ -23,7 +23,7 @@ env:
   ARTIFACT_NAME: DeepSeek.YukiRyou
   RELEASE_VERSION: ${{ inputs.version }}
   RELEASE_TAG: v${{ inputs.version }}
-  UPGRADE_FROM_VERSION: 0.2.1-beta.2
+  UPGRADE_FROM_VERSION: 0.2.3-beta.2
   MACOS_SIGN_IDENTITY: 'Developer ID Application: HanTao Cao (7G6J4S76PN)'
 
 jobs:
