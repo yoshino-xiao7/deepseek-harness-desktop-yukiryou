@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createPluginProfileGeneration } from './plugin-profile-bootstrap.js';
 
 interface Inspector {
-  inspect(identity: { readonly sourceRecordId: string; readonly itemId: string }): Promise<Record<string, unknown>>;
+  inspect(identity: {
+    readonly sourceRecordId: string;
+    readonly itemId: string;
+    readonly versionPreference?: 'catalog' | 'latest';
+  }): Promise<Record<string, unknown>>;
 }
 
 const item = {
@@ -40,6 +44,7 @@ async function createInspector(options: Record<string, unknown> = {}): Promise<I
   return module.createInstallInspector({
     catalog: { read: async () => ({ items: [item] }) },
     requestManifest: async () => manifest,
+    requestPackument: async () => ({ 'dist-tags': { latest: item.package.version } }),
     now: () => Date.parse('2026-08-21T13:00:00.000Z'),
     platform: 'darwin',
     architecture: 'arm64',
@@ -63,6 +68,117 @@ async function createInspector(options: Record<string, unknown> = {}): Promise<I
 }
 
 describe('desktop market install inspector', () => {
+  it('resolves a stale catalog entry to the newer npm latest version before inspection', async () => {
+    const staleItem = {
+      ...item,
+      package: { name: '@community/dsh-example', version: '0.3.0' },
+    };
+    const latestManifest = {
+      ...manifest,
+      version: '0.4.10',
+      dist: {
+        ...manifest.dist,
+        tarball: 'https://registry.npmjs.org/@community/dsh-example/-/dsh-example-0.4.10.tgz',
+      },
+    };
+    const requestManifest = vi.fn(async () => latestManifest);
+    const inspector = await createInspector({
+      catalog: { read: async () => ({ items: [staleItem] }) },
+      requestPackument: async () => ({ 'dist-tags': { latest: '0.4.10' } }),
+      requestManifest,
+    });
+
+    const result = await inspector.inspect({ sourceRecordId: 'dshfind', itemId: item.id });
+
+    expect(requestManifest).toHaveBeenCalledWith('@community/dsh-example', '0.4.10');
+    expect(result).toMatchObject({
+      status: 'artifact-verified',
+      identity: {
+        packageName: '@community/dsh-example',
+        version: '0.4.10',
+        catalogVersion: '0.3.0',
+      },
+    });
+  });
+
+  it('keeps the exact catalog version when explicitly selected', async () => {
+    const staleItem = {
+      ...item,
+      package: { name: '@community/dsh-example', version: '0.3.0' },
+    };
+    const catalogManifest = {
+      ...manifest,
+      version: '0.3.0',
+      dist: {
+        ...manifest.dist,
+        tarball: 'https://registry.npmjs.org/@community/dsh-example/-/dsh-example-0.3.0.tgz',
+      },
+    };
+    const requestManifest = vi.fn(async () => catalogManifest);
+    const requestPackument = vi.fn();
+    const inspector = await createInspector({
+      catalog: { read: async () => ({ items: [staleItem] }) },
+      requestPackument,
+      requestManifest,
+    });
+
+    const result = await inspector.inspect({
+      sourceRecordId: 'dshfind', itemId: item.id, versionPreference: 'catalog',
+    });
+
+    expect(requestPackument).not.toHaveBeenCalled();
+    expect(requestManifest).toHaveBeenCalledWith('@community/dsh-example', '0.3.0');
+    expect(result).toMatchObject({
+      identity: { version: '0.3.0', catalogVersion: '0.3.0' },
+    });
+  });
+
+  it('keeps catalog and latest inspections in separate cache entries', async () => {
+    const requestManifest = vi.fn(async () => manifest);
+    const inspector = await createInspector({ requestManifest });
+
+    await inspector.inspect({
+      sourceRecordId: 'dshfind', itemId: item.id, versionPreference: 'catalog',
+    });
+    await inspector.inspect({
+      sourceRecordId: 'dshfind', itemId: item.id, versionPreference: 'latest',
+    });
+
+    expect(requestManifest).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects unknown version preferences', async () => {
+    const inspector = await createInspector();
+    await expect(inspector.inspect({
+      sourceRecordId: 'dshfind',
+      itemId: item.id,
+      versionPreference: 'newest' as never,
+    })).rejects.toMatchObject({ code: 'catalog:invalid-request' });
+  });
+
+  it('keeps an explicitly hardware-tested version pinned when the catalog version is selected', async () => {
+    const verifiedItem = {
+      ...item,
+      developerVerification: {
+        testedAt: '2026-08-23T03:00:00.000Z',
+        platforms: ['darwin-arm64'],
+        harnessVersion: '0.1.1-rc.2',
+      },
+    };
+    const requestPackument = vi.fn();
+    const inspector = await createInspector({
+      catalog: { read: async () => ({ items: [verifiedItem] }) },
+      requestPackument,
+    });
+
+    const result = await inspector.inspect({
+      sourceRecordId: 'dshfind', itemId: item.id, versionPreference: 'catalog',
+    });
+
+    expect(requestPackument).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ identity: { version: '1.2.3', catalogVersion: '1.2.3' } });
+  });
+
   it('verifies graph, Runtime compatibility, artifact bytes, and frozen lock without claiming it is executable', async () => {
     const requestManifest = vi.fn(async () => manifest);
     const inspector = await createInspector({ requestManifest });

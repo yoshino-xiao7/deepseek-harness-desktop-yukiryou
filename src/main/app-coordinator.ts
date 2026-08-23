@@ -426,6 +426,7 @@ export class AppCoordinator {
       const preview = await createRuntimeMarketClient(this.#companionToken).preview(state.origin, {
         sourceRecordId: request.sourceRecordId,
         itemId: request.itemId,
+        versionPreference: request.versionPreference,
       });
       const summary = validatedManagedPluginPreviewSummary(preview.inspection);
       if (summary === undefined) {

@@ -20,6 +20,7 @@ describe('managed plugin inventory boundary', () => {
       currentGeneration: generation,
       entries: [{
         packageName: '@example/dsh-tool',
+        sourceId: 'dshfind',
         version: '1.2.3',
         generation,
         installedAt: '2026-08-21T12:41:40.475Z',
@@ -37,7 +38,7 @@ describe('managed plugin inventory boundary', () => {
       }],
     })).toMatchObject({
       status: 'ready',
-      entries: [{ packageName: '@example/dsh-tool', rollbackTarget: { version: '1.2.2' } }],
+      entries: [{ packageName: '@example/dsh-tool', sourceId: 'dshfind', rollbackTarget: { version: '1.2.2' } }],
     });
   });
 

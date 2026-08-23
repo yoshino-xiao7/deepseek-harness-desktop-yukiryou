@@ -16,7 +16,11 @@ export interface RuntimeManagedPreview {
 export interface RuntimeMarketClient {
   preview(
     origin: string,
-    identity: { readonly sourceRecordId: string; readonly itemId: string },
+    identity: {
+      readonly sourceRecordId: string;
+      readonly itemId: string;
+      readonly versionPreference: 'catalog' | 'latest';
+    },
   ): Promise<RuntimeManagedPreview>;
   stage(origin: string, previewId: string): Promise<{
     readonly status: string;
@@ -31,12 +35,17 @@ export function createRuntimeMarketClient(token: string): RuntimeMarketClient {
   return Object.freeze({
     async preview(
       origin: string,
-      identity: { readonly sourceRecordId: string; readonly itemId: string },
+      identity: {
+        readonly sourceRecordId: string;
+        readonly itemId: string;
+        readonly versionPreference: 'catalog' | 'latest';
+      },
     ) {
       const value = await execute(origin, token, {
         kind: 'preview',
         sourceRecordId: identity.sourceRecordId,
         itemId: identity.itemId,
+        versionPreference: identity.versionPreference,
       });
       const preview = validatedPreview(value);
       if (preview === undefined) throw new Error('Runtime returned an invalid managed preview');

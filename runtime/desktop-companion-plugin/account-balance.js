@@ -12,6 +12,7 @@ const PRICE_PER_MILLION_CNY = new Map([
   ['deepseek-v4-flash-vision-exp', { input: 3, cacheRead: 0.1, output: 9 }],
   ['deepseek-v4-pro', { input: 9, cacheRead: 0.3, output: 27 }],
 ]);
+const DEEPSEEK_PROVIDER_IDS = new Set(['deepseek', 'deepseek-official']);
 const SESSION_READ_CONCURRENCY = 4;
 const BEIJING_CLOCK = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Shanghai', weekday: 'short', hour: '2-digit', minute: '2-digit',
@@ -96,7 +97,7 @@ export async function estimateTodaySpend(sessionQuery, timestamp) {
         if (event.type !== 'assistant/message' || event.time < dayStart || event.time >= dayEnd) continue;
         const source = event.data?.message?.source;
         const usage = event.data?.usage;
-        if (source?.kind !== 'model' || source.provider !== 'deepseek' || !validUsage(usage)) continue;
+        if (source?.kind !== 'model' || !DEEPSEEK_PROVIDER_IDS.has(source.provider) || !validUsage(usage)) continue;
         requestCount += 1;
         const peakPrice = PRICE_PER_MILLION_CNY.get(String(source.model).toLowerCase());
         if (peakPrice === undefined) {

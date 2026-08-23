@@ -637,6 +637,11 @@ body[data-state="failure"] .eyebrow { color: #8a6370; }
   to { transform: translate3d(1rem, 0.7rem, 0) scale(1.05); }
 }
 
+@keyframes reduced-progress-wave {
+  0%, 100% { opacity: 0.32; }
+  50% { opacity: 1; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root,
   body { background: #10131a; color: #f2f4fa; }
@@ -665,4 +670,7 @@ body[data-state="failure"] .eyebrow { color: #8a6370; }
     transition-duration: 0.01ms !important;
   }
   .brand-shine, .spark, .orbit { display: none; }
+  .progress-track span {
+    animation: reduced-progress-wave 1.6s ease-in-out infinite !important;
+  }
 }

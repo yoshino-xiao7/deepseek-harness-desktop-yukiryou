@@ -30,12 +30,16 @@ describe('RuntimeMarketClient', () => {
 
     await expect(client.preview('http://127.0.0.1:31337', {
       sourceRecordId: 'dshfind', itemId: 'example',
+      versionPreference: 'latest',
     })).resolves.toMatchObject({ profileGeneration: generation, expiresInSeconds: 300 });
     expect(fetchMock).toHaveBeenCalledWith(
       new URL('http://127.0.0.1:31337/plugins/@dsh-desktop/market/managed-rpc'),
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'x-dsh-desktop-companion-token': token }),
+        body: JSON.stringify({
+          kind: 'preview', sourceRecordId: 'dshfind', itemId: 'example', versionPreference: 'latest',
+        }),
       }),
     );
   });
@@ -49,6 +53,7 @@ describe('RuntimeMarketClient', () => {
 
     await expect(client.preview('http://127.0.0.1:31337', {
       sourceRecordId: 'dshfind', itemId: 'example',
+      versionPreference: 'catalog',
     })).rejects.toThrow('invalid managed preview');
     await expect(client.stage('http://127.0.0.1:31337', '../invalid')).rejects
       .toThrow('Invalid Runtime staging preview');

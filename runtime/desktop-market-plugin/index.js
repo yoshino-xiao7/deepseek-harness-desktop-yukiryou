@@ -192,6 +192,7 @@ export function apply(ctx) {
             ? await managedPreviewVault.issue({
                 sourceRecordId: payload.sourceRecordId,
                 itemId: payload.itemId,
+                versionPreference: payload.versionPreference,
               })
             : payload?.kind === 'stage'
               ? await managedPreviewVault.stage(payload.previewId)

@@ -18,6 +18,7 @@ export const MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL =
 const REQUEST_ID = /^request-[a-f0-9-]{36}$/u;
 const GENERATION = /^gen-[a-f0-9]{64}$/u;
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/[a-z0-9][a-z0-9._~-]*|[a-z0-9][a-z0-9._~-]*)$/u;
+const SOURCE_ID = /^[a-z0-9][a-z0-9._-]{0,99}$/u;
 
 export interface ManagedPluginInventoryRequest {
   readonly requestId: string;
@@ -50,6 +51,7 @@ export type ManagedPluginRollbackResult = ManagedPluginRemoveResult;
 
 export interface ManagedPluginInventoryEntry {
   readonly packageName: string;
+  readonly sourceId: string;
   readonly version: string;
   readonly generation: string;
   readonly installedAt: string;
@@ -162,6 +164,7 @@ export function validatedManagedPluginInventoryResult(
 
 function validatedEntry(value: unknown): ManagedPluginInventoryEntry | undefined {
   if (!isRecord(value) || !validPackageName(value.packageName) ||
+    typeof value.sourceId !== 'string' || !SOURCE_ID.test(value.sourceId) ||
     !boundedString(value.version, 100) || !validGeneration(value.generation) ||
     !validIsoDate(value.installedAt) || typeof value.enabled !== 'boolean') return undefined;
   let rollbackTarget: ManagedPluginInventoryEntry['rollbackTarget'] = null;
@@ -191,6 +194,7 @@ function validatedEntry(value: unknown): ManagedPluginInventoryEntry | undefined
   }
   return {
     packageName: value.packageName,
+    sourceId: value.sourceId,
     version: value.version,
     generation: value.generation,
     installedAt: value.installedAt,

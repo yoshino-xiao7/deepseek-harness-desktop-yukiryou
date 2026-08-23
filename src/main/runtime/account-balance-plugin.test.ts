@@ -74,4 +74,41 @@ describe('Runtime account balance module', () => {
     expect(isBeijingPeak(Date.parse('2026-08-24T10:00:00.000Z'))).toBe(false);
     expect(isBeijingPeak(Date.parse('2026-08-23T02:00:00.000Z'))).toBe(false);
   });
+
+  it('prices usage emitted by the official DeepSeek provider route', async () => {
+    const moduleUrl = pathToFileURL(join(process.cwd(), 'runtime', 'desktop-companion-plugin', 'account-balance.js')).href;
+    const { estimateTodaySpend } = await import(moduleUrl) as {
+      estimateTodaySpend(query: unknown, now: number): Promise<unknown>;
+    };
+    const now = new Date(2026, 7, 23, 12, 0, 0).getTime();
+    const result = await estimateTodaySpend({
+      listSessions: async () => [{ header: { id: 'official-provider' } }],
+      readSession: async () => ({ events: [{
+        type: 'assistant/message',
+        time: new Date(2026, 7, 23, 9, 0, 0).getTime(),
+        data: {
+          message: {
+            source: {
+              kind: 'model',
+              provider: 'deepseek-official',
+              model: 'deepseek-v4-flash',
+            },
+          },
+          usage: {
+            inputTokens: 1_000_000,
+            cacheReadTokens: 1_000_000,
+            outputTokens: 1_000_000,
+          },
+        },
+      }] }),
+    }, now);
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      amount: '6.05',
+      requestCount: 1,
+      unpricedRequestCount: 0,
+      partial: false,
+    });
+  });
 });

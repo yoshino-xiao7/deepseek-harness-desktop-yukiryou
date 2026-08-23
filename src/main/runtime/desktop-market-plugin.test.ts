@@ -481,7 +481,13 @@ describe('desktop community plugin catalog', () => {
       new URL('../../../runtime/desktop-market-plugin/client.js', import.meta.url),
       'utf8',
     );
-    let plugin: { apply(context: unknown): void } | undefined;
+    let plugin: {
+      apply(context: unknown): void;
+      findInstalledCatalogItem(
+        entry: Record<string, unknown>,
+        items: readonly Record<string, unknown>[],
+      ): Record<string, unknown> | undefined;
+    } | undefined;
     const register = vi.fn();
     const React = { createElement: vi.fn(), Fragment: Symbol('fragment') };
     const document = {
@@ -539,6 +545,19 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain("ownership: receipt === undefined ? inferredOwnership(entry.moduleName) : 'managed'");
     expect(source).toContain("format(t, 'installedAt', { time: formatDateTime(entry.receipt.installedAt) })");
     expect(source).toContain("format(t, 'blockedAttempt', { version: entry.receipt.lastBlockedAttempt.version })");
+    expect(source).toContain('onClick: () => openInstalledDetails(entry)');
+    expect(source).toContain("t(entry.receipt ? 'checkUpdates' : 'details')");
+    expect(source).toContain("selectedInstalled ? 'checkUpdates' : 'inspect'");
+    expect(source).toContain("inspection.value.identity.catalogVersion");
+    expect(source).toContain("format(t, 'catalogVersionInline', { version: item.package.version })");
+    expect(source).toContain('choose the catalog version or npm latest');
+    expect(source).toContain("const [versionPreference, setVersionPreference] = React.useState('latest')");
+    expect(source).toContain("versionPreference === 'catalog'");
+    expect(source).toContain("versionPreference === 'latest'");
+    expect(source).toContain("versionPreference,");
+    expect(source).toContain("t('catalogVersionChoice')");
+    expect(source).toContain("t('latestVersionChoice')");
+    expect(source).toContain("candidateVersion === receipt.version ? 'upToDate' : 'prepareUpdate'");
     expect(source).toContain("onClick: () => removeManagedPlugin(entry.receipt)");
     expect(source).toContain("onClick: () => setManagedPluginEnabled(entry.receipt, !entry.receipt.enabled)");
     expect(source).toContain('onClick: () => rollbackManagedPlugin(entry.receipt)');
@@ -546,6 +565,14 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain("'reinstallAndRestart'");
     expect(source).toContain('preview.operation.currentVersion');
     expect(source).not.toContain("new Date(catalog.snapshot.cache.storedAt).toLocaleString()");
+    expect(plugin?.findInstalledCatalogItem({
+      moduleName: 'dsh-context',
+      receipt: { packageName: 'dsh-context', version: '0.15.0' },
+    }, [{
+      id: 'dshfind:context',
+      package: { name: 'dsh-context', version: '0.15.0' },
+      summary: 'Context plugin details',
+    }])).toMatchObject({ summary: 'Context plugin details' });
   });
 });
 

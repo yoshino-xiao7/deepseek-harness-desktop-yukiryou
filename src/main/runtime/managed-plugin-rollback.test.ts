@@ -10,6 +10,7 @@ const request = {
 };
 const receipt = {
   ...request,
+  sourceId: 'dshfind',
   installedAt: '2026-08-22T00:00:00.000Z',
   enabled: true,
   rollbackTarget: {

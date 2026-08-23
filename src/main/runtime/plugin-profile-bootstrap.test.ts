@@ -55,6 +55,7 @@ describe('PluginProfileBootstrap', () => {
       currentGeneration: generation,
       entries: [{
         packageName: candidate.packageName,
+        sourceId: candidate.sourceId,
         version: candidate.version,
         generation,
         installedAt: '2026-08-21T12:41:40.475Z',

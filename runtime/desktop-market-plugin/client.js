@@ -26,9 +26,11 @@ window.__ModuleLoader__.load({
         curatedTrust: '此精确版本曾由 YukiRyou 实机安装测试，但这不是代码审计或绝对安全保证。安装前仍会执行完整包体、依赖、脚本、完整性和 Runtime 兼容性预检。',
         developmentTrust: '这是应用内置的开发测试包体，只用于验证安装链，不包含业务功能，也不会出现在正式发行版。',
         installableEmpty: '当前来源只提供发现信息，没有满足精确 npm 身份与来源证据要求的可安装候选。',
-        installableHelp: '“可安装”只是结构资格，不代表代码安全。未来仍须经过 Host 对 npm、仓库、完整性、生命周期脚本和 Runtime 兼容性的独立预览。',
+        installableHelp: '“可安装”只是结构资格，不代表代码安全。列表显示社区目录记录版本；打开详情后可选择目录版本或 npm 最新版本，安装前都必须通过完整安全预检。',
         installedLoading: '正在读取本机插件状态…', installedError: '暂时无法读取本机插件状态。',
         installedEmpty: '当前 Runtime 没有可显示的插件。', active: '已启用', disabled: '已停用',
+        installedVersion: '已安装版本', installedOwnership: '安装类型', installedState: '运行状态',
+        installedMetadataUnavailable: '当前来源中没有找到该插件的远程简介；以下仍会显示本机安装信息。',
         system: '系统', dependency: '依赖', managed: '受管安装', external: '外部', readonlyState: '只读状态',
         runtimeUnavailable: 'Runtime 未加载', installedAt: '安装于 {time}', blockedAttempt: '已自动恢复失败版本 {version}',
         uninstall: '卸载', uninstalling: '正在卸载…', uninstallUnavailable: '卸载状态已变化，请刷新后重试。',
@@ -53,15 +55,16 @@ window.__ModuleLoader__.load({
         sourceDisabled: '已停用', sourceMutationError: '无法保存来源，请检查地址是否重复或格式是否正确。',
         developerVerification: '开发者验证', verifiedPlatforms: '平台', verifiedHarness: 'Harness', verifiedAt: '验证时间',
         previous: '上一页', next: '下一页', page: '第 {current} / {total} 页', items: '{count} 项',
-        inspect: '安全预检', inspectionTitle: '安装前安全预检', inspectionLoading: '正在冻结依赖图并核验全部 npm 包体…',
+        inspect: '安全预检', checkUpdates: '检查更新', inspectionTitle: '安装前安全预检', inspectionLoading: '正在解析所选版本、冻结依赖图并核验全部包体…',
+        versionChoiceTitle: '安装版本', catalogVersionChoice: '安装目录版本', catalogVersionChoiceHelp: '严格安装社区目录当前记录的 {version}', latestVersionChoice: '安装最新版本', latestVersionChoiceHelp: '对账 npm latest 后安装最新稳定版本',
         inspectionLoadingDevelopment: '正在核验内置测试包体并生成冻结安装锁…',
         inspectionVerified: '依赖、Runtime 与实际包体校验通过', inspectionBlocked: '当前包或其依赖被安全策略阻止',
         inspectionUnavailable: '暂时无法完成安全预检，请稍后重试。', inspectionNoInstall: '实际包体、内容寻址缓存与 frozen lock 已核验。继续后会生成短期一次性安装预览；最终执行仍需在系统原生确认框中确认。', inspectionNoInstallBlocked: '前置检查尚未全部通过，实际包体与 frozen lock 未生成；当前结果只用于解释阻断原因，不会产生安装操作。',
         inspectionPackage: '精确包', inspectionPlatform: '目标平台', inspectionDependencies: '直接依赖 / Peer', inspectionGraph: '依赖图', inspectionPeers: 'Peer 结果', inspectionArtifacts: '已验证包体',
-        prepareInstall: '准备安装', prepareUpdate: '准备更新', prepareReinstall: '准备重新安装', preparingInstall: '正在生成受管变更预览…', installPreviewTitle: '受管安装摘要', updatePreviewTitle: '受管更新摘要', reinstallPreviewTitle: '受管重装摘要',
+        prepareInstall: '准备安装', prepareUpdate: '准备应用版本', prepareReinstall: '准备重新安装', preparingInstall: '正在生成受管变更预览…', installPreviewTitle: '受管安装摘要', updatePreviewTitle: '受管版本变更摘要', reinstallPreviewTitle: '受管重装摘要',
         installSize: '压缩 / 解包大小', installFiles: '文件数', installGraph: '依赖图', installValidity: '有效期',
         installValidityValue: '约 {minutes} 分钟', installPermissionWarning: '插件与 Harness 共享当前用户权限。确认后应用会重启并试运行新配置；启动失败会自动恢复。',
-        currentVersion: '当前版本', installAndRestart: '安装并重启', updateAndRestart: '更新并重启', reinstallAndRestart: '重新安装并重启', installCancelled: '已取消操作，当前预览仍可再次确认。', installPrepared: '插件配置已准备完成，正在重启…',
+        currentVersion: '当前版本', catalogVersion: '目录记录版本', catalogVersionInline: '目录版本 {version}', latestVersion: 'npm 最新版本', upToDate: '当前已是所选版本', updateAvailable: '发现可用更新', installAndRestart: '安装并重启', updateAndRestart: '应用版本并重启', reinstallAndRestart: '重新安装并重启', installCancelled: '已取消操作，当前预览仍可再次确认。', installPrepared: '插件配置已准备完成，正在重启…',
         installUnavailable: '安装预览已失效或 Runtime 状态发生变化，请重新准备。',
         peerMissing: 'Runtime 缺少', peerIncompatible: '版本不兼容', peerAmbiguous: '提供者不唯一', peerRequired: '需要', peerAvailable: '当前',
         checkExactIdentity: '目录与 npm 精确身份', checkRepository: '仓库回链', checkDeprecated: '废弃状态',
@@ -83,9 +86,11 @@ window.__ModuleLoader__.load({
         curatedTrust: 'YukiRyou installed and tested this exact version on real hardware. This is not a code audit or an absolute safety guarantee; the full artifact, dependency, script, integrity, and Runtime compatibility inspection still applies.',
         developmentTrust: 'This app-bundled development fixture only verifies the install chain. It has no product behavior and is absent from packaged releases.',
         installableEmpty: 'The current source provides discovery metadata only. No entry satisfies the exact npm identity and provenance evidence required for an installable candidate.',
-        installableHelp: 'Installable is structural eligibility, not proof of safety. A future Host preview must still verify npm, repository, integrity, lifecycle scripts, and Runtime compatibility.',
+        installableHelp: 'Installable is structural eligibility, not proof of safety. The list shows the community catalog version; open the details to choose the catalog version or npm latest, both of which must pass the full safety inspection before installation.',
         installedLoading: 'Reading local plugin state…', installedError: 'Local plugin state is temporarily unavailable.',
         installedEmpty: 'The current Runtime has no visible plugins.', active: 'Enabled', disabled: 'Disabled',
+        installedVersion: 'Installed version', installedOwnership: 'Install type', installedState: 'Runtime state',
+        installedMetadataUnavailable: 'No remote description was found in the recorded source. Local installation details are still shown below.',
         system: 'System', dependency: 'Dependency', managed: 'Managed install', external: 'External', readonlyState: 'Read-only state',
         runtimeUnavailable: 'Not loaded by Runtime', installedAt: 'Installed {time}', blockedAttempt: 'Recovered failed version {version}',
         uninstall: 'Uninstall', uninstalling: 'Uninstalling…', uninstallUnavailable: 'Plugin state changed. Refresh and try again.',
@@ -110,15 +115,16 @@ window.__ModuleLoader__.load({
         sourceDisabled: 'Disabled', sourceMutationError: 'Could not save the source. Check the URL format and duplicates.',
         developerVerification: 'Developer verification', verifiedPlatforms: 'Platforms', verifiedHarness: 'Harness', verifiedAt: 'Verified',
         previous: 'Previous', next: 'Next', page: 'Page {current} / {total}', items: '{count} items',
-        inspect: 'Safety inspection', inspectionTitle: 'Pre-install safety inspection', inspectionLoading: 'Freezing the dependency graph and verifying every npm artifact…',
+        inspect: 'Safety inspection', checkUpdates: 'Check for updates', inspectionTitle: 'Pre-install safety inspection', inspectionLoading: 'Resolving the selected version, freezing the dependency graph, and verifying every artifact…',
+        versionChoiceTitle: 'Install version', catalogVersionChoice: 'Install catalog version', catalogVersionChoiceHelp: 'Install the exact version currently recorded by the catalog: {version}', latestVersionChoice: 'Install latest version', latestVersionChoiceHelp: 'Resolve npm latest and install the newest stable version',
         inspectionLoadingDevelopment: 'Verifying the bundled test artifact and creating a frozen install lock…',
         inspectionVerified: 'Dependencies, Runtime, and artifact bytes passed', inspectionBlocked: 'The package or one of its dependencies is blocked by safety policy',
         inspectionUnavailable: 'The safety inspection is temporarily unavailable. Try again later.', inspectionNoInstall: 'Artifact bytes, the content-addressed cache, and frozen lock are verified. Continuing creates a short-lived one-time preview; execution still requires native system confirmation.', inspectionNoInstallBlocked: 'Prerequisite checks did not all pass, so artifact bytes and the frozen lock were not produced. This result only explains the blockers and cannot install anything.',
         inspectionPackage: 'Exact package', inspectionPlatform: 'Target platform', inspectionDependencies: 'Direct / peer dependencies', inspectionGraph: 'Dependency graph', inspectionPeers: 'Peer result', inspectionArtifacts: 'Verified artifacts',
-        prepareInstall: 'Prepare install', prepareUpdate: 'Prepare update', prepareReinstall: 'Prepare reinstall', preparingInstall: 'Preparing a managed change preview…', installPreviewTitle: 'Managed install summary', updatePreviewTitle: 'Managed update summary', reinstallPreviewTitle: 'Managed reinstall summary',
+        prepareInstall: 'Prepare install', prepareUpdate: 'Prepare selected version', prepareReinstall: 'Prepare reinstall', preparingInstall: 'Preparing a managed change preview…', installPreviewTitle: 'Managed install summary', updatePreviewTitle: 'Managed version change summary', reinstallPreviewTitle: 'Managed reinstall summary',
         installSize: 'Compressed / unpacked', installFiles: 'Files', installGraph: 'Dependency graph', installValidity: 'Valid for',
         installValidityValue: 'About {minutes} min', installPermissionWarning: 'The plugin shares the current user privileges with Harness. After confirmation the app restarts in trial mode and recovers automatically if startup fails.',
-        currentVersion: 'Current version', installAndRestart: 'Install and restart', updateAndRestart: 'Update and restart', reinstallAndRestart: 'Reinstall and restart', installCancelled: 'The operation was cancelled. This preview can still be confirmed again.', installPrepared: 'The plugin profile is ready. Restarting…',
+        currentVersion: 'Current version', catalogVersion: 'Catalog version', catalogVersionInline: 'Catalog version {version}', latestVersion: 'npm latest', upToDate: 'The selected version is already installed', updateAvailable: 'An update is available', installAndRestart: 'Install and restart', updateAndRestart: 'Apply version and restart', reinstallAndRestart: 'Reinstall and restart', installCancelled: 'The operation was cancelled. This preview can still be confirmed again.', installPrepared: 'The plugin profile is ready. Restarting…',
         installUnavailable: 'The preview expired or Runtime state changed. Prepare it again.',
         peerMissing: 'Missing from Runtime', peerIncompatible: 'Incompatible version', peerAmbiguous: 'Ambiguous provider', peerRequired: 'requires', peerAvailable: 'available',
         checkExactIdentity: 'Catalog and npm identity', checkRepository: 'Repository backlink', checkDeprecated: 'Deprecation status',
@@ -188,6 +194,7 @@ window.__ModuleLoader__.load({
       .dsh-market-modal-summary{margin:14px 0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:21px}.dsh-market-detail-grid{display:grid;margin:14px 0;grid-template-columns:100px minmax(0,1fr);gap:8px 12px;font-size:12px}.dsh-market-detail-grid dt{color:var(--dsw-alias-label-tertiary)}.dsh-market-detail-grid dd{overflow-wrap:anywhere;margin:0}
       .dsh-market-trust{margin:14px 0;padding:11px 12px;border-radius:10px;color:var(--dsw-alias-label-secondary);background:rgb(77 107 254 / 8%);font-size:11px;line-height:18px}.dsh-market-trust strong{display:block;margin-bottom:3px;color:var(--dsw-alias-label-primary)}
       .dsh-market-inspection{margin:14px 0;padding:13px;border:1px solid var(--dsw-alias-border-l2);border-radius:11px;background:var(--dsw-alias-bg-layer-2)}.dsh-market-inspection h4{margin:0 0 8px;font-size:13px}.dsh-market-inspection-summary{margin:0 0 10px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px}.dsh-market-inspection-meta{display:grid;margin-bottom:10px;grid-template-columns:100px minmax(0,1fr);gap:5px 10px;color:var(--dsw-alias-label-secondary);font-size:11px}.dsh-market-inspection-meta strong{color:var(--dsw-alias-label-tertiary);font-weight:500}.dsh-market-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.dsh-market-check{display:flex;min-width:0;align-items:center;gap:6px;color:var(--dsw-alias-label-secondary);font-size:10px}.dsh-market-check::before{content:'…';display:grid;width:16px;height:16px;flex:none;place-items:center;border-radius:999px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-interactive-bg-hover)}.dsh-market-check[data-state="pass"]::before{content:'✓';color:var(--dsw-static-green-500,#30a46c);background:rgb(48 164 108 / 12%)}.dsh-market-check[data-state="fail"]::before{content:'×';color:var(--dsw-static-red-500,#e5484d);background:rgb(229 72 77 / 12%)}.dsh-market-peer-issues{display:grid;margin:10px 0 0;padding:0;gap:6px;list-style:none}.dsh-market-peer-issue{min-width:0;padding:7px 9px;border:1px solid rgb(229 72 77 / 22%);border-radius:8px;background:rgb(229 72 77 / 7%);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px}.dsh-market-peer-issue strong{display:block;overflow:hidden;color:var(--dsw-alias-label-primary);font-weight:550;text-overflow:ellipsis;white-space:nowrap}
+      .dsh-market-version-choice{display:grid;margin:0 0 12px;padding:0;border:0;gap:7px}.dsh-market-version-choice legend{margin-bottom:2px;color:var(--dsw-alias-label-tertiary);font-size:10px}.dsh-market-version-option{display:grid;padding:9px 10px;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:2px 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;cursor:pointer;background:var(--dsw-alias-bg-layer-1)}.dsh-market-version-option:has(input:checked){border-color:rgb(77 107 254 / 48%);background:rgb(77 107 254 / 7%)}.dsh-market-version-option input{margin:2px 0 0;grid-row:1/3}.dsh-market-version-option strong{font-size:11px;font-weight:550}.dsh-market-version-option span{color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px}
       .dsh-market-install-preview{margin-top:12px;padding:12px;border:1px solid rgb(77 107 254 / 28%);border-radius:10px;background:rgb(77 107 254 / 7%)}.dsh-market-install-preview h5{margin:0 0 8px;color:var(--dsw-alias-label-primary);font-size:12px}.dsh-market-install-preview .dsh-market-inspection-meta{margin-bottom:8px}.dsh-market-install-warning{margin:0 0 10px;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:17px}.dsh-market-install-status{margin:10px 0 0;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px}.dsh-market-install-actions{display:flex;align-items:center;gap:8px}
       @media(max-width:760px){.dsh-market-grid{grid-template-columns:1fr}.dsh-market-toolbar,.dsh-market-source-form{grid-template-columns:1fr}.dsh-market-button{width:100%}.dsh-market-installed-row{grid-template-columns:minmax(0,1fr) auto}.dsh-market-installed-row>:last-child{grid-column:1/-1}.dsh-market-source-card{grid-template-columns:1fr}.dsh-market-source-actions{max-width:none;justify-content:flex-start}.dsh-market-modal-backdrop{padding:12px}}
     `;
@@ -279,6 +286,15 @@ window.__ModuleLoader__.load({
       return entries;
     }
 
+    function findInstalledCatalogItem(entry, items) {
+      const packageName = entry.receipt?.packageName ?? entry.moduleName;
+      const version = entry.receipt?.version;
+      return items.find((item) => item.package?.name === packageName &&
+        (version === undefined || item.package?.version === version))
+        ?? items.find((item) => item.package?.name === packageName)
+        ?? items.find((item) => item.package?.name === entry.moduleName || item.displayName === entry.moduleName);
+    }
+
     function format(t, key, values) {
       let value = t(key);
       for (const [name, replacement] of Object.entries(values)) value = value.replace(`{${name}}`, String(replacement));
@@ -345,16 +361,20 @@ window.__ModuleLoader__.load({
       const [category, setCategory] = React.useState('all');
       const [page, setPage] = React.useState(1);
       const [selected, setSelected] = React.useState(null);
+      const [selectedInstalled, setSelectedInstalled] = React.useState(null);
+      const [selectedSource, setSelectedSource] = React.useState(null);
       const [sourceName, setSourceName] = React.useState('');
       const [sourceUrl, setSourceUrl] = React.useState('');
       const [sourceBusy, setSourceBusy] = React.useState(false);
       const [sourceError, setSourceError] = React.useState(false);
       const [inspection, setInspection] = React.useState({ status: 'idle', value: null });
+      const [versionPreference, setVersionPreference] = React.useState('latest');
       const [managedInstall, setManagedInstall] = React.useState({ status: 'idle', value: null });
       const [managedRemove, setManagedRemove] = React.useState({ status: 'idle', packageName: null });
       const [managedActivation, setManagedActivation] = React.useState({ status: 'idle', packageName: null });
       const [managedRollback, setManagedRollback] = React.useState({ status: 'idle', packageName: null });
       React.useEffect(() => {
+        setVersionPreference('latest');
         setInspection({ status: 'idle', value: null });
         setManagedInstall({ status: 'idle', value: null });
       }, [selected?.id]);
@@ -424,8 +444,49 @@ window.__ModuleLoader__.load({
         setSourceId(nextSourceId);
         setPage(1);
         setSelected(null);
+        setSelectedInstalled(null);
+        setSelectedSource(null);
         setInspection({ status: 'idle', value: null });
         setManagedInstall({ status: 'idle', value: null });
+      };
+      const closeDetails = () => {
+        setSelected(null);
+        setSelectedInstalled(null);
+        setSelectedSource(null);
+      };
+      const openCatalogDetails = (item) => {
+        setSelected(item);
+        setSelectedInstalled(null);
+        setSelectedSource(catalog.snapshot?.source ?? null);
+      };
+      const openInstalledDetails = async (entry) => {
+        const recordedSourceId = entry.receipt?.sourceId;
+        const fallback = {
+          id: `installed:${entry.entryId}`,
+          displayName: entry.moduleName,
+          summary: '',
+          categories: [],
+          provenance: {
+            sourceId: recordedSourceId ?? 'local-runtime',
+            observedAt: entry.receipt?.installedAt,
+          },
+          installability: { state: 'installed' },
+        };
+        setSelected(fallback);
+        setSelectedInstalled(entry);
+        setSelectedSource(recordedSourceId === undefined
+          ? { id: 'local-runtime', displayName: t('readonlyState') }
+          : { id: recordedSourceId, displayName: recordedSourceId });
+        try {
+          const snapshot = recordedSourceId !== undefined && catalog.snapshot?.source?.id !== recordedSourceId
+            ? await readCatalog(false, recordedSourceId)
+            : catalog.snapshot;
+          const item = findInstalledCatalogItem(entry, snapshot?.items ?? []);
+          if (item !== undefined) {
+            setSelected(item);
+            setSelectedSource(snapshot.source);
+          }
+        } catch { /* local installation details remain available */ }
       };
       const applySourceMutation = async (operation) => {
         setSourceBusy(true);
@@ -507,7 +568,11 @@ window.__ModuleLoader__.load({
         if (selected?.installability?.state !== 'candidate') return;
         setInspection({ status: 'loading', value: null });
         try {
-          const value = await inspectInstall({ sourceRecordId: selected.provenance.sourceId, itemId: selected.id });
+          const value = await inspectInstall({
+            sourceRecordId: selected.provenance.sourceId,
+            itemId: selected.id,
+            versionPreference,
+          });
           setInspection({ status: 'ready', value });
         } catch {
           setInspection({ status: 'error', value: null });
@@ -521,6 +586,7 @@ window.__ModuleLoader__.load({
           const value = await window.deepSeekYukiRyouPlugins.preview({
             sourceRecordId: selected.provenance.sourceId,
             itemId: selected.id,
+            versionPreference,
           });
           setManagedInstall(value.status === 'ready'
             ? { status: 'ready', value }
@@ -552,8 +618,12 @@ window.__ModuleLoader__.load({
         if (!bridgeAvailable) return null;
         if (managedInstall.status === 'idle') {
           const receipt = inventory.entries.find((entry) => entry.receipt?.packageName === selected?.package?.name)?.receipt;
+          const candidateVersion = inspection.value?.identity?.version ?? selected?.package?.version;
           const action = receipt === undefined ? 'prepareInstall'
-            : receipt.version === selected?.package?.version ? 'prepareReinstall' : 'prepareUpdate';
+            : candidateVersion === receipt.version ? 'upToDate' : 'prepareUpdate';
+          if (action === 'upToDate') {
+            return React.createElement('p', { className: 'dsh-market-install-status', role: 'status' }, t('upToDate'));
+          }
           return React.createElement('button', {
             type: 'button', className: 'dsh-market-button dsh-market-primary', onClick: prepareManagedInstall,
           }, t(action));
@@ -638,7 +708,7 @@ window.__ModuleLoader__.load({
                       React.createElement('div', { className: 'dsh-market-footer' },
                         React.createElement('span', { className: 'dsh-market-source', title: sourceDisplayName(catalog.snapshot.source) }, sourceDisplayName(catalog.snapshot.source)),
                         React.createElement('div', { className: 'dsh-market-card-actions' },
-                          React.createElement('button', { type: 'button', className: 'dsh-market-detail', onClick: () => setSelected(item) }, t('details')),
+                          React.createElement('button', { type: 'button', className: 'dsh-market-detail', onClick: () => openCatalogDetails(item) }, t('details')),
                           React.createElement('a', { className: 'dsh-market-link', href: item.repository, target: '_blank', rel: 'noreferrer' }, `${t('repository')} ↗`),
                         ),
                       ),
@@ -667,10 +737,12 @@ window.__ModuleLoader__.load({
                   : React.createElement(React.Fragment, null,
                 React.createElement('p', { className: 'dsh-market-source-notice' }, t('installableHelp')),
                 React.createElement('div', { className: 'dsh-market-installed-list' }, ...visibleInstallable.map((item) =>
-                  React.createElement('button', { type: 'button', className: 'dsh-market-installed-row', key: item.id, onClick: () => setSelected(item) },
+                  React.createElement('button', { type: 'button', className: 'dsh-market-installed-row', key: item.id, onClick: () => openCatalogDetails(item) },
                     React.createElement('span', { className: 'dsh-market-installed-name', title: item.displayName }, item.displayName),
                     React.createElement('span', { className: 'dsh-market-installed-meta' }, item.package?.name ?? ''),
-                    React.createElement('span', { className: 'dsh-market-installed-meta' }, item.package?.version ?? ''),
+                    React.createElement('span', { className: 'dsh-market-installed-meta' }, item.package?.version
+                      ? format(t, 'catalogVersionInline', { version: item.package.version })
+                      : ''),
                   ),
                 )),
                 filteredInstallable.length > pageSize && React.createElement('div', { className: 'dsh-market-pagination' },
@@ -707,6 +779,7 @@ window.__ModuleLoader__.load({
                         ),
                         React.createElement('span', { className: 'dsh-market-installed-meta' }, t(entry.ownership)),
                         React.createElement('span', { className: 'dsh-market-installed-meta' }, `${t(entry.runtimeState)} · ${t(entry.receipt ? 'managedState' : 'readonlyState')}`),
+                        React.createElement('button', { type: 'button', className: 'dsh-market-button', onClick: () => openInstalledDetails(entry) }, t(entry.receipt ? 'checkUpdates' : 'details')),
                         entry.receipt && React.createElement('span', { className: 'dsh-market-installed-actions' },
                           entry.receipt.rollbackTarget && React.createElement('button', {
                             type: 'button',
@@ -807,19 +880,27 @@ window.__ModuleLoader__.load({
           ),
         )),
         content,
-        selected && React.createElement('div', { className: 'dsh-market-modal-backdrop', role: 'presentation', onClick: (event) => { if (event.currentTarget === event.target) setSelected(null); } },
+        selected && React.createElement('div', { className: 'dsh-market-modal-backdrop', role: 'presentation', onClick: (event) => { if (event.currentTarget === event.target) closeDetails(); } },
           React.createElement('div', { className: 'dsh-market-modal', role: 'dialog', 'aria-modal': true, 'aria-label': selected.displayName },
             React.createElement('div', { className: 'dsh-market-modal-head' },
               React.createElement(MarketIcon, { item: selected, large: true }),
               React.createElement('h3', null, selected.displayName),
-              React.createElement('button', { type: 'button', className: 'dsh-market-modal-close', 'aria-label': t('close'), onClick: () => setSelected(null) }, '×'),
+              React.createElement('button', { type: 'button', className: 'dsh-market-modal-close', 'aria-label': t('close'), onClick: closeDetails }, '×'),
             ),
-            React.createElement('p', { className: 'dsh-market-modal-summary' }, selected.summary || t('noSummary')),
+            React.createElement('p', { className: 'dsh-market-modal-summary' }, selected.summary || t(selectedInstalled ? 'installedMetadataUnavailable' : 'noSummary')),
             React.createElement('dl', { className: 'dsh-market-detail-grid' },
               React.createElement('dt', null, t('publisher')), React.createElement('dd', null, selected.publisher?.name ?? '—'),
-              React.createElement('dt', null, t('source')), React.createElement('dd', null, sourceDisplayName(catalog.snapshot.source)),
+              React.createElement('dt', null, t('source')), React.createElement('dd', null, sourceDisplayName(selectedSource)),
               React.createElement('dt', null, t('observed')), React.createElement('dd', null, formatDateTime(selected.provenance.observedAt)),
-              React.createElement('dt', null, t('categories')), React.createElement('dd', null, selected.categories.join(' · ') || '—'),
+              React.createElement('dt', null, t('categories')), React.createElement('dd', null, selected.categories?.join(' · ') || '—'),
+              selectedInstalled && React.createElement(React.Fragment, null,
+                React.createElement('dt', null, t('installedVersion')),
+                React.createElement('dd', null, selectedInstalled.receipt?.version ?? '—'),
+                React.createElement('dt', null, t('installedOwnership')),
+                React.createElement('dd', null, t(selectedInstalled.ownership)),
+                React.createElement('dt', null, t('installedState')),
+                React.createElement('dd', null, t(selectedInstalled.runtimeState)),
+              ),
               selected.developerVerification && React.createElement(React.Fragment, null,
                 React.createElement('dt', null, t('developerVerification')),
                 React.createElement('dd', null, selected.developerVerification.notes || t('developerVerification')),
@@ -832,10 +913,31 @@ window.__ModuleLoader__.load({
               ),
             ),
             React.createElement('div', { className: 'dsh-market-trust' }, React.createElement('strong', null, t('trustTitle')), t(developmentFixtureSelected ? 'developmentTrust' : curatedSelected ? 'curatedTrust' : 'trust')),
-            selected.installability?.state === 'candidate' && React.createElement('div', { className: 'dsh-market-inspection' },
+            selected.installability?.state === 'candidate' && (!selectedInstalled || selectedInstalled.receipt) && React.createElement('div', { className: 'dsh-market-inspection' },
               React.createElement('h4', null, t('inspectionTitle')),
+              React.createElement('fieldset', { className: 'dsh-market-version-choice', disabled: inspection.status === 'loading' || managedInstall.status !== 'idle' },
+                React.createElement('legend', null, t('versionChoiceTitle')),
+                React.createElement('label', { className: 'dsh-market-version-option' },
+                  React.createElement('input', {
+                    type: 'radio', name: 'dsh-market-version-preference', value: 'catalog',
+                    checked: versionPreference === 'catalog',
+                    onChange: () => { setVersionPreference('catalog'); setInspection({ status: 'idle', value: null }); setManagedInstall({ status: 'idle', value: null }); },
+                  }),
+                  React.createElement('strong', null, t('catalogVersionChoice')),
+                  React.createElement('span', null, format(t, 'catalogVersionChoiceHelp', { version: selected.package.version })),
+                ),
+                React.createElement('label', { className: 'dsh-market-version-option' },
+                  React.createElement('input', {
+                    type: 'radio', name: 'dsh-market-version-preference', value: 'latest',
+                    checked: versionPreference === 'latest',
+                    onChange: () => { setVersionPreference('latest'); setInspection({ status: 'idle', value: null }); setManagedInstall({ status: 'idle', value: null }); },
+                  }),
+                  React.createElement('strong', null, t('latestVersionChoice')),
+                  React.createElement('span', null, t('latestVersionChoiceHelp')),
+                ),
+              ),
               inspection.status === 'idle'
-                ? React.createElement('button', { type: 'button', className: 'dsh-market-button', onClick: startInspection }, t('inspect'))
+                ? React.createElement('button', { type: 'button', className: 'dsh-market-button dsh-market-primary', onClick: startInspection }, t(selectedInstalled ? 'checkUpdates' : 'inspect'))
                 : inspection.status === 'loading'
                   ? React.createElement('p', { className: 'dsh-market-inspection-summary', role: 'status' }, t(developmentFixtureSelected ? 'inspectionLoadingDevelopment' : 'inspectionLoading'))
                   : inspection.status === 'error'
@@ -845,8 +947,12 @@ window.__ModuleLoader__.load({
                       )
                     : React.createElement(React.Fragment, null,
                         React.createElement('p', { className: 'dsh-market-inspection-summary' }, t(inspection.value.status === 'artifact-verified' ? 'inspectionVerified' : 'inspectionBlocked')),
-                        React.createElement('div', { className: 'dsh-market-inspection-meta' },
-                          React.createElement('strong', null, t('inspectionPackage')), React.createElement('span', null, `${inspection.value.identity.packageName}@${inspection.value.identity.version}`),
+                         React.createElement('div', { className: 'dsh-market-inspection-meta' },
+                           inspection.value.identity.catalogVersion !== inspection.value.identity.version && React.createElement(React.Fragment, null,
+                             React.createElement('strong', null, t('catalogVersion')), React.createElement('span', null, inspection.value.identity.catalogVersion),
+                             React.createElement('strong', null, t('latestVersion')), React.createElement('span', null, inspection.value.identity.version),
+                           ),
+                           React.createElement('strong', null, t('inspectionPackage')), React.createElement('span', null, `${inspection.value.identity.packageName}@${inspection.value.identity.version}`),
                           React.createElement('strong', null, t('inspectionPlatform')), React.createElement('span', null, `${inspection.value.environment.platform}-${inspection.value.environment.architecture}`),
                           React.createElement('strong', null, t('inspectionDependencies')), React.createElement('span', null, `${inspection.value.dependencySummary.direct} / ${inspection.value.dependencySummary.peers}`),
                           inspection.value.dependencySummary.graphStatus === 'frozen' && React.createElement(React.Fragment, null,
@@ -875,7 +981,7 @@ window.__ModuleLoader__.load({
                         inspection.value.status === 'artifact-verified' && renderManagedInstall(),
                       ),
             ),
-            React.createElement('a', { className: 'dsh-market-link', href: selected.repository, target: '_blank', rel: 'noreferrer' }, `${t('repository')} ↗`),
+            selected.repository && React.createElement('a', { className: 'dsh-market-link', href: selected.repository, target: '_blank', rel: 'noreferrer' }, `${t('repository')} ↗`),
           ),
         ),
       );
@@ -897,6 +1003,7 @@ window.__ModuleLoader__.load({
     }
     exports.inject = inject;
     exports.apply = apply;
+    exports.findInstalledCatalogItem = findInstalledCatalogItem;
     return module.exports;
   },
 });

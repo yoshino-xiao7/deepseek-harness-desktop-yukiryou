@@ -11,6 +11,7 @@ const request = {
 };
 const receipt = {
   packageName: request.packageName,
+  sourceId: 'dshfind',
   version: request.version,
   generation: request.generation,
   installedAt: '2026-08-22T02:00:00.000Z',
