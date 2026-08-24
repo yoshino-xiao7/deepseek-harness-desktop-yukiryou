@@ -99,6 +99,10 @@ import {
   validatedWindowMenuRequest,
 } from '../shared/window-menu.js';
 import { type DesktopLocale, validatedDesktopLocale } from '../shared/locale-sync.js';
+import {
+  createWorkspaceChangeMonitor,
+  type WorkspaceChangeMonitor,
+} from './workspace/workspace-change-monitor.js';
 
 const moduleDirectory = __dirname;
 export class AppCoordinator {
@@ -116,6 +120,7 @@ export class AppCoordinator {
   });
   #workspaceAuthorityRevision = 0;
   #workspaceInspector: WorkspaceInspector | undefined;
+  #workspaceChangeMonitor: WorkspaceChangeMonitor | undefined;
   #pluginProfileBootstrap: PluginProfileBootstrap | undefined;
   #pluginTrialGeneration: string | undefined;
   #pluginTrialRecoveryActive = false;
@@ -351,6 +356,8 @@ export class AppCoordinator {
   async #handleHarnessContext(snapshot: HarnessContextSnapshot): Promise<void> {
     const requestRevision = ++this.#workspaceAuthorityRevision;
     if (snapshot.sessionId === undefined) {
+      this.#workspaceChangeMonitor?.close();
+      this.#workspaceChangeMonitor = undefined;
       this.#workspaceInspector = undefined;
       this.#window?.setCompanionWorkspace({ status: 'none' });
       return;
@@ -361,6 +368,9 @@ export class AppCoordinator {
     });
     const state = this.#runtime?.getState();
     if (state?.kind !== 'ready' || this.#companionToken === '') {
+      this.#workspaceChangeMonitor?.close();
+      this.#workspaceChangeMonitor = undefined;
+      this.#workspaceInspector = undefined;
       this.#window?.setCompanionWorkspace({
         status: 'unavailable',
         running: snapshot.running,
@@ -379,6 +389,8 @@ export class AppCoordinator {
       authority === undefined ||
       (snapshot.workspaceId !== undefined && authority.workspaceId !== snapshot.workspaceId)
     ) {
+      this.#workspaceChangeMonitor?.close();
+      this.#workspaceChangeMonitor = undefined;
       this.#workspaceInspector = undefined;
       this.#window?.setCompanionWorkspace({
         status: 'unavailable',
@@ -386,7 +398,13 @@ export class AppCoordinator {
       });
       return;
     }
+    this.#workspaceChangeMonitor?.close();
     this.#workspaceInspector = createWorkspaceInspector(authority.root);
+    this.#workspaceChangeMonitor = createWorkspaceChangeMonitor(authority.root, () => {
+      if (requestRevision === this.#workspaceAuthorityRevision) {
+        this.#window?.notifyWorkspaceChanged();
+      }
+    });
     this.#window?.setCompanionWorkspace({
       status: 'ready',
       sessionId: snapshot.sessionId,
@@ -1071,6 +1089,8 @@ export class AppCoordinator {
       return;
     }
     this.#quitting = true;
+    this.#workspaceChangeMonitor?.close();
+    this.#workspaceChangeMonitor = undefined;
     this.#log?.write('app.quit');
     try {
       await this.#runtime?.stop('quit');

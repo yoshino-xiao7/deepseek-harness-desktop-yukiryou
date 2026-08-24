@@ -1,6 +1,7 @@
 export const HARNESS_CONTEXT_CHANNEL = 'deepseek-yukiryou:companion:harness-context';
 export const COMPANION_STATE_CHANNEL = 'deepseek-yukiryou:companion:state';
 export const COMPANION_COMMAND_CHANNEL = 'deepseek-yukiryou:companion:command';
+export const WORKSPACE_CHANGED_CHANNEL = 'deepseek-yukiryou:workspace-review:changed';
 
 export const COMPANION_PANEL_WIDTH = 340;
 export const COMPANION_PANEL_MIN_WIDTH = 280;
@@ -34,6 +35,16 @@ export interface DesktopCompanionSnapshot {
   readonly previewOpen: boolean;
   readonly panelWidth: number;
   readonly workspace: CompanionWorkspaceSnapshot;
+}
+
+export function createInitialDesktopCompanionSnapshot(): DesktopCompanionSnapshot {
+  return {
+    active: false,
+    open: false,
+    previewOpen: false,
+    panelWidth: COMPANION_PANEL_WIDTH,
+    workspace: { status: 'none' },
+  };
 }
 
 export type CompanionCommand =

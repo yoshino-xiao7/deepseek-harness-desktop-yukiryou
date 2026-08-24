@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COMPANION_PANEL_MAX_WIDTH,
   COMPANION_PANEL_MIN_WIDTH,
+  createInitialDesktopCompanionSnapshot,
   transitionCompanion,
   transitionCompanionWorkspace,
   validatedHarnessContext,
@@ -10,6 +11,13 @@ import {
 } from './desktop-companion.js';
 
 describe('Harness context boundary', () => {
+  it('starts with Workspace Review collapsed', () => {
+    expect(createInitialDesktopCompanionSnapshot()).toMatchObject({
+      active: false,
+      open: false,
+      previewOpen: false,
+    });
+  });
   it('accepts bounded identifiers and a monotonic revision', () => {
     expect(validatedHarnessContext({ revision: 4, sessionId: 'session:one', workspaceId: 'workspace-1', running: true })).toEqual({ revision: 4, sessionId: 'session:one', workspaceId: 'workspace-1', running: true });
   });

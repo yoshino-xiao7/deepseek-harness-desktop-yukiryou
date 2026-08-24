@@ -69,6 +69,14 @@ async function launchLegacy(
   const shell = application.windows().find((page) => page.url().startsWith('file:'));
   if (shell === undefined) throw new Error('Legacy shell page is missing');
   await expect.poll(
+    () => shell.locator('[data-testid="companion-toggle"]').isVisible(),
+    { timeout: 30_000 },
+  ).toBe(true);
+  await expect.poll(
+    () => shell.locator('[data-testid="companion-panel"]').isHidden(),
+  ).toBe(true);
+  await shell.locator('[data-testid="companion-toggle"]').click();
+  await expect.poll(
     () => shell.locator('[data-testid="companion-resizer"]').isVisible(),
     { timeout: 30_000 },
   ).toBe(true);

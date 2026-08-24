@@ -28,7 +28,8 @@ window.__ModuleLoader__.load({
         installableEmpty: '当前来源只提供发现信息，没有满足精确 npm 身份与来源证据要求的可安装候选。',
         installableHelp: '“可安装”只是结构资格，不代表代码安全。列表显示社区目录记录版本；打开详情后可选择目录版本或 npm 最新版本，安装前都必须通过完整安全预检。',
         installedLoading: '正在读取本机插件状态…', installedError: '暂时无法读取本机插件状态。',
-        installedEmpty: '当前 Runtime 没有可显示的插件。', active: '已启用', disabled: '已停用',
+        installedEmpty: '当前 Runtime 没有可显示的插件。', installedUserEmpty: '当前没有自行安装的插件。', active: '已启用', disabled: '已停用',
+        installedScope: '安装来源', installedUser: '自行安装', installedSystem: '系统与依赖', installedAll: '全部（含系统）',
         installedVersion: '已安装版本', installedOwnership: '安装类型', installedState: '运行状态',
         installedMetadataUnavailable: '当前来源中没有找到该插件的远程简介；以下仍会显示本机安装信息。',
         system: '系统', dependency: '依赖', managed: '受管安装', external: '外部', readonlyState: '只读状态',
@@ -88,7 +89,8 @@ window.__ModuleLoader__.load({
         installableEmpty: 'The current source provides discovery metadata only. No entry satisfies the exact npm identity and provenance evidence required for an installable candidate.',
         installableHelp: 'Installable is structural eligibility, not proof of safety. The list shows the community catalog version; open the details to choose the catalog version or npm latest, both of which must pass the full safety inspection before installation.',
         installedLoading: 'Reading local plugin state…', installedError: 'Local plugin state is temporarily unavailable.',
-        installedEmpty: 'The current Runtime has no visible plugins.', active: 'Enabled', disabled: 'Disabled',
+        installedEmpty: 'The current Runtime has no visible plugins.', installedUserEmpty: 'No user-installed plugins were found.', active: 'Enabled', disabled: 'Disabled',
+        installedScope: 'Install source', installedUser: 'User installed', installedSystem: 'System and dependencies', installedAll: 'All (including system)',
         installedVersion: 'Installed version', installedOwnership: 'Install type', installedState: 'Runtime state',
         installedMetadataUnavailable: 'No remote description was found in the recorded source. Local installation details are still shown below.',
         system: 'System', dependency: 'Dependency', managed: 'Managed install', external: 'External', readonlyState: 'Read-only state',
@@ -148,6 +150,7 @@ window.__ModuleLoader__.load({
       .dsh-market-count{margin-left:5px;color:var(--dsw-alias-label-tertiary);font-size:10px}
       .dsh-market-toolbar{display:grid;margin-bottom:14px;grid-template-columns:minmax(0,1fr) 150px auto;gap:8px}
       .dsh-market-toolbar-search-only{grid-template-columns:minmax(0,1fr)}
+      .dsh-market-toolbar-installed{grid-template-columns:minmax(0,1fr) 180px}
       .dsh-market-search,.dsh-market-select{box-sizing:border-box;height:36px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;outline:none;padding:0 12px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1);font:inherit;font-size:12px}
       .dsh-market-search:focus,.dsh-market-select:focus{border-color:var(--dsw-static-deepseek-500,#4d6bfe)}
       .dsh-market-button{height:36px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;padding:0 13px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-1);cursor:pointer;font:inherit;font-size:12px}
@@ -349,6 +352,12 @@ window.__ModuleLoader__.load({
       ], needle);
     }
 
+    function matchesInstalledScope(entry, scope) {
+      if (scope === 'all') return true;
+      const systemOwned = entry.ownership === 'system' || entry.ownership === 'dependency';
+      return scope === 'system' ? systemOwned : !systemOwned;
+    }
+
     function CommunityMarketTab({ t, listInstalled }) {
       const [sourceId, setSourceId] = React.useState(() => {
         try { return window.localStorage.getItem('dsh.market.source') ?? 'dshfind'; } catch { return 'dshfind'; }
@@ -357,6 +366,7 @@ window.__ModuleLoader__.load({
       const [inventory, setInventory] = React.useState({ status: 'loading', entries: [] });
       const [sourceRecords, setSourceRecords] = React.useState({ status: 'loading', entries: [] });
       const [view, setView] = React.useState('discover');
+      const [installedScope, setInstalledScope] = React.useState('user');
       const [query, setQuery] = React.useState('');
       const [category, setCategory] = React.useState('all');
       const [page, setPage] = React.useState(1);
@@ -421,14 +431,16 @@ window.__ModuleLoader__.load({
       const installablePages = Math.max(1, Math.ceil(filteredInstallable.length / pageSize));
       const installablePage = Math.min(page, installablePages);
       const visibleInstallable = filteredInstallable.slice((installablePage - 1) * pageSize, installablePage * pageSize);
-      const filteredInstalled = inventory.entries.filter((entry) => matchesInstalledSearch(entry, needle));
+      const userInstalled = inventory.entries.filter((entry) => matchesInstalledScope(entry, 'user'));
+      const scopedInstalled = inventory.entries.filter((entry) => matchesInstalledScope(entry, installedScope));
+      const filteredInstalled = scopedInstalled.filter((entry) => matchesInstalledSearch(entry, needle));
       const installedPages = Math.max(1, Math.ceil(filteredInstalled.length / pageSize));
       const installedPage = Math.min(page, installedPages);
       const visibleInstalled = filteredInstalled.slice((installedPage - 1) * pageSize, installedPage * pageSize);
       const views = [
         ['discover', 'discover', allItems.length],
         ['installable', 'installable', installable.length],
-        ['installed', 'installed', inventory.entries.length],
+        ['installed', 'installed', userInstalled.length],
         ['sources', 'sources', sourceRecords.entries.length],
       ];
       const selectView = (next) => { setView(next); setPage(1); };
@@ -438,6 +450,21 @@ window.__ModuleLoader__.load({
           placeholder: t('search'), 'aria-label': t('search'),
           onChange: (event) => { setQuery(event.currentTarget.value); setPage(1); },
         }),
+      );
+      const installedToolbar = React.createElement('div', { className: 'dsh-market-toolbar dsh-market-toolbar-installed' },
+        React.createElement('input', {
+          className: 'dsh-market-search', type: 'search', value: query,
+          placeholder: t('search'), 'aria-label': t('search'),
+          onChange: (event) => { setQuery(event.currentTarget.value); setPage(1); },
+        }),
+        React.createElement('select', {
+          className: 'dsh-market-select', value: installedScope, 'aria-label': t('installedScope'),
+          onChange: (event) => { setInstalledScope(event.currentTarget.value); setPage(1); },
+        },
+        React.createElement('option', { value: 'user' }, t('installedUser')),
+        React.createElement('option', { value: 'system' }, t('installedSystem')),
+        React.createElement('option', { value: 'all' }, t('installedAll')),
+        ),
       );
       const selectSource = (nextSourceId) => {
         try { window.localStorage.setItem('dsh.market.source', nextSourceId); } catch { /* storage may be unavailable */ }
@@ -757,10 +784,13 @@ window.__ModuleLoader__.load({
               ? React.createElement('div', { className: 'dsh-market-message', role: 'status' }, t('installedLoading'))
               : inventory.status === 'error'
                 ? React.createElement('div', { className: 'dsh-market-message', role: 'alert' }, t('installedError'))
-                : inventory.entries.length === 0
-                  ? React.createElement('div', { className: 'dsh-market-message' }, t('installedEmpty'))
+                : scopedInstalled.length === 0
+                  ? React.createElement(React.Fragment, null,
+                    installedToolbar,
+                    React.createElement('div', { className: 'dsh-market-message' }, t(installedScope === 'user' ? 'installedUserEmpty' : 'installedEmpty')),
+                  )
                   : React.createElement(React.Fragment, null,
-                    searchControl,
+                    installedToolbar,
                     filteredInstalled.length === 0
                       ? React.createElement('div', { className: 'dsh-market-message' }, t('empty'))
                       : React.createElement('div', { className: 'dsh-market-installed-list' }, ...visibleInstalled.map((entry) => {
@@ -1004,6 +1034,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject;
     exports.apply = apply;
     exports.findInstalledCatalogItem = findInstalledCatalogItem;
+    exports.matchesInstalledScope = matchesInstalledScope;
     return module.exports;
   },
 });

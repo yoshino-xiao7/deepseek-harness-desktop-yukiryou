@@ -1,4 +1,4 @@
-/* global document, window */
+/* global clearTimeout, document, setTimeout, window */
 
 window.__ModuleLoader__.load({
   id: '@dsh-desktop/companion',
@@ -230,12 +230,24 @@ window.__ModuleLoader__.load({
           status: 'unavailable', reason: 'network', today: { status: 'unavailable' },
         },
       );
+      const todayRetryCount = React.useRef(0);
       React.useEffect(() => {
         if (bridge === undefined) return undefined;
         const unsubscribe = bridge.subscribe((next) => setSnapshot(next));
         bridge.refresh(false);
         return unsubscribe;
       }, [bridge]);
+      React.useEffect(() => {
+        if (bridge === undefined || snapshot.status !== 'ready') return undefined;
+        if (snapshot.today.status === 'ready') {
+          todayRetryCount.current = 0;
+          return undefined;
+        }
+        if (todayRetryCount.current >= 8) return undefined;
+        todayRetryCount.current += 1;
+        const timer = setTimeout(() => bridge.refresh(false), 1_000);
+        return () => clearTimeout(timer);
+      }, [bridge, snapshot]);
       const language = document.documentElement.lang.toLowerCase();
       const zh = !language.startsWith('en');
       const shown = snapshot.status === 'unavailable' && snapshot.lastGood ? snapshot.lastGood : snapshot;

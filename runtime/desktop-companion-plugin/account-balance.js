@@ -1,7 +1,8 @@
-/* global AbortSignal, TextDecoder, fetch */
+/* global AbortSignal, TextDecoder, clearTimeout, fetch, setTimeout */
 
 const AUTOMATIC_TTL_MS = 5 * 60 * 1000;
 const MANUAL_TTL_MS = 30 * 1000;
+const TODAY_RESPONSE_WAIT_MS = 750;
 const MAX_RESPONSE_BYTES = 32 * 1024;
 const API_URL = 'https://api.deepseek.com/user/balance';
 
@@ -19,27 +20,44 @@ const BEIJING_CLOCK = new Intl.DateTimeFormat('en-US', {
   hourCycle: 'h23',
 });
 
-export function createAccountBalance({ credentials, sessionQuery, fetchImpl = fetch, now = Date.now }) {
+export function createAccountBalance({
+  credentials,
+  sessionQuery,
+  fetchImpl = fetch,
+  now = Date.now,
+  todayResponseWaitMs = TODAY_RESPONSE_WAIT_MS,
+}) {
   let lastGood;
-  let lastAttemptAt = 0;
-  let inFlight;
+  let balanceAttemptAt = 0;
+  let balanceInFlight;
+  let todayAttemptAt = 0;
+  let todayInFlight;
+  let todayHasAttempted = false;
+  let lastToday = { status: 'unavailable' };
 
   return {
-    read({ force = false } = {}) {
-      const age = now() - lastAttemptAt;
-      const ttl = force ? MANUAL_TTL_MS : AUTOMATIC_TTL_MS;
-      if (lastGood !== undefined && age < ttl) return Promise.resolve(lastGood);
-      if (inFlight !== undefined) return inFlight;
-      lastAttemptAt = now();
-      inFlight = load().finally(() => { inFlight = undefined; });
-      return inFlight;
+    async read({ force = false } = {}) {
+      const [balance, today] = await Promise.all([
+        readOfficialBalance(force),
+        waitForToday(readTodaySpend(force), todayResponseWaitMs),
+      ]);
+      return withToday(balance, today);
     },
   };
 
-  async function load() {
-    const today = await estimateTodaySpend(sessionQuery, now());
+  function readOfficialBalance(force) {
+    const age = now() - balanceAttemptAt;
+    const ttl = force ? MANUAL_TTL_MS : AUTOMATIC_TTL_MS;
+    if (lastGood !== undefined && age < ttl) return Promise.resolve(lastGood);
+    if (balanceInFlight !== undefined) return balanceInFlight;
+    balanceAttemptAt = now();
+    balanceInFlight = loadOfficialBalance().finally(() => { balanceInFlight = undefined; });
+    return balanceInFlight;
+  }
+
+  async function loadOfficialBalance() {
     const credential = await credentials.resolve('DEEPSEEK_API_KEY');
-    if (credential === undefined) return unavailable('credential-unconfigured', today);
+    if (credential === undefined) return unavailable('credential-unconfigured');
     try {
       const response = await fetchImpl(API_URL, {
         method: 'GET',
@@ -47,27 +65,43 @@ export function createAccountBalance({ credentials, sessionQuery, fetchImpl = fe
         headers: { accept: 'application/json', authorization: `Bearer ${credential.value}` },
         signal: AbortSignal.timeout(5_000),
       });
-      if (response.status === 401 || response.status === 403) return unavailable('credential-unauthorized', today);
-      if (response.status === 429) return unavailable('rate-limited', today);
-      if (!response.ok) return unavailable(response.status >= 500 ? 'network' : 'invalid-response', today);
+      if (response.status === 401 || response.status === 403) return unavailable('credential-unauthorized');
+      if (response.status === 429) return unavailable('rate-limited');
+      if (!response.ok) return unavailable(response.status >= 500 ? 'network' : 'invalid-response');
       const payload = JSON.parse(await readBoundedBody(response));
-      const ready = parseBalance(payload, new Date(now()).toISOString(), today);
-      if (ready === undefined) return unavailable('invalid-response', today);
+      const ready = parseBalance(payload, new Date(now()).toISOString());
+      if (ready === undefined) return unavailable('invalid-response');
       lastGood = ready;
       return ready;
     } catch {
-      return unavailable('network', today);
+      return unavailable('network');
     }
   }
 
-  function unavailable(reason, today) {
+  function readTodaySpend(force) {
+    const age = now() - todayAttemptAt;
+    const ttl = force ? MANUAL_TTL_MS : AUTOMATIC_TTL_MS;
+    if (todayInFlight !== undefined) return todayInFlight;
+    if (todayHasAttempted && age < ttl) return Promise.resolve(lastToday);
+    todayHasAttempted = true;
+    todayAttemptAt = now();
+    todayInFlight = estimateTodaySpend(sessionQuery, now())
+      .then((today) => {
+        lastToday = today;
+        return today;
+      })
+      .finally(() => { todayInFlight = undefined; });
+    return todayInFlight;
+  }
+
+  function unavailable(reason) {
     return lastGood === undefined
-      ? { status: 'unavailable', reason, today }
-      : { status: 'unavailable', reason, today, lastGood: { ...lastGood, today, stale: true } };
+      ? { status: 'unavailable', reason, today: { status: 'unavailable' } }
+      : { status: 'unavailable', reason, today: { status: 'unavailable' }, lastGood: { ...lastGood, stale: true } };
   }
 }
 
-function parseBalance(value, fetchedAt, today) {
+function parseBalance(value, fetchedAt) {
   if (!isRecord(value) || typeof value.is_available !== 'boolean' || !Array.isArray(value.balance_infos) || value.balance_infos.length > 2) return undefined;
   const balances = [];
   const currencies = new Set();
@@ -78,7 +112,27 @@ function parseBalance(value, fetchedAt, today) {
     currencies.add(item.currency);
     balances.push({ currency: item.currency, total: item.total_balance, granted: item.granted_balance, toppedUp: item.topped_up_balance });
   }
-  return { status: 'ready', isAvailable: value.is_available, balances, today, fetchedAt, stale: false };
+  return { status: 'ready', isAvailable: value.is_available, balances, today: { status: 'unavailable' }, fetchedAt, stale: false };
+}
+
+function withToday(snapshot, today) {
+  if (snapshot.status === 'ready') return { ...snapshot, today };
+  return snapshot.lastGood === undefined
+    ? { ...snapshot, today }
+    : { ...snapshot, today, lastGood: { ...snapshot.lastGood, today } };
+}
+
+async function waitForToday(promise, waitMs) {
+  if (waitMs <= 0) return { status: 'unavailable' };
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => { timer = setTimeout(() => resolve({ status: 'unavailable' }), waitMs); }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export async function estimateTodaySpend(sessionQuery, timestamp) {

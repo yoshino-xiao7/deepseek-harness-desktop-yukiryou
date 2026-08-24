@@ -306,6 +306,10 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouPlugins', {
 ipcRenderer.on(ACCOUNT_BALANCE_STATE_CHANNEL, (_event, value: unknown) => {
   const snapshot = validatedAccountBalanceSnapshot(value);
   if (snapshot === undefined) return;
+  if (
+    snapshot.status === 'loading' &&
+    (balanceState.status === 'ready' || balanceState.status === 'unavailable' && balanceState.lastGood !== undefined)
+  ) return;
   balanceState = snapshot;
   for (const listener of balanceListeners) listener(snapshot);
 });
@@ -467,17 +471,27 @@ function installHarnessSidebarObserver(): void {
   });
 }
 
+let appearanceColorProbe: HTMLSpanElement | undefined;
+
 function normalizedColor(value: string): string | undefined {
-  const probe = document.createElement('span');
+  const probe = appearanceColorProbe ?? document.createElement('span');
+  if (appearanceColorProbe === undefined) {
+    appearanceColorProbe = probe;
+    probe.dataset.desktopAppearanceProbe = 'true';
+    probe.style.display = 'none';
+    document.body.append(probe);
+  }
   probe.style.color = value;
-  probe.style.display = 'none';
-  document.body.append(probe);
   const color = window.getComputedStyle(probe).color;
-  probe.remove();
   return color === '' ? undefined : color;
 }
 
 function explicitChromeColor(token: string): string | undefined {
+  const value = window.getComputedStyle(document.body).getPropertyValue(token);
+  return value.trim() === '' ? undefined : normalizedColor(value);
+}
+
+function harnessTokenColor(token: string): string | undefined {
   const value = window.getComputedStyle(document.body).getPropertyValue(token);
   return value.trim() === '' ? undefined : normalizedColor(value);
 }
@@ -516,6 +530,17 @@ function readHarnessAppearance(): DesktopAppearanceSnapshot | undefined {
     sidebarBackground,
     contentBackground,
     bodyBackground: opaqueBackground(document.body),
+    foreground: harnessTokenColor('--dsw-alias-label-primary') ??
+      normalizedColor(window.getComputedStyle(content ?? document.body).color),
+    mutedForeground: harnessTokenColor('--dsw-alias-label-secondary'),
+    borderColor: harnessTokenColor('--dsw-alias-border-l1'),
+    accentColor: harnessTokenColor('--dsw-alias-brand-primary'),
+    accentForeground: harnessTokenColor('--dsw-alias-brand-text'),
+    surfaceBackground: harnessTokenColor('--dsw-alias-bg-layer-1'),
+    subtleBackground: harnessTokenColor('--dsw-alias-bg-layer-2'),
+    hoverBackground: harnessTokenColor('--dsw-alias-interactive-bg-hover'),
+    selectedBackground: harnessTokenColor('--dsw-alias-interactive-bg-active'),
+    overlayBackground: harnessTokenColor('--dsw-alias-bg-overlay'),
   });
 }
 
@@ -540,7 +565,11 @@ function installHarnessAppearanceObserver(): void {
       window.requestAnimationFrame(report);
     }
   };
-  new MutationObserver(schedule).observe(document.documentElement, {
+  new MutationObserver((mutations) => {
+    if (mutations.some((mutation) => mutation.target !== appearanceColorProbe)) {
+      schedule();
+    }
+  }).observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['class', 'style', 'data-ds-dark-theme'],
     childList: true,

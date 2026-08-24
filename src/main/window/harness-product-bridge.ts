@@ -1,4 +1,4 @@
-import type { WebContents } from 'electron';
+import type { BrowserWindow, WebContents } from 'electron';
 
 import {
   ACCOUNT_BALANCE_REQUEST_CHANNEL,
@@ -131,6 +131,19 @@ export interface HarnessProductBridge {
   dispose(): void;
 }
 
+const OAUTH_PLACEHOLDER_URL = 'about:blank';
+const OAUTH_PLACEHOLDER_TIMEOUT_MS = 30_000;
+
+const oauthPlaceholderWindowOptions = {
+  show: false,
+  webPreferences: {
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: true,
+    webSecurity: true,
+  },
+} as const;
+
 export function createHarnessProductBridge(
   options: HarnessProductBridgeOptions,
 ): HarnessProductBridge {
@@ -150,6 +163,7 @@ export function createHarnessProductBridge(
   let managedExecuteRateWindowStartedAt = 0;
   let managedExecuteRateCount = 0;
   const managedInventoryRequests = new Set<string>();
+  const oauthPlaceholderWindows = new Set<BrowserWindow>();
 
   const acceptContextEvent = (): boolean => {
     const now = Date.now();
@@ -542,9 +556,46 @@ export function createHarnessProductBridge(
   };
   const onDownload = (event: Electron.Event): void => event.preventDefault();
 
+  const onDidCreateWindow = (
+    popup: BrowserWindow,
+    details: Electron.DidCreateWindowDetails,
+  ): void => {
+    if (details.url !== OAUTH_PLACEHOLDER_URL) {
+      popup.close();
+      return;
+    }
+    oauthPlaceholderWindows.add(popup);
+    const timeout = setTimeout(() => {
+      oauthPlaceholderWindows.delete(popup);
+      if (!popup.isDestroyed()) popup.close();
+    }, OAUTH_PLACEHOLDER_TIMEOUT_MS);
+    timeout.unref();
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      oauthPlaceholderWindows.delete(popup);
+    };
+    popup.once('closed', cleanup);
+    popup.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    popup.webContents.on('will-navigate', (event, target) => {
+      if (target === OAUTH_PLACEHOLDER_URL) return;
+      event.preventDefault();
+      if (navigationDecision(target) === 'open-external') {
+        options.openExternal(target);
+      }
+      if (!popup.isDestroyed()) popup.close();
+    });
+  };
+
   webContents.on('will-navigate', onNavigate);
   webContents.on('ipc-message', onIpcMessage);
+  webContents.on('did-create-window', onDidCreateWindow);
   webContents.setWindowOpenHandler(({ url }) => {
+    if (trustedOrigin !== undefined && url === OAUTH_PLACEHOLDER_URL) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: oauthPlaceholderWindowOptions,
+      };
+    }
     if (navigationDecision(url) === 'open-external') options.openExternal(url);
     return { action: 'deny' };
   });
@@ -574,8 +625,13 @@ export function createHarnessProductBridge(
       balanceRequestRevision += 1;
       webContents.removeListener('will-navigate', onNavigate);
       webContents.removeListener('ipc-message', onIpcMessage);
+      webContents.removeListener('did-create-window', onDidCreateWindow);
       webContents.session.removeListener('will-download', onDownload);
       webContents.session.setPermissionRequestHandler(null);
+      for (const popup of oauthPlaceholderWindows) {
+        if (!popup.isDestroyed()) popup.close();
+      }
+      oauthPlaceholderWindows.clear();
     },
   };
 }

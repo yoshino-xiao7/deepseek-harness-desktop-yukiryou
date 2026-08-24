@@ -41,6 +41,7 @@ describe('desktop companion turn card', () => {
         return { type, props: props ?? {}, children: children.flat() };
       },
       useEffect: (effect: () => unknown) => effects.push(effect),
+      useRef: <T>(initial: T): { current: T } => ({ current: initial }),
       useState: <T>(initial: T | (() => T)): [T, ReturnType<typeof vi.fn>] => [
         typeof initial === 'function' ? (initial as () => T)() : initial,
         vi.fn(),

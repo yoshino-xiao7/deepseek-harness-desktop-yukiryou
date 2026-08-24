@@ -12,7 +12,32 @@ export interface DesktopAppearanceSnapshot {
   readonly colorScheme: 'light' | 'dark';
   readonly sidebarBackground: string;
   readonly contentBackground: string;
+  readonly foreground: string;
+  readonly mutedForeground: string;
+  readonly borderColor: string;
+  readonly accentColor: string;
+  readonly accentForeground: string;
+  readonly surfaceBackground: string;
+  readonly subtleBackground: string;
+  readonly hoverBackground: string;
+  readonly selectedBackground: string;
+  readonly overlayBackground: string;
 }
+
+const COLOR_KEYS = [
+  'sidebarBackground',
+  'contentBackground',
+  'foreground',
+  'mutedForeground',
+  'borderColor',
+  'accentColor',
+  'accentForeground',
+  'surfaceBackground',
+  'subtleBackground',
+  'hoverBackground',
+  'selectedBackground',
+  'overlayBackground',
+] as const satisfies readonly (keyof DesktopAppearanceSnapshot)[];
 
 const COMPUTED_COLOR =
   /^rgba?\(\s*\d+(?:\.\d+)?(?:\s+|\s*,\s*)\d+(?:\.\d+)?(?:\s+|\s*,\s*)\d+(?:\.\d+)?(?:\s*(?:\/|,)\s*(?:\d+(?:\.\d+)?%?))?\s*\)$/;
@@ -26,16 +51,14 @@ export function validatedAppearanceSnapshot(
   const candidate = value as Record<string, unknown>;
   if (
     (candidate.colorScheme !== 'light' && candidate.colorScheme !== 'dark') ||
-    !isComputedColor(candidate.sidebarBackground) ||
-    !isComputedColor(candidate.contentBackground)
+    COLOR_KEYS.some((key) => !isComputedColor(candidate[key]))
   ) {
     return undefined;
   }
   return {
     colorScheme: candidate.colorScheme,
-    sidebarBackground: candidate.sidebarBackground,
-    contentBackground: candidate.contentBackground,
-  };
+    ...Object.fromEntries(COLOR_KEYS.map((key) => [key, candidate[key]])),
+  } as DesktopAppearanceSnapshot;
 }
 
 function isComputedColor(value: unknown): value is string {

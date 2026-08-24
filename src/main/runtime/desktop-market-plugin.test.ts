@@ -487,6 +487,7 @@ describe('desktop community plugin catalog', () => {
         entry: Record<string, unknown>,
         items: readonly Record<string, unknown>[],
       ): Record<string, unknown> | undefined;
+      matchesInstalledScope(entry: Record<string, unknown>, scope: 'user' | 'system' | 'all'): boolean;
     } | undefined;
     const register = vi.fn();
     const React = { createElement: vi.fn(), Fragment: Symbol('fragment') };
@@ -521,10 +522,14 @@ describe('desktop community plugin catalog', () => {
     expect(source).not.toContain('onInstall');
     expect(source).toContain("['discover', 'discover', allItems.length]");
     expect(source).toContain("['installable', 'installable', installable.length]");
-    expect(source).toContain("['installed', 'installed', inventory.entries.length]");
+    expect(source).toContain("['installed', 'installed', userInstalled.length]");
     expect(source).toContain("['sources', 'sources', sourceRecords.entries.length]");
     expect(source).toContain('const filteredInstallable = installable.filter');
-    expect(source).toContain('const filteredInstalled = inventory.entries.filter');
+    expect(source).toContain('const filteredInstalled = scopedInstalled.filter');
+    expect(source).toContain("const [installedScope, setInstalledScope] = React.useState('user')");
+    expect(source).toContain("React.createElement('option', { value: 'user' }, t('installedUser'))");
+    expect(source).toContain("React.createElement('option', { value: 'system' }, t('installedSystem'))");
+    expect(source).toContain("React.createElement('option', { value: 'all' }, t('installedAll'))");
     expect(source).toContain('...visibleInstalled.map((entry) =>');
     expect(source).toContain('dsh-market-toolbar-search-only');
     expect(source).toContain("'x-dsh-desktop-market-mutation': '1'");
@@ -573,6 +578,13 @@ describe('desktop community plugin catalog', () => {
       package: { name: 'dsh-context', version: '0.15.0' },
       summary: 'Context plugin details',
     }])).toMatchObject({ summary: 'Context plugin details' });
+    expect(plugin?.matchesInstalledScope({ ownership: 'managed' }, 'user')).toBe(true);
+    expect(plugin?.matchesInstalledScope({ ownership: 'external' }, 'user')).toBe(true);
+    expect(plugin?.matchesInstalledScope({ ownership: 'system' }, 'user')).toBe(false);
+    expect(plugin?.matchesInstalledScope({ ownership: 'dependency' }, 'user')).toBe(false);
+    expect(plugin?.matchesInstalledScope({ ownership: 'system' }, 'system')).toBe(true);
+    expect(plugin?.matchesInstalledScope({ ownership: 'managed' }, 'system')).toBe(false);
+    expect(plugin?.matchesInstalledScope({ ownership: 'dependency' }, 'all')).toBe(true);
   });
 });
 

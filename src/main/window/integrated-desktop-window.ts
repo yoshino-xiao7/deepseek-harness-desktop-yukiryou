@@ -150,6 +150,8 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
 
   setCompanionWorkspace(): void {}
 
+  notifyWorkspaceChanged(): void {}
+
   dispose(): void {
     this.#disposing = true;
     this.#cancelReadiness();

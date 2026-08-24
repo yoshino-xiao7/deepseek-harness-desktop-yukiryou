@@ -266,7 +266,7 @@ describe('packaged desktop application', () => {
           () => typeof (window as unknown as { deepSeekYukiRyouBalance?: unknown }).deepSeekYukiRyouBalance,
         ),
       ).toBe('undefined');
-      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
       await expect.poll(() => shellPage!.locator('[data-testid="companion-empty"]').textContent()).toContain('选择一个工作区会话');
       const rejectedPath = await shellPage!.evaluate(async () => {
         const bridge = (window as unknown as { deepSeekYukiRyouCompanion: { request(value: unknown): Promise<unknown> } }).deepSeekYukiRyouCompanion;
@@ -293,18 +293,18 @@ describe('packaged desktop application', () => {
         ));
         return harness?.getBounds().width;
       });
-      const openHarnessWidth = await readHarnessViewWidth();
+      const closedHarnessWidth = await readHarnessViewWidth();
       await shellPage!.locator('[data-testid="companion-toggle"]').click();
       await shellPage!.waitForTimeout(60);
       const animatingHarnessWidth = await readHarnessViewWidth();
-      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
-      const closedHarnessWidth = await readHarnessViewWidth();
-      expect(openHarnessWidth).toBeTypeOf('number');
-      expect(animatingHarnessWidth).toBeGreaterThan(openHarnessWidth!);
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      const openHarnessWidth = await readHarnessViewWidth();
+      expect(closedHarnessWidth).toBeTypeOf('number');
       expect(animatingHarnessWidth).toBeLessThan(closedHarnessWidth!);
+      expect(animatingHarnessWidth).toBeGreaterThan(openHarnessWidth!);
       expect(closedHarnessWidth! - openHarnessWidth!).toBeCloseTo(340, -1);
       await shellPage!.locator('[data-testid="companion-toggle"]').click();
-      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
       await expect
         .poll(readToolbarSidebarWidth, { timeout: 5_000 })
         .toBeCloseTo(280, 1);

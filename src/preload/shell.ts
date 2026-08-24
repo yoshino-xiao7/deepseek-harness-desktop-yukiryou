@@ -10,6 +10,8 @@ import {
 import {
   COMPANION_COMMAND_CHANNEL,
   COMPANION_STATE_CHANNEL,
+  WORKSPACE_CHANGED_CHANNEL,
+  createInitialDesktopCompanionSnapshot,
   type DesktopCompanionSnapshot,
   validatedCompanionCommand,
   validatedDesktopCompanionSnapshot,
@@ -48,14 +50,9 @@ import {
 const DEFAULT_SIDEBAR_WIDTH = 280;
 let pendingToolbarWidth = DEFAULT_SIDEBAR_WIDTH;
 let pendingAppearance: DesktopAppearanceSnapshot | undefined;
-let companionState: DesktopCompanionSnapshot = {
-  active: false,
-  open: true,
-  previewOpen: false,
-  panelWidth: 340,
-  workspace: { status: 'none' },
-};
+let companionState = createInitialDesktopCompanionSnapshot();
 const companionListeners = new Set<(snapshot: DesktopCompanionSnapshot) => void>();
+const workspaceChangeListeners = new Set<() => void>();
 const shortcutListeners = new Set<(shortcut: WorkspaceReviewShortcut) => void>();
 const reviewTargets = createReviewTargetStore();
 
@@ -80,6 +77,10 @@ ipcRenderer.on(WORKSPACE_REVIEW_SHORTCUT_CHANNEL, (_event, value: unknown) => {
   for (const listener of shortcutListeners) listener(shortcut);
 });
 
+ipcRenderer.on(WORKSPACE_CHANGED_CHANNEL, () => {
+  for (const listener of workspaceChangeListeners) listener();
+});
+
 contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
   getSnapshot: (): DesktopCompanionSnapshot => companionState,
   subscribe: (listener: (snapshot: DesktopCompanionSnapshot) => void): (() => void) => {
@@ -89,6 +90,10 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouCompanion', {
   subscribeShortcut: (listener: (shortcut: WorkspaceReviewShortcut) => void): (() => void) => {
     shortcutListeners.add(listener);
     return () => shortcutListeners.delete(listener);
+  },
+  subscribeWorkspaceChanged: (listener: () => void): (() => void) => {
+    workspaceChangeListeners.add(listener);
+    return () => workspaceChangeListeners.delete(listener);
   },
   subscribeReviewTarget: (listener: (preview: Extract<WorkspaceReviewResponse, { kind: 'preview' }> | undefined) => void): (() => void) => reviewTargets.subscribe(listener),
   toggle: (): void => ipcRenderer.send(COMPANION_COMMAND_CHANNEL, { kind: 'toggle' }),
@@ -148,6 +153,21 @@ function applyToolbarAppearance(): void {
     '--toolbar-content-background',
     pendingAppearance.contentBackground,
   );
+  const semanticColors = {
+    '--harness-foreground': pendingAppearance.foreground,
+    '--harness-muted-foreground': pendingAppearance.mutedForeground,
+    '--harness-border': pendingAppearance.borderColor,
+    '--harness-accent': pendingAppearance.accentColor,
+    '--harness-accent-foreground': pendingAppearance.accentForeground,
+    '--harness-surface-background': pendingAppearance.surfaceBackground,
+    '--harness-subtle-background': pendingAppearance.subtleBackground,
+    '--harness-hover-background': pendingAppearance.hoverBackground,
+    '--harness-selected-background': pendingAppearance.selectedBackground,
+    '--harness-overlay-background': pendingAppearance.overlayBackground,
+  } as const;
+  for (const [token, color] of Object.entries(semanticColors)) {
+    document.documentElement.style.setProperty(token, color);
+  }
 }
 
 ipcRenderer.on(TOOLBAR_SIDEBAR_WIDTH_CHANNEL, (_event, value: unknown) => {

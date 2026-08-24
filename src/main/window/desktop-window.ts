@@ -12,8 +12,9 @@ import {
 import {
   COMPANION_COMMAND_CHANNEL,
   COMPANION_STATE_CHANNEL,
+  WORKSPACE_CHANGED_CHANNEL,
+  createInitialDesktopCompanionSnapshot,
   type CompanionWorkspaceSnapshot,
-  type DesktopCompanionSnapshot,
   type HarnessContextSnapshot,
   validatedCompanionCommand,
   transitionCompanion,
@@ -105,6 +106,7 @@ export interface DesktopWindow {
   reveal(): void;
   setUpdateState(state: DesktopUpdateState): void;
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void;
+  notifyWorkspaceChanged(): void;
   dispose(): void;
 }
 
@@ -168,13 +170,7 @@ class ElectronDesktopWindow implements DesktopWindow {
   #sidebarWidth: number | undefined;
   #appearance: DesktopAppearanceSnapshot | undefined;
   #locale: DesktopLocale | undefined;
-  #companionState: DesktopCompanionSnapshot = {
-    active: false,
-    open: true,
-    previewOpen: false,
-    panelWidth: 340,
-    workspace: { status: 'none' },
-  };
+  #companionState = createInitialDesktopCompanionSnapshot();
   #reservedRightWidth = 0;
   #layoutAnimationRevision = 0;
   #layoutAnimationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -340,6 +336,12 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#sendCompanionState();
     if (companionLayoutStateChanged(previous, this.#companionState)) {
       this.#layoutHarnessView(true);
+    }
+  }
+
+  notifyWorkspaceChanged(): void {
+    if (!this.#window.webContents.isDestroyed()) {
+      this.#window.webContents.send(WORKSPACE_CHANGED_CHANNEL);
     }
   }
 
