@@ -133,6 +133,7 @@ jobs:
           tests/e2e/packaged-startup.test.ts
           tests/e2e/session-selection-restart.test.ts
           tests/e2e/packaged-app.test.ts
+          tests/e2e/window-state-persistence.test.ts
           --no-file-parallelism
       - name: Upload Windows UI verification screenshots
         if: ${{ always() && hashFiles('out/windows-ui-verification/*.png') != '' }}
