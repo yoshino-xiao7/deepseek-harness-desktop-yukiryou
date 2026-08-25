@@ -178,7 +178,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
   startAutomaticChecks(): void {
     if (this.#initialTimer !== undefined) return;
     const check = (): void => { void this.checkForUpdates().catch(() => undefined); };
-    this.#initialTimer = setTimeout(check, this.#options.automaticCheckDelayMs ?? 15_000);
+    this.#initialTimer = setTimeout(check, this.#options.automaticCheckDelayMs ?? 0);
     this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
   }
 
@@ -308,7 +308,7 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
   startAutomaticChecks(): void {
     if (!this.#options.enabled || this.#initialTimer !== undefined) return;
     const check = (): void => { void this.checkForUpdates().catch(() => undefined); };
-    this.#initialTimer = setTimeout(check, this.#options.automaticCheckDelayMs ?? 15_000);
+    this.#initialTimer = setTimeout(check, this.#options.automaticCheckDelayMs ?? 0);
     this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
   }
 
@@ -502,7 +502,7 @@ class ElectronAppUpdater implements AppUpdater {
     };
     this.#initialTimer = setTimeout(
       check,
-      this.#options.automaticCheckDelayMs ?? 15_000,
+      this.#options.automaticCheckDelayMs ?? 0,
     );
     this.#intervalTimer = setInterval(
       check,

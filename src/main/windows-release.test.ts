@@ -24,6 +24,7 @@ describe('Windows release identity', () => {
     const packager = config.packagerConfig as {
       readonly icon?: string;
       readonly overwrite?: boolean;
+      readonly extraResource?: readonly string[];
     };
     const makers = (config.makers ?? []).map((maker) => {
       const instance = maker as {
@@ -35,6 +36,7 @@ describe('Windows release identity', () => {
 
     expect(packager.icon).toBe('resources/icons/deepseek-yukiryou');
     expect(packager.overwrite).toBe(true);
+    expect(packager.extraResource).toContain('resources/app-update.yml');
     expect(makers).toContainEqual({
       name: 'dmg',
       platforms: ['darwin', 'mas'],
@@ -56,5 +58,10 @@ describe('Windows release identity', () => {
       scripts?: Record<string, string>;
     };
     expect(packageJson.scripts?.['make:win']).toContain('--publish never');
+
+    const updateConfig = await readFile('resources/app-update.yml', 'utf8');
+    expect(updateConfig).toContain('provider: github');
+    expect(updateConfig).toContain('owner: yoshino-xiao7');
+    expect(updateConfig).toContain('repo: deepseek-harness-desktop-yukiryou');
   });
 });

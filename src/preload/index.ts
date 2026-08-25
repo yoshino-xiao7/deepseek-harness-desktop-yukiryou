@@ -615,35 +615,36 @@ function reconcileHarnessUpdateButton(): void {
   button.type = 'button';
   button.className = 'dsh-desktop-header-update';
   button.dataset.updateStatus = updateState.status;
-  positionHarnessUpdateButton(button, sidebar);
   const downloaded = updateState.status === 'downloaded';
   const manual = updateState.status === 'manual';
+  const checking = updateState.status === 'checking';
+  const downloading = updateState.status === 'downloading';
   const language = document.documentElement.lang.toLowerCase();
-  const label = downloaded
-    ? language.startsWith('en')
-      ? 'Restart to update'
-      : '重启更新'
-    : manual
-      ? language.startsWith('en')
-        ? 'Download update manually'
-        : '手动下载更新'
-    : language.startsWith('en')
-      ? 'Downloading update'
-      : '正在更新';
-  if (button.childElementCount === 0) {
-    button.append(createUpdateIcon());
-  }
-  button.title = label;
-  button.setAttribute('aria-label', label);
-  button.disabled = !downloaded && !manual;
+  const english = language.startsWith('en');
+  const accessibleLabel = (() => {
+    switch (updateState.status) {
+      case 'checking': return english ? 'Checking for updates' : '正在检查更新';
+      case 'latest': return english ? 'Up to date. Check again' : '已是最新版本，点击重新检查';
+      case 'downloading': return english ? 'Downloading update' : '正在下载更新';
+      case 'downloaded': return english ? 'Restart to update' : '重启更新';
+      case 'manual': return english ? 'Download update manually' : '手动下载更新';
+      case 'error': return english ? 'Update check failed. Try again' : '检查失败，点击重试';
+      default: return english ? 'Check for updates' : '检查更新';
+    }
+  })();
+  button.replaceChildren(createUpdateIcon());
+  button.title = accessibleLabel;
+  button.setAttribute('aria-label', accessibleLabel);
+  button.disabled = checking || downloading;
   button.onclick = downloaded
     ? () => sendUpdateCommand('install')
     : manual
       ? () => sendUpdateCommand('download')
-      : null;
+      : () => sendUpdateCommand('check');
   if (button.parentElement !== sidebar) {
     sidebar.append(button);
   }
+  positionHarnessUpdateButton(button, sidebar);
 }
 
 function positionHarnessUpdateButton(
@@ -651,8 +652,9 @@ function positionHarnessUpdateButton(
   sidebar: HTMLElement,
 ): void {
   const bounds = sidebar.getBoundingClientRect();
-  button.style.left = `${String(Math.round(bounds.right - 46))}px`;
-  button.style.top = `${String(Math.round(bounds.bottom - 46))}px`;
+  const buttonBounds = button.getBoundingClientRect();
+  button.style.left = `${String(Math.round(bounds.right - buttonBounds.width - 12))}px`;
+  button.style.top = `${String(Math.round(bounds.bottom - buttonBounds.height - 12))}px`;
 }
 
 function createUpdateIcon(): SVGElement {
@@ -664,7 +666,7 @@ function createUpdateIcon(): SVGElement {
   const path = document.createElementNS(namespace, 'path');
   path.setAttribute(
     'd',
-    'M10 3.25v8.5m0 0 3-3m-3 3-3-3M4.25 13.25v1.5c0 1.1.9 2 2 2h7.5c1.1 0 2-.9 2-2v-1.5',
+    'M15.8 7.1A6.2 6.2 0 1 0 16 12m-.2-4.9V3.8m0 3.3h-3.3',
   );
   path.setAttribute('stroke', 'currentColor');
   path.setAttribute('stroke-linecap', 'round');
@@ -683,31 +685,48 @@ function installHarnessUpdateButton(): void {
         position: fixed;
         z-index: 20;
         box-sizing: border-box;
-        display: grid;
-        width: 34px;
+        display: flex;
+        width: max-content;
+        min-width: 34px;
+        max-width: calc(100% - 24px);
         height: 34px;
-        padding: 0;
-        border: 0;
+        padding: 0 11px;
+        border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 16%));
         border-radius: 10px;
-        place-items: center;
-        color: #fff;
-        background: var(--dsw-static-deepseek-500, #4d6bfe);
-        box-shadow: 0 4px 12px rgb(38 70 180 / 22%);
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        color: var(--dsw-alias-label-secondary, #667085);
+        background: var(--dsw-alias-bg-layer-1, #fff);
+        box-shadow: 0 4px 12px rgb(18 24 40 / 10%);
         cursor: pointer;
         flex: none;
+        transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
       }
-      .dsh-desktop-header-update svg { width: 20px; height: 20px; }
+      .dsh-desktop-header-update svg { width: 18px; height: 18px; flex: none; }
       .dsh-desktop-header-update:hover:not(:disabled) {
-        filter: brightness(.96);
+        color: var(--dsw-alias-label-primary, #252b37);
+        background: var(--dsw-alias-interactive-bg-hover, rgb(127 127 127 / 8%));
         transform: translateY(-1px);
       }
       .dsh-desktop-header-update:disabled {
         cursor: default;
       }
       .dsh-desktop-header-update:focus-visible {
-        outline: 2px solid rgb(77 107 254 / 38%);
+        outline: 2px solid color-mix(in srgb, var(--dsw-static-deepseek-500, #4d6bfe) 38%, transparent);
         outline-offset: 2px;
       }
+      .dsh-desktop-header-update[data-update-status="downloaded"],
+      .dsh-desktop-header-update[data-update-status="manual"] {
+        border-color: var(--dsw-static-deepseek-500, #4d6bfe);
+        color: #fff;
+        background: var(--dsw-static-deepseek-500, #4d6bfe);
+        box-shadow: 0 4px 12px rgb(38 70 180 / 22%);
+      }
+      .dsh-desktop-header-update[data-update-status="error"] {
+        color: var(--dsw-alias-status-error, #d92d20);
+      }
+      .dsh-desktop-header-update[data-update-status="checking"],
       .dsh-desktop-header-update[data-update-status="downloading"] {
         animation: dsh-desktop-header-update-pulse 1.1s ease-in-out infinite;
       }

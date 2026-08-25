@@ -72,6 +72,16 @@ const nodePtyManifest = JSON.parse(
 ) as DependencyPackageJson;
 
 await stat(join(resources, 'app.asar'));
+const updateBootstrap = await readFile(join(resources, 'app-update.yml'), 'utf8');
+for (const requiredLine of [
+  'provider: github',
+  'owner: yoshino-xiao7',
+  'repo: deepseek-harness-desktop-yukiryou',
+]) {
+  if (!updateBootstrap.includes(requiredLine)) {
+    throw new Error(`Updater bootstrap is missing ${requiredLine}`);
+  }
+}
 expectArchitecture(executable, architecture);
 expectArchitecture(runtimeNode, architecture);
 expectArchitecture(ptyNativeModule, architecture);

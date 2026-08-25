@@ -91,6 +91,15 @@ jobs:
         run: pnpm test:integration
       - name: Build unsigned installer and portable candidates
         run: pnpm make:win
+      - name: Verify updater bootstrap in packaged Windows application
+        shell: pwsh
+        run: |
+          $config = 'out/DeepSeek YukiRyou-win32-x64/resources/app-update.yml'
+          if (-not (Test-Path -LiteralPath $config)) { throw "Missing updater bootstrap: $config" }
+          $content = Get-Content -LiteralPath $config -Raw
+          foreach ($required in @('provider: github', 'owner: yoshino-xiao7', 'repo: deepseek-harness-desktop-yukiryou')) {
+            if (-not $content.Contains($required)) { throw "Updater bootstrap is missing: $required" }
+          }
       - name: Start and restart the exact packaged application
         env:
           DSH_E2E_EXECUTABLE_PATH: ${{ github.workspace }}\out\DeepSeek YukiRyou-win32-x64\DeepSeek YukiRyou.exe
@@ -117,6 +126,8 @@ jobs:
           Expand-Archive -LiteralPath $archive.FullName -DestinationPath 'out/windows-portable-smoke'
           $executables = @(Get-ChildItem 'out/windows-portable-smoke' -Recurse -Filter 'DeepSeek YukiRyou.exe')
           if ($executables.Count -ne 1) { throw "Expected one portable executable, found $($executables.Count)" }
+          $updateConfigs = @(Get-ChildItem 'out/windows-portable-smoke' -Recurse -Filter 'app-update.yml')
+          if ($updateConfigs.Count -ne 1) { throw "Expected one updater bootstrap, found $($updateConfigs.Count)" }
           $env:DSH_E2E_EXECUTABLE_PATH = $executables[0].FullName
           "DSH_E2E_EXECUTABLE_PATH=$($executables[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts --no-file-parallelism

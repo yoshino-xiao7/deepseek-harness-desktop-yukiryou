@@ -571,6 +571,9 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain("React.createElement('option', { value: 'system' }, t('installedSystem'))");
     expect(source).toContain("React.createElement('option', { value: 'all' }, t('installedAll'))");
     expect(source).toContain('...visibleInstalled.map((entry) =>');
+    expect(source).toContain("className: 'dsh-market-installed-status'");
+    expect(source).toContain("className: 'dsh-market-installed-actions'");
+    expect(source).toContain('.dsh-market-installed-row{display:grid;min-width:0;padding:14px 16px;grid-template-columns:minmax(0,1fr) auto auto;');
     expect(source).toContain('dsh-market-toolbar-search-only');
     expect(source).toContain("'x-dsh-desktop-market-mutation': '1'");
     expect(source).toContain("kind: 'set-enabled'");

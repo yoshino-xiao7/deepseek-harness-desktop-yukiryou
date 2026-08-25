@@ -103,10 +103,15 @@ describe('macOS release workflow contract', () => {
       (step) => step.name === 'Start and restart the exact portable ZIP application',
     );
     const command = portableStep?.run ?? '';
+    const updaterBootstrapStep = workflow.jobs?.build_candidate?.steps?.find(
+      (step) => step.name === 'Verify updater bootstrap in packaged Windows application',
+    );
 
+    expect(updaterBootstrapStep?.run).toContain('app-update.yml');
     expect(command).toContain(
       '$env:DSH_E2E_EXECUTABLE_PATH = $executables[0].FullName',
     );
+    expect(command).toContain("-Filter 'app-update.yml'");
     expect(command.indexOf('$env:DSH_E2E_EXECUTABLE_PATH')).toBeLessThan(
       command.indexOf('pnpm exec vitest run'),
     );

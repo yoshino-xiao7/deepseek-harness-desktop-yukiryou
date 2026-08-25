@@ -1,0 +1,4 @@
+provider: github
+owner: yoshino-xiao7
+repo: deepseek-harness-desktop-yukiryou
+updaterCacheDirName: deepseek-yukiryou-updater
