@@ -146,7 +146,12 @@ describe('macOS release workflow contract', () => {
     expect(desktopProbe).toContain('OpenInputDesktop');
     expect(desktopProbe).toContain('SwitchDesktop');
     expect(desktopProbe).toContain('Get-Process explorer');
+    expect(desktopProbe).toContain('the packaged Electron UI tests remain the authoritative gate');
+    expect(desktopProbe).toContain('Write-Warning');
     expect(desktopProbe).not.toContain('Get-Process LogonUI');
+    expect(desktopProbe).not.toContain(
+      'throw "Windows desktop Session $sessionId is not available',
+    );
   });
 
   it('exercises guided NSIS install, repair, and uninstall in an isolated directory', async () => {

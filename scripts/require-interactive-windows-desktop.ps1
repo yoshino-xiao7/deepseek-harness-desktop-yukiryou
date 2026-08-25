@@ -64,8 +64,13 @@ public static class DesktopInputProbe
 '@
 }
 
-if (-not [DesktopInputProbe]::IsInteractive()) {
-  throw "Windows desktop Session $sessionId is not available for interactive UI automation"
+$inputDesktopAvailable = [DesktopInputProbe]::IsInteractive()
+if (-not $inputDesktopAvailable) {
+  Write-Warning (
+    "Windows input desktop is not switchable in Session $sessionId. " +
+    'This is expected for some connected or disconnected RDP sessions; ' +
+    'the packaged Electron UI tests remain the authoritative gate.'
+  )
 }
 
-"Using interactive Windows desktop Session $sessionId"
+"Using Windows desktop Session $sessionId (switchable input desktop: $inputDesktopAvailable)"
