@@ -18,23 +18,37 @@ describe('workspace change monitor', () => {
     expect(isReviewRelevantPath('.git/objects/ab/cd')).toBe(false);
   });
 
-  it('notifies after a nested workspace file changes', async () => {
+  it('reconciles after watcher startup before observing nested workspace changes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workspace-change-monitor-'));
     await mkdir(join(root, 'src'));
+    let monitor: ReturnType<typeof createWorkspaceChangeMonitor> | undefined;
     try {
+      let changeCount = 0;
       let resolveChanged: (() => void) | undefined;
-      const changed = new Promise<void>((resolve) => { resolveChanged = resolve; });
-      const monitor = createWorkspaceChangeMonitor(root, () => resolveChanged?.(), 10);
+      const nextChange = (): Promise<void> => new Promise((resolve) => { resolveChanged = resolve; });
+      let changed = nextChange();
+      monitor = createWorkspaceChangeMonitor(root, () => {
+        changeCount += 1;
+        resolveChanged?.();
+      }, 10);
+      await expectObserved(changed);
+
+      changed = nextChange();
       await writeFile(join(root, 'src', 'app.ts'), 'export {}\n');
-      await Promise.race([
-        changed,
-        new Promise<never>((_resolve, reject) => {
-          setTimeout(() => reject(new Error('workspace change was not observed')), 2_000);
-        }),
-      ]);
-      monitor.close();
+      await expectObserved(changed);
+      expect(changeCount).toBeGreaterThanOrEqual(2);
     } finally {
+      monitor?.close();
       await rm(root, { recursive: true, force: true });
     }
   });
 });
+
+async function expectObserved(changed: Promise<void>): Promise<void> {
+  await Promise.race([
+    changed,
+    new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('workspace change was not observed')), 2_000);
+    }),
+  ]);
+}

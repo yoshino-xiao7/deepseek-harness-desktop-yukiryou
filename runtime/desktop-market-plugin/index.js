@@ -7,6 +7,7 @@ import { createCatalog } from './catalog.js';
 import { createCatalogSnapshotStore } from './catalog-cache.js';
 import { createMediaProxy } from './media.js';
 import { createInstallInspector } from './install-inspector.js';
+import { createUpdateChecker } from './update-checker.js';
 import { createManagedPluginInstaller } from './managed-installer.js';
 import { createManagedPreviewVault } from './managed-preview-vault.js';
 import { createSourceRegistry } from './source-registry.js';
@@ -22,6 +23,7 @@ const CATALOG_ROUTE = '/plugins/@dsh-desktop/market/catalog';
 const SOURCES_ROUTE = '/plugins/@dsh-desktop/market/sources';
 const MEDIA_ROUTE = '/plugins/@dsh-desktop/market/media';
 const INSPECTION_ROUTE = '/plugins/@dsh-desktop/market/install-inspection';
+const UPDATE_CHECK_ROUTE = '/plugins/@dsh-desktop/market/update-check';
 const MANAGED_ROUTE = '/plugins/@dsh-desktop/market/managed-rpc';
 const PRIVATE_TOKEN_HEADER = 'x-dsh-desktop-companion-token';
 const MUTATION_HEADER = 'x-dsh-desktop-market-mutation';
@@ -43,6 +45,7 @@ const installInspector = createDevelopmentInspectorAdapter(createInstallInspecto
   catalog,
   artifactVerifier,
 }), developmentFixture);
+const updateChecker = createUpdateChecker();
 const managedPreviewVault = createManagedPreviewVault({
   inspector: installInspector,
   installer: createManagedPluginInstaller({ artifactStore: artifactCache }),
@@ -53,6 +56,32 @@ export const inject = ['webServer'];
 
 export function apply(ctx) {
   const expectedPrivateToken = process.env.DSH_DESKTOP_COMPANION_TOKEN ?? '';
+  ctx.effect(
+    () => ctx.webServer.register({
+      kind: 'exact',
+      path: UPDATE_CHECK_ROUTE,
+      handler: async (request, response) => {
+        if (request.method !== 'GET') {
+          send(response, 405, { ok: false, error: 'method-not-allowed' });
+          return;
+        }
+        try {
+          const url = new URL(request.url ?? UPDATE_CHECK_ROUTE, 'http://localhost');
+          const value = await updateChecker.check({
+            packageName: url.searchParams.get('packageName'),
+            installedVersion: url.searchParams.get('installedVersion'),
+          });
+          send(response, 200, { ok: true, value });
+        } catch (error) {
+          const code = typeof error?.code === 'string' && error.code.startsWith('update-check:')
+            ? error.code.slice('update-check:'.length)
+            : 'unavailable';
+          send(response, code === 'invalid-request' ? 400 : 503, { ok: false, error: code });
+        }
+      },
+    }),
+    'deepseek-yukiryou: targeted managed plugin update check route',
+  );
   ctx.effect(
     () => ctx.webServer.register({
       kind: 'exact',

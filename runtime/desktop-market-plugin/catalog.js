@@ -96,39 +96,53 @@ export function createCatalog(options = {}) {
           });
           return decorateSnapshot(persistent.snapshot, 'persistent', persistent.storedAt, availableSources, mediaProxy);
         }
-        try {
-          const raw = sourceId === 'dshfind'
-            ? await scanDshfind(requestJson, wait)
-            : source.builtIn === false ? await requestJson(source.url) : await requestJson();
-          const observedAt = new Date(timestamp).toISOString();
-          const normalized = sourceId === 'dshfind'
-            ? normalizeDshfind(raw, observedAt, availableSources)
-            : sourceId === 'yukiryou-curated'
-              ? normalizeYukiRyouSnapshot(raw, observedAt, availableSources, mediaProxy)
-            : sourceId === 'dsh-1024store'
-              ? normalizeDsh1024Store(raw, observedAt, availableSources)
-              : sourceId === 'github-topic-dsh-plugin'
-                ? normalizeGitHubSnapshot(raw, observedAt, availableSources, mediaProxy)
-                : normalizeCustomSnapshot(raw, source, observedAt, availableSources, mediaProxy);
-          const storedAt = now();
-          cache.set(sourceId, { snapshot: normalized, storedAt, persistedAt: storedAt, cacheStatus: 'network' });
-          if (snapshotStore !== undefined) await snapshotStore.save(sourceId, normalized, storedAt).catch(() => undefined);
-          return decorateSnapshot(normalized, 'network', storedAt, availableSources, mediaProxy);
-        } catch (error) {
-          if (persistent !== undefined) {
-            cache.set(sourceId, {
-              snapshot: persistent.snapshot, storedAt: timestamp, persistedAt: persistent.storedAt, cacheStatus: 'stale',
-            });
-            return decorateSnapshot(persistent.snapshot, 'stale', persistent.storedAt, availableSources, mediaProxy);
+        const rebuild = async () => {
+          try {
+            const raw = sourceId === 'dshfind'
+              ? await scanDshfind(requestJson, wait)
+              : source.builtIn === false ? await requestJson(source.url) : await requestJson();
+            const observedAt = new Date(timestamp).toISOString();
+            const normalized = sourceId === 'dshfind'
+              ? normalizeDshfind(raw, observedAt, availableSources)
+              : sourceId === 'yukiryou-curated'
+                ? normalizeYukiRyouSnapshot(raw, observedAt, availableSources, mediaProxy)
+              : sourceId === 'dsh-1024store'
+                ? normalizeDsh1024Store(raw, observedAt, availableSources)
+                : sourceId === 'github-topic-dsh-plugin'
+                  ? normalizeGitHubSnapshot(raw, observedAt, availableSources, mediaProxy)
+                  : normalizeCustomSnapshot(raw, source, observedAt, availableSources, mediaProxy);
+            const storedAt = now();
+            cache.set(sourceId, { snapshot: normalized, storedAt, persistedAt: storedAt, cacheStatus: 'network' });
+            if (snapshotStore !== undefined) await snapshotStore.save(sourceId, normalized, storedAt).catch(() => undefined);
+            return decorateSnapshot(normalized, 'network', storedAt, availableSources, mediaProxy);
+          } catch (error) {
+            if (persistent !== undefined) {
+              cache.set(sourceId, {
+                snapshot: persistent.snapshot, storedAt: timestamp, persistedAt: persistent.storedAt, cacheStatus: 'stale',
+              });
+              return decorateSnapshot(persistent.snapshot, 'stale', persistent.storedAt, availableSources, mediaProxy);
+            }
+            throw error;
           }
-          throw error;
+        };
+        if (!refresh && persistent !== undefined) {
+          cache.set(sourceId, {
+            snapshot: persistent.snapshot, storedAt: timestamp, persistedAt: persistent.storedAt, cacheStatus: 'stale',
+          });
+          const background = rebuild();
+          inFlight.set(sourceId, background);
+          void background.finally(() => {
+            if (inFlight.get(sourceId) === background) inFlight.delete(sourceId);
+          }).catch(() => undefined);
+          return decorateSnapshot(persistent.snapshot, 'stale', persistent.storedAt, availableSources, mediaProxy);
         }
+        return rebuild();
       })();
       inFlight.set(sourceId, request);
       try {
         return await request;
       } finally {
-        inFlight.delete(sourceId);
+        if (inFlight.get(sourceId) === request) inFlight.delete(sourceId);
       }
     },
   });

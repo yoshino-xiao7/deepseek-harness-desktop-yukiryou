@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SESSION_SELECTION_PATCH_MARKER } from '../src/main/runtime/vendor-session-selection-patch.ts';
+import { CONTEXT_METER_TOOLTIP_PATCH_MARKER } from '../src/main/runtime/vendor-context-meter-tooltip-patch.ts';
 
 import {
   type BundledRuntimeArchitecture,
@@ -91,7 +92,7 @@ await verifyBundledExtension('market', 'desktop-market-plugin', [
   'catalog-network.js', 'catalog.js', 'client.js', 'dependency-graph.js',
   'development-fixture.js', 'index.js', 'install-inspector.js', 'media.js', 'managed-installer.js',
   'managed-preview-vault.js', 'package.json', 'runtime-snapshot.js',
-  'source-registry.js',
+  'source-registry.js', 'update-checker.js',
 ]);
 const desktopMarketCache = await readFile(
   join(runtimeNodeModules, '@dsh-desktop', 'market', 'catalog-cache.js'),
@@ -142,6 +143,16 @@ const clientRuntime = await readFile(
     runtimeNodeModules,
     '@deepseek-ai',
     'dsh-client-runtime',
+    'lib',
+    'client.js',
+  ),
+  'utf8',
+);
+const conversationClient = await readFile(
+  join(
+    runtimeNodeModules,
+    '@deepseek-ai',
+    'dsh-client-ui-conversation',
     'lib',
     'client.js',
   ),
@@ -208,6 +219,9 @@ expectValue('desktop frame prototype version', desktopFrameManifest.version, '0.
 expectValue('desktop market version', desktopMarketManifest.version, '0.1.0');
 if (!clientRuntime.includes(SESSION_SELECTION_PATCH_MARKER)) {
   throw new Error('Harness session-selection startup patch is missing');
+}
+if (!conversationClient.includes(CONTEXT_METER_TOOLTIP_PATCH_MARKER)) {
+  throw new Error('Harness context-meter tooltip patch is missing');
 }
 if (
   !deepSeekAdapter.includes('deepseek-v4-flash-vision-exp') ||
