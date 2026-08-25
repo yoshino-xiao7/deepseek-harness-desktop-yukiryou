@@ -6,12 +6,31 @@ export async function closeElectronTestApplication(
   application: ElectronApplication | undefined,
 ): Promise<void> {
   if (application === undefined) return;
+  const applicationProcess = application.process();
+  if (
+    applicationProcess.exitCode !== null ||
+    applicationProcess.signalCode !== null
+  ) return;
   if (process.platform !== 'win32') {
-    await application.close();
-    return;
+    await application.evaluate(({ app }) => app.quit()).catch(() => undefined);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (
+        applicationProcess.exitCode !== null ||
+        applicationProcess.signalCode !== null
+      ) return;
+      await setTimeout(100);
+    }
+    applicationProcess.kill('SIGTERM');
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (
+        applicationProcess.exitCode !== null ||
+        applicationProcess.signalCode !== null
+      ) return;
+      await setTimeout(100);
+    }
+    throw new Error('Electron process did not exit after app.quit() or SIGTERM');
   }
 
-  const applicationProcess = application.process();
   if (
     applicationProcess.pid === undefined ||
     applicationProcess.exitCode !== null ||

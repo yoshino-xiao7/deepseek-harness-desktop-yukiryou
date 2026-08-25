@@ -298,11 +298,19 @@ describe('packaged desktop application', () => {
       await shellPage!.waitForTimeout(60);
       const animatingHarnessWidth = await readHarnessViewWidth();
       await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await expect.poll(
+        async () => closedHarnessWidth! - (await readHarnessViewWidth())!,
+        { timeout: 5_000 },
+      ).toBe(340);
       const openHarnessWidth = await readHarnessViewWidth();
       expect(closedHarnessWidth).toBeTypeOf('number');
-      expect(animatingHarnessWidth).toBeLessThan(closedHarnessWidth!);
-      expect(animatingHarnessWidth).toBeGreaterThan(openHarnessWidth!);
-      expect(closedHarnessWidth! - openHarnessWidth!).toBeCloseTo(340, -1);
+      // IPC scheduling can sample anywhere in the 220 ms animation, including
+      // either endpoint on a busy real machine. The easing curve itself is
+      // covered by deterministic layout tests; E2E enforces valid bounds and
+      // the exact final reserved width.
+      expect(animatingHarnessWidth).toBeLessThanOrEqual(closedHarnessWidth!);
+      expect(animatingHarnessWidth).toBeGreaterThanOrEqual(openHarnessWidth!);
+      expect(closedHarnessWidth! - openHarnessWidth!).toBe(340);
       await shellPage!.locator('[data-testid="companion-toggle"]').click();
       await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
       await expect
@@ -806,23 +814,28 @@ describe('packaged desktop application', () => {
           () =>
             shellPage!
               .locator('[data-testid="window-drag-region"]')
-              .evaluate(() => ({
-                scheme: document.documentElement.dataset.appearanceScheme,
-                menuColor: window.getComputedStyle(
+              .evaluate(() => {
+                const rootStyle = window.getComputedStyle(document.documentElement);
+                const menuColor = window.getComputedStyle(
                   document.querySelector('[data-window-menu]')!,
-                ).color,
-                sidebar: document.documentElement.style.getPropertyValue(
-                  '--toolbar-sidebar-background',
-                ),
-                content: document.documentElement.style.getPropertyValue(
-                  '--toolbar-content-background',
-                ),
-              })),
+                ).color;
+                return {
+                  scheme: document.documentElement.dataset.appearanceScheme,
+                  menuMatchesForeground: menuColor === rootStyle
+                    .getPropertyValue('--harness-foreground').trim(),
+                  sidebar: document.documentElement.style.getPropertyValue(
+                    '--toolbar-sidebar-background',
+                  ),
+                  content: document.documentElement.style.getPropertyValue(
+                    '--toolbar-content-background',
+                  ),
+                };
+              }),
           { timeout: 5_000 },
         )
         .toMatchObject({
           scheme: 'dark',
-          menuColor: 'rgb(242, 244, 250)',
+          menuMatchesForeground: true,
           sidebar: expect.stringMatching(/^rgb/),
           content: expect.stringMatching(/^rgb/),
         });

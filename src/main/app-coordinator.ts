@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, screen, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { release } from 'node:os';
@@ -68,6 +68,10 @@ import { createAppUpdater, type AppUpdater } from './update/app-updater.js';
 import { isUpdaterSupported } from './update/update-config.js';
 import { createDesktopWindow, type DesktopWindow } from './window/desktop-window.js';
 import { resolveDesktopCarrierMode } from './window/desktop-carrier-mode.js';
+import {
+  createWindowStatePersistence,
+  type WindowStatePersistence,
+} from './window/window-state.js';
 import type { UpdateCommand } from '../shared/update-bridge.js';
 import type { AccountBalanceSnapshot } from '../shared/account-balance.js';
 import type { HarnessContextSnapshot } from '../shared/desktop-companion.js';
@@ -103,10 +107,12 @@ import {
   createWorkspaceChangeMonitor,
   type WorkspaceChangeMonitor,
 } from './workspace/workspace-change-monitor.js';
+import { createApplicationMenuTemplate } from './application-menu-template.js';
 
 const moduleDirectory = __dirname;
 export class AppCoordinator {
   #window: DesktopWindow | undefined;
+  #windowState: WindowStatePersistence | undefined;
   #runtime: RuntimeSupervisor | undefined;
   #log: AppLog | undefined;
   #updater: AppUpdater | undefined;
@@ -143,6 +149,9 @@ export class AppCoordinator {
     app.on('activate', () => this.#window?.reveal());
     app.on('before-quit', (event) => {
       if (!this.#quitting) {
+        // Capture before Runtime shutdown: macOS may alter zoom/bounds while
+        // the asynchronous quit sequence is in progress.
+        this.#window?.captureWindowState();
         event.preventDefault();
         void this.quit();
       }
@@ -166,6 +175,14 @@ export class AppCoordinator {
     await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
     this.#log = await createAppLog(logDirectory);
     this.#log.write('desktop.carrier-selected', `mode=${carrierMode}`);
+    this.#windowState = await createWindowStatePersistence(
+      join(userData, 'window-state.json'),
+      screen.getAllDisplays().map((display) => display.workArea),
+      (error) => this.#log?.write(
+        'desktop.window-state-error',
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
     this.#updater = createAppUpdater({
       enabled:
         process.env.DSH_DESKTOP_E2E !== '1' &&
@@ -191,6 +208,8 @@ export class AppCoordinator {
       loadingUrl: loadingLocation,
       shellPreloadPath: join(moduleDirectory, 'shell-preload-entry.cjs'),
       harnessPreloadPath: join(moduleDirectory, 'harness-preload-entry.cjs'),
+      initialWindowState: this.#windowState.initialState,
+      onWindowStateChange: (state) => this.#windowState?.update(state),
       onRetry: () => void this.#retryStartup(),
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
@@ -908,11 +927,11 @@ export class AppCoordinator {
     }
     this.#runtimeStderr.flush();
     this.#quitting = true;
+    await this.#disposeWindowAndFlushState();
     await relaunchAfterStartupFailure({
       log: this.#log,
       relaunch: () => app.relaunch(),
       dispose: () => {
-        this.#window?.dispose();
         this.#updater?.dispose();
       },
       quit: () => app.quit(),
@@ -991,6 +1010,7 @@ export class AppCoordinator {
     if (this.#quitting) {
       return;
     }
+    this.#window?.captureWindowState();
     this.#quitting = true;
     this.#log?.write('update.installing');
     const updater = this.#updater;
@@ -998,10 +1018,10 @@ export class AppCoordinator {
       await this.#runtime?.stop('update');
     } finally {
       this.#runtimeStderr.flush();
+      await this.#disposeWindowAndFlushState();
       await finalizeApplicationExit({
         log: this.#log,
         dispose: () => {
-          this.#window?.dispose();
           updater?.dispose();
         },
         exit: () => updater?.quitAndInstall(),
@@ -1056,11 +1076,11 @@ export class AppCoordinator {
         return true;
       }
       this.#quitting = true;
+      await this.#disposeWindowAndFlushState();
       await relaunchAfterStartupFailure({
         log: this.#log,
         relaunch: () => app.relaunch(),
         dispose: () => {
-          this.#window?.dispose();
           this.#updater?.dispose();
         },
         quit: () => app.quit(),
@@ -1088,6 +1108,7 @@ export class AppCoordinator {
     if (this.#quitting) {
       return;
     }
+    this.#window?.captureWindowState();
     this.#quitting = true;
     this.#workspaceChangeMonitor?.close();
     this.#workspaceChangeMonitor = undefined;
@@ -1096,15 +1117,26 @@ export class AppCoordinator {
       await this.#runtime?.stop('quit');
     } finally {
       this.#runtimeStderr.flush();
+      await this.#disposeWindowAndFlushState();
       await finalizeApplicationExit({
         log: this.#log,
         dispose: () => {
-          this.#window?.dispose();
           this.#updater?.dispose();
         },
         exit: () => app.quit(),
       });
     }
+  }
+
+  async #disposeWindowAndFlushState(): Promise<void> {
+    this.#window?.dispose();
+    this.#window = undefined;
+    await this.#windowState?.flush().catch((error: unknown) => {
+      this.#log?.write(
+        'desktop.window-state-flush-error',
+        error instanceof Error ? error.message : String(error),
+      );
+    });
   }
 
   async #startRuntime(): Promise<void> {
@@ -1218,73 +1250,18 @@ export class AppCoordinator {
   }
 
   #installMenu(logDirectory: string, locale: DesktopLocale): void {
-    const labels = locale === 'en-US'
-      ? {
-          edit: 'Edit', view: 'View', window: 'Window', help: 'Help',
-          restart: 'Restart Harness', reload: 'Reload Harness UI',
-          logs: 'Open Logs', diagnostics: 'Export Diagnostics…',
-          updates: 'Check for Updates…',
-        }
-      : {
-          edit: '编辑', view: '视图', window: '窗口', help: '帮助',
-          restart: '重启 Harness', reload: '重新加载 Harness 界面',
-          logs: '打开日志', diagnostics: '导出诊断信息…',
-          updates: '检查更新…',
-        };
-    const menu = Menu.buildFromTemplate([
-      {
-        id: 'file',
-        label: app.name,
-        submenu: [
-          { role: 'about' },
-          { type: 'separator' },
-          {
-            label: labels.restart,
-            click: () => void this.restartRuntime(),
-          },
-          {
-            label: labels.reload,
-            accelerator: 'CmdOrCtrl+R',
-            click: () => this.#window?.reload(),
-          },
-          {
-            label: labels.logs,
-            click: () => void shell.openPath(logDirectory),
-          },
-          {
-            label: labels.diagnostics,
-            click: () => void this.#exportDiagnostics(logDirectory),
-          },
-          {
-            label: labels.updates,
-            click: () => void this.#checkForUpdates(),
-          },
-          { type: 'separator' },
-          { role: 'hide' },
-          { role: 'hideOthers' },
-          { role: 'unhide' },
-          { type: 'separator' },
-          { role: 'quit' },
-        ],
+    const menu = Menu.buildFromTemplate(createApplicationMenuTemplate({
+      appName: app.name,
+      locale,
+      platform: process.platform,
+      actions: {
+        restartHarness: () => void this.restartRuntime(),
+        reloadHarness: () => this.#window?.reload(),
+        openLogs: () => void shell.openPath(logDirectory),
+        exportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
+        checkForUpdates: () => void this.#checkForUpdates(),
       },
-      { id: 'edit', role: 'editMenu', label: labels.edit },
-      { id: 'view', role: 'viewMenu', label: labels.view },
-      { id: 'window', role: 'windowMenu', label: labels.window },
-      {
-        id: 'help',
-        label: labels.help,
-        submenu: [
-          {
-            label: labels.updates,
-            click: () => void this.#checkForUpdates(),
-          },
-          {
-            label: labels.logs,
-            click: () => void shell.openPath(logDirectory),
-          },
-        ],
-      },
-    ]);
+    }));
     Menu.setApplicationMenu(menu);
     ipcMain.removeAllListeners(WINDOW_MENU_CHANNEL);
     ipcMain.on(WINDOW_MENU_CHANNEL, (event, value: unknown) => {
