@@ -112,8 +112,8 @@ describe('macOS release workflow contract', () => {
     );
   });
 
-  it('does not mistake a residual LockApp process for a locked remote desktop', async () => {
-    const [candidateWorkflow, publishedWorkflow] = await Promise.all([
+  it('probes the input desktop instead of mistaking RDP processes for a lock', async () => {
+    const [candidateWorkflow, publishedWorkflow, desktopProbe] = await Promise.all([
       readFile(
         join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'),
         'utf8',
@@ -127,13 +127,31 @@ describe('macOS release workflow contract', () => {
         ),
         'utf8',
       ),
+      readFile(
+        join(
+          process.cwd(),
+          'scripts',
+          'require-interactive-windows-desktop.ps1',
+        ),
+        'utf8',
+      ),
     ]);
 
     for (const workflow of [candidateWorkflow, publishedWorkflow]) {
-      expect(workflow).toContain('Get-Process LogonUI');
-      expect(workflow).toContain('Residual LockApp processes:');
-      expect(workflow).not.toContain('Get-Process LockApp, LogonUI');
+      expect(workflow).toContain(
+        './scripts/require-interactive-windows-desktop.ps1',
+      );
+      expect(workflow).not.toContain('Get-Process LogonUI');
     }
+    expect(desktopProbe).toContain('OpenInputDesktop');
+    expect(desktopProbe).toContain('SwitchDesktop');
+    expect(desktopProbe).toContain('Get-Process explorer');
+    expect(desktopProbe).toContain('the packaged Electron UI tests remain the authoritative gate');
+    expect(desktopProbe).toContain('Write-Warning');
+    expect(desktopProbe).not.toContain('Get-Process LogonUI');
+    expect(desktopProbe).not.toContain(
+      'throw "Windows desktop Session $sessionId is not available',
+    );
   });
 
   it('exercises guided NSIS install, repair, and uninstall in an isolated directory', async () => {

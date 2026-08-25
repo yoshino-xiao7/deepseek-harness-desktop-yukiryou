@@ -6,6 +6,7 @@ import { isAbsolute } from 'node:path';
 
 const ROUTE = '/plugins/@dsh-desktop/companion/rpc';
 const MAX_RESPONSE_BYTES = 32 * 1024;
+const ACCOUNT_BALANCE_TIMEOUT_MS = 7_500;
 
 export interface RuntimeCompanionClient {
   readAccountBalance(origin: string, force: boolean): Promise<AccountBalanceSnapshot>;
@@ -34,7 +35,7 @@ export function createRuntimeCompanionClient(token: string): RuntimeCompanionCli
             'x-dsh-desktop-companion-token': token,
           },
           body: JSON.stringify({ kind: 'account.balance', force }),
-          signal: AbortSignal.timeout(5_000),
+          signal: AbortSignal.timeout(ACCOUNT_BALANCE_TIMEOUT_MS),
         });
         if (!response.ok) return unavailableBalance();
         const body = await readBoundedBody(response, MAX_RESPONSE_BYTES);

@@ -10,6 +10,7 @@ window.__ModuleLoader__.load({
     const route = '/plugins/@dsh-desktop/market/catalog';
     const sourcesRoute = '/plugins/@dsh-desktop/market/sources';
     const inspectionRoute = '/plugins/@dsh-desktop/market/install-inspection';
+    const updateCheckRoute = '/plugins/@dsh-desktop/market/update-check';
     const pageSize = 20;
     const dictionaries = {
       zh: {
@@ -28,7 +29,8 @@ window.__ModuleLoader__.load({
         installableEmpty: '当前来源只提供发现信息，没有满足精确 npm 身份与来源证据要求的可安装候选。',
         installableHelp: '“可安装”只是结构资格，不代表代码安全。列表显示社区目录记录版本；打开详情后可选择目录版本或 npm 最新版本，安装前都必须通过完整安全预检。',
         installedLoading: '正在读取本机插件状态…', installedError: '暂时无法读取本机插件状态。',
-        installedEmpty: '当前 Runtime 没有可显示的插件。', active: '已启用', disabled: '已停用',
+        installedEmpty: '当前 Runtime 没有可显示的插件。', installedUserEmpty: '当前没有自行安装的插件。', active: '已启用', disabled: '已停用',
+        installedScope: '安装来源', installedUser: '自行安装', installedSystem: '系统与依赖', installedAll: '全部（含系统）',
         installedVersion: '已安装版本', installedOwnership: '安装类型', installedState: '运行状态',
         installedMetadataUnavailable: '当前来源中没有找到该插件的远程简介；以下仍会显示本机安装信息。',
         system: '系统', dependency: '依赖', managed: '受管安装', external: '外部', readonlyState: '只读状态',
@@ -37,9 +39,9 @@ window.__ModuleLoader__.load({
         enablePlugin: '启用', disablePlugin: '停用', changingPlugin: '正在应用…', enabledUnavailable: '启用状态已变化，请刷新后重试。', managedState: '受管状态',
         rollbackPlugin: '回滚', rollingBack: '正在回滚…', rollbackUnavailable: '回滚目标已变化，请刷新后重试。', rollbackTarget: '可回滚至 {version}',
         sourceActive: '当前来源', sourceBuiltIn: '内置 Adapter', sourceProvider: '提供方', sourceSelect: '选择来源',
-        sourceComplete: '完整索引', sourceTruncated: '截断来源', sourceIndexed: '已索引 {indexed} / 来源报告 {total}',
+        sourceComplete: '当前来源完整索引', sourceTruncated: '当前来源截断索引', sourceIndexed: '已索引 {indexed} / 来源报告 {total}',
         cacheNetwork: '刚刚从来源同步', cachePersistent: '已从持久缓存快速载入 · {time}', cacheDevelopment: '本地开发测试数据',
-        cacheStale: '来源暂不可用，正在显示过期缓存 · {time}',
+        cacheStale: '正在显示过期缓存，后台更新不影响当前使用 · {time}', catalogRefreshing: '正在后台更新当前来源…',
         source1024Description: '结构化社区目录快照；当前响应少于来源报告总数，因此按截断来源处理，不生成可安装候选。',
         sourceDshfindDescription: '支持稳定数据版本的分页目录；Host 固定同一版本遍历全部页面后才发布本地索引。首次同步可能需要数分钟。',
         sourceYukiRyouName: 'YukiRyou · 实机验证',
@@ -56,6 +58,7 @@ window.__ModuleLoader__.load({
         developerVerification: '开发者验证', verifiedPlatforms: '平台', verifiedHarness: 'Harness', verifiedAt: '验证时间',
         previous: '上一页', next: '下一页', page: '第 {current} / {total} 页', items: '{count} 项',
         inspect: '安全预检', checkUpdates: '检查更新', inspectionTitle: '安装前安全预检', inspectionLoading: '正在解析所选版本、冻结依赖图并核验全部包体…',
+        updateChecking: '正在直接查询 npm 最新稳定版本…', updateCheckUnavailable: '暂时无法查询 npm 最新版本；本机插件状态不受影响。', updateLatest: 'npm 最新版本', updateCurrent: '当前已是最新稳定版本', updateFound: '发现稳定版本 {version}', updateCatalogRequired: '应用更新仍需恢复对应目录证据并通过完整安全预检。',
         versionChoiceTitle: '安装版本', catalogVersionChoice: '安装目录版本', catalogVersionChoiceHelp: '严格安装社区目录当前记录的 {version}', latestVersionChoice: '安装最新版本', latestVersionChoiceHelp: '对账 npm latest 后安装最新稳定版本',
         inspectionLoadingDevelopment: '正在核验内置测试包体并生成冻结安装锁…',
         inspectionVerified: '依赖、Runtime 与实际包体校验通过', inspectionBlocked: '当前包或其依赖被安全策略阻止',
@@ -88,7 +91,8 @@ window.__ModuleLoader__.load({
         installableEmpty: 'The current source provides discovery metadata only. No entry satisfies the exact npm identity and provenance evidence required for an installable candidate.',
         installableHelp: 'Installable is structural eligibility, not proof of safety. The list shows the community catalog version; open the details to choose the catalog version or npm latest, both of which must pass the full safety inspection before installation.',
         installedLoading: 'Reading local plugin state…', installedError: 'Local plugin state is temporarily unavailable.',
-        installedEmpty: 'The current Runtime has no visible plugins.', active: 'Enabled', disabled: 'Disabled',
+        installedEmpty: 'The current Runtime has no visible plugins.', installedUserEmpty: 'No user-installed plugins were found.', active: 'Enabled', disabled: 'Disabled',
+        installedScope: 'Install source', installedUser: 'User installed', installedSystem: 'System and dependencies', installedAll: 'All (including system)',
         installedVersion: 'Installed version', installedOwnership: 'Install type', installedState: 'Runtime state',
         installedMetadataUnavailable: 'No remote description was found in the recorded source. Local installation details are still shown below.',
         system: 'System', dependency: 'Dependency', managed: 'Managed install', external: 'External', readonlyState: 'Read-only state',
@@ -97,9 +101,9 @@ window.__ModuleLoader__.load({
         enablePlugin: 'Enable', disablePlugin: 'Disable', changingPlugin: 'Applying…', enabledUnavailable: 'Enabled state changed. Refresh and try again.', managedState: 'Managed state',
         rollbackPlugin: 'Roll back', rollingBack: 'Rolling back…', rollbackUnavailable: 'The rollback target changed. Refresh and try again.', rollbackTarget: 'Can roll back to {version}',
         sourceActive: 'Current source', sourceBuiltIn: 'Bundled adapter', sourceProvider: 'Provider', sourceSelect: 'Select source',
-        sourceComplete: 'Complete index', sourceTruncated: 'Truncated source', sourceIndexed: 'Indexed {indexed} / provider reports {total}',
+        sourceComplete: 'Complete index for current source', sourceTruncated: 'Truncated index for current source', sourceIndexed: 'Indexed {indexed} / provider reports {total}',
         cacheNetwork: 'Just synchronized from the source', cachePersistent: 'Loaded quickly from persistent cache · {time}', cacheDevelopment: 'Local development test data',
-        cacheStale: 'Source unavailable; showing stale cache · {time}',
+        cacheStale: 'Showing stale cache while background refresh stays non-blocking · {time}', catalogRefreshing: 'Refreshing the current source in the background…',
         source1024Description: 'A structured community snapshot. Its response is smaller than the provider-reported total, so it is treated as truncated and produces no installable candidates.',
         sourceDshfindDescription: 'A versioned paginated catalog. The Host pins one data version and scans every page before publishing the local index. Initial sync may take several minutes.',
         sourceYukiRyouName: 'YukiRyou · Hardware tested',
@@ -116,6 +120,7 @@ window.__ModuleLoader__.load({
         developerVerification: 'Developer verification', verifiedPlatforms: 'Platforms', verifiedHarness: 'Harness', verifiedAt: 'Verified',
         previous: 'Previous', next: 'Next', page: 'Page {current} / {total}', items: '{count} items',
         inspect: 'Safety inspection', checkUpdates: 'Check for updates', inspectionTitle: 'Pre-install safety inspection', inspectionLoading: 'Resolving the selected version, freezing the dependency graph, and verifying every artifact…',
+        updateChecking: 'Checking npm latest stable directly…', updateCheckUnavailable: 'npm latest is temporarily unavailable. The local plugin state is unchanged.', updateLatest: 'npm latest', updateCurrent: 'This is the latest stable version', updateFound: 'Stable version {version} is available', updateCatalogRequired: 'Applying it still requires catalog provenance and the complete safety inspection.',
         versionChoiceTitle: 'Install version', catalogVersionChoice: 'Install catalog version', catalogVersionChoiceHelp: 'Install the exact version currently recorded by the catalog: {version}', latestVersionChoice: 'Install latest version', latestVersionChoiceHelp: 'Resolve npm latest and install the newest stable version',
         inspectionLoadingDevelopment: 'Verifying the bundled test artifact and creating a frozen install lock…',
         inspectionVerified: 'Dependencies, Runtime, and artifact bytes passed', inspectionBlocked: 'The package or one of its dependencies is blocked by safety policy',
@@ -148,6 +153,7 @@ window.__ModuleLoader__.load({
       .dsh-market-count{margin-left:5px;color:var(--dsw-alias-label-tertiary);font-size:10px}
       .dsh-market-toolbar{display:grid;margin-bottom:14px;grid-template-columns:minmax(0,1fr) 150px auto;gap:8px}
       .dsh-market-toolbar-search-only{grid-template-columns:minmax(0,1fr)}
+      .dsh-market-toolbar-installed{grid-template-columns:minmax(0,1fr) 180px}
       .dsh-market-search,.dsh-market-select{box-sizing:border-box;height:36px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;outline:none;padding:0 12px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1);font:inherit;font-size:12px}
       .dsh-market-search:focus,.dsh-market-select:focus{border-color:var(--dsw-static-deepseek-500,#4d6bfe)}
       .dsh-market-button{height:36px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;padding:0 13px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-1);cursor:pointer;font:inherit;font-size:12px}
@@ -224,6 +230,18 @@ window.__ModuleLoader__.load({
       const response = await fetch(sourcesRoute, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
       const body = await response.json();
       if (!response.ok || body?.ok !== true || !Array.isArray(body.value)) throw new Error('sources unavailable');
+      return body.value;
+    }
+
+    async function readInstalledUpdate(packageName, installedVersion) {
+      const params = new URLSearchParams({ packageName, installedVersion });
+      const response = await fetch(`${updateCheckRoute}?${params.toString()}`, {
+        method: 'GET', credentials: 'same-origin', cache: 'no-store',
+      });
+      const body = await response.json();
+      if (!response.ok || body?.ok !== true || typeof body.value?.latestVersion !== 'string') {
+        throw new Error(body?.error ?? 'update check unavailable');
+      }
       return body.value;
     }
 
@@ -349,6 +367,12 @@ window.__ModuleLoader__.load({
       ], needle);
     }
 
+    function matchesInstalledScope(entry, scope) {
+      if (scope === 'all') return true;
+      const systemOwned = entry.ownership === 'system' || entry.ownership === 'dependency';
+      return scope === 'system' ? systemOwned : !systemOwned;
+    }
+
     function CommunityMarketTab({ t, listInstalled }) {
       const [sourceId, setSourceId] = React.useState(() => {
         try { return window.localStorage.getItem('dsh.market.source') ?? 'dshfind'; } catch { return 'dshfind'; }
@@ -357,6 +381,7 @@ window.__ModuleLoader__.load({
       const [inventory, setInventory] = React.useState({ status: 'loading', entries: [] });
       const [sourceRecords, setSourceRecords] = React.useState({ status: 'loading', entries: [] });
       const [view, setView] = React.useState('discover');
+      const [installedScope, setInstalledScope] = React.useState('user');
       const [query, setQuery] = React.useState('');
       const [category, setCategory] = React.useState('all');
       const [page, setPage] = React.useState(1);
@@ -373,18 +398,21 @@ window.__ModuleLoader__.load({
       const [managedRemove, setManagedRemove] = React.useState({ status: 'idle', packageName: null });
       const [managedActivation, setManagedActivation] = React.useState({ status: 'idle', packageName: null });
       const [managedRollback, setManagedRollback] = React.useState({ status: 'idle', packageName: null });
+      const [updateCheck, setUpdateCheck] = React.useState({ status: 'idle', packageName: null, value: null });
       React.useEffect(() => {
         setVersionPreference('latest');
         setInspection({ status: 'idle', value: null });
         setManagedInstall({ status: 'idle', value: null });
       }, [selected?.id]);
       const load = React.useCallback((refresh = false) => {
-        setCatalog({ status: 'loading', snapshot: null });
+        setCatalog((current) => ({ status: 'loading', snapshot: current.snapshot }));
         readCatalog(refresh, sourceId).then(
           (snapshot) => setCatalog({ status: 'ready', snapshot }),
-          (error) => setCatalog({ status: error.code === 'rate-limited' ? 'rate-limited' : 'error', snapshot: null }),
+          (error) => setCatalog((current) => current.snapshot === null
+            ? { status: error.code === 'rate-limited' ? 'rate-limited' : 'error', snapshot: null }
+            : { status: 'ready', snapshot: current.snapshot, refreshError: true }),
         );
-        setInventory({ status: 'loading', entries: [] });
+        setInventory((current) => ({ status: 'loading', entries: current.entries }));
         listInstalled().then(
           async (value) => {
             let managedSnapshot = { entries: [] };
@@ -421,14 +449,16 @@ window.__ModuleLoader__.load({
       const installablePages = Math.max(1, Math.ceil(filteredInstallable.length / pageSize));
       const installablePage = Math.min(page, installablePages);
       const visibleInstallable = filteredInstallable.slice((installablePage - 1) * pageSize, installablePage * pageSize);
-      const filteredInstalled = inventory.entries.filter((entry) => matchesInstalledSearch(entry, needle));
+      const userInstalled = inventory.entries.filter((entry) => matchesInstalledScope(entry, 'user'));
+      const scopedInstalled = inventory.entries.filter((entry) => matchesInstalledScope(entry, installedScope));
+      const filteredInstalled = scopedInstalled.filter((entry) => matchesInstalledSearch(entry, needle));
       const installedPages = Math.max(1, Math.ceil(filteredInstalled.length / pageSize));
       const installedPage = Math.min(page, installedPages);
       const visibleInstalled = filteredInstalled.slice((installedPage - 1) * pageSize, installedPage * pageSize);
       const views = [
         ['discover', 'discover', allItems.length],
         ['installable', 'installable', installable.length],
-        ['installed', 'installed', inventory.entries.length],
+        ['installed', 'installed', userInstalled.length],
         ['sources', 'sources', sourceRecords.entries.length],
       ];
       const selectView = (next) => { setView(next); setPage(1); };
@@ -438,6 +468,21 @@ window.__ModuleLoader__.load({
           placeholder: t('search'), 'aria-label': t('search'),
           onChange: (event) => { setQuery(event.currentTarget.value); setPage(1); },
         }),
+      );
+      const installedToolbar = React.createElement('div', { className: 'dsh-market-toolbar dsh-market-toolbar-installed' },
+        React.createElement('input', {
+          className: 'dsh-market-search', type: 'search', value: query,
+          placeholder: t('search'), 'aria-label': t('search'),
+          onChange: (event) => { setQuery(event.currentTarget.value); setPage(1); },
+        }),
+        React.createElement('select', {
+          className: 'dsh-market-select', value: installedScope, 'aria-label': t('installedScope'),
+          onChange: (event) => { setInstalledScope(event.currentTarget.value); setPage(1); },
+        },
+        React.createElement('option', { value: 'user' }, t('installedUser')),
+        React.createElement('option', { value: 'system' }, t('installedSystem')),
+        React.createElement('option', { value: 'all' }, t('installedAll')),
+        ),
       );
       const selectSource = (nextSourceId) => {
         try { window.localStorage.setItem('dsh.market.source', nextSourceId); } catch { /* storage may be unavailable */ }
@@ -453,6 +498,7 @@ window.__ModuleLoader__.load({
         setSelected(null);
         setSelectedInstalled(null);
         setSelectedSource(null);
+        setUpdateCheck({ status: 'idle', packageName: null, value: null });
       };
       const openCatalogDetails = (item) => {
         setSelected(item);
@@ -477,6 +523,18 @@ window.__ModuleLoader__.load({
         setSelectedSource(recordedSourceId === undefined
           ? { id: 'local-runtime', displayName: t('readonlyState') }
           : { id: recordedSourceId, displayName: recordedSourceId });
+        if (entry.receipt !== undefined) {
+          const packageName = entry.receipt.packageName;
+          setUpdateCheck({ status: 'loading', packageName, value: null });
+          readInstalledUpdate(packageName, entry.receipt.version).then(
+            (value) => setUpdateCheck((current) => current.packageName === packageName
+              ? { status: 'ready', packageName, value }
+              : current),
+            () => setUpdateCheck((current) => current.packageName === packageName
+              ? { status: 'error', packageName, value: null }
+              : current),
+          );
+        } else setUpdateCheck({ status: 'idle', packageName: null, value: null });
         try {
           const snapshot = recordedSourceId !== undefined && catalog.snapshot?.source?.id !== recordedSourceId
             ? await readCatalog(false, recordedSourceId)
@@ -676,7 +734,7 @@ window.__ModuleLoader__.load({
       const checkLabel = (key) => key === 'tarball-origin' && developmentFixtureSelected
         ? t('checkBundledFixtureOrigin')
         : t(`check${key.split('-').map((part) => part.slice(0, 1).toUpperCase() + part.slice(1)).join('')}`);
-      const discoverContent = catalog.status === 'loading'
+      const discoverContent = catalog.status === 'loading' && catalog.snapshot === null
         ? React.createElement('div', { className: 'dsh-market-message', role: 'status' }, t('loading'))
         : catalog.status === 'error' || catalog.status === 'rate-limited'
           ? React.createElement('div', { className: 'dsh-market-message', role: 'alert' },
@@ -753,14 +811,17 @@ window.__ModuleLoader__.load({
               ),
             )
           : view === 'installed'
-            ? inventory.status === 'loading'
+            ? inventory.status === 'loading' && inventory.entries.length === 0
               ? React.createElement('div', { className: 'dsh-market-message', role: 'status' }, t('installedLoading'))
               : inventory.status === 'error'
                 ? React.createElement('div', { className: 'dsh-market-message', role: 'alert' }, t('installedError'))
-                : inventory.entries.length === 0
-                  ? React.createElement('div', { className: 'dsh-market-message' }, t('installedEmpty'))
+                : scopedInstalled.length === 0
+                  ? React.createElement(React.Fragment, null,
+                    installedToolbar,
+                    React.createElement('div', { className: 'dsh-market-message' }, t(installedScope === 'user' ? 'installedUserEmpty' : 'installedEmpty')),
+                  )
                   : React.createElement(React.Fragment, null,
-                    searchControl,
+                    installedToolbar,
                     filteredInstalled.length === 0
                       ? React.createElement('div', { className: 'dsh-market-message' }, t('empty'))
                       : React.createElement('div', { className: 'dsh-market-installed-list' }, ...visibleInstalled.map((entry) => {
@@ -865,6 +926,7 @@ window.__ModuleLoader__.load({
         catalog.snapshot && React.createElement('div', { className: 'dsh-market-index-status', 'data-cache': catalog.snapshot.cache?.status ?? 'network' },
           React.createElement('strong', null, catalog.snapshot.source.complete ? t('sourceComplete') : t('sourceTruncated')),
           React.createElement('span', null, format(t, 'sourceIndexed', { indexed: catalog.snapshot.source.indexedTotal, total: catalog.snapshot.source.providerTotal })),
+          catalog.status === 'loading' && React.createElement('span', { role: 'status' }, t('catalogRefreshing')),
           React.createElement('span', null, catalog.snapshot.cache?.status === 'persistent'
             ? format(t, 'cachePersistent', { time: formatDateTime(catalog.snapshot.cache.storedAt) })
             : catalog.snapshot.cache?.status === 'stale'
@@ -900,6 +962,10 @@ window.__ModuleLoader__.load({
                 React.createElement('dd', null, t(selectedInstalled.ownership)),
                 React.createElement('dt', null, t('installedState')),
                 React.createElement('dd', null, t(selectedInstalled.runtimeState)),
+                updateCheck.status === 'ready' && React.createElement(React.Fragment, null,
+                  React.createElement('dt', null, t('updateLatest')),
+                  React.createElement('dd', null, updateCheck.value.latestVersion),
+                ),
               ),
               selected.developerVerification && React.createElement(React.Fragment, null,
                 React.createElement('dt', null, t('developerVerification')),
@@ -911,6 +977,22 @@ window.__ModuleLoader__.load({
                 React.createElement('dt', null, t('verifiedAt')),
                 React.createElement('dd', null, formatDateTime(selected.developerVerification.testedAt)),
               ),
+            ),
+            selectedInstalled?.receipt && React.createElement('div', { className: 'dsh-market-inspection' },
+              React.createElement('p', {
+                className: 'dsh-market-inspection-summary',
+                role: updateCheck.status === 'error' ? 'alert' : 'status',
+              }, updateCheck.status === 'loading'
+                ? t('updateChecking')
+                : updateCheck.status === 'error'
+                  ? t('updateCheckUnavailable')
+                  : updateCheck.status === 'ready'
+                    ? (updateCheck.value.updateAvailable
+                      ? format(t, 'updateFound', { version: updateCheck.value.latestVersion })
+                      : t('updateCurrent'))
+                    : ''),
+              updateCheck.status === 'ready' && updateCheck.value.updateAvailable &&
+                React.createElement('p', { className: 'dsh-market-source-notice' }, t('updateCatalogRequired')),
             ),
             React.createElement('div', { className: 'dsh-market-trust' }, React.createElement('strong', null, t('trustTitle')), t(developmentFixtureSelected ? 'developmentTrust' : curatedSelected ? 'curatedTrust' : 'trust')),
             selected.installability?.state === 'candidate' && (!selectedInstalled || selectedInstalled.receipt) && React.createElement('div', { className: 'dsh-market-inspection' },
@@ -1004,6 +1086,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject;
     exports.apply = apply;
     exports.findInstalledCatalogItem = findInstalledCatalogItem;
+    exports.matchesInstalledScope = matchesInstalledScope;
     return module.exports;
   },
 });

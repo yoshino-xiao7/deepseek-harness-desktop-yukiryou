@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { WebContents } from 'electron';
+import type { BrowserWindow, WebContents } from 'electron';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -48,7 +48,18 @@ class FakeSession extends EventEmitter {
 class FakeWebContents extends EventEmitter {
   readonly session = new FakeSession();
   readonly sent: Array<{ channel: string; value: unknown }> = [];
-  windowOpenHandler: ((details: { url: string }) => { action: 'deny' }) | undefined;
+  windowOpenHandler: ((details: { url: string }) => {
+    action: 'allow' | 'deny';
+    overrideBrowserWindowOptions?: {
+      show?: boolean;
+      webPreferences?: {
+        nodeIntegration?: boolean;
+        contextIsolation?: boolean;
+        sandbox?: boolean;
+        webSecurity?: boolean;
+      };
+    };
+  }) | undefined;
 
   send(channel: string, value: unknown): void {
     this.sent.push({ channel, value });
@@ -59,9 +70,18 @@ class FakeWebContents extends EventEmitter {
   }
 
   setWindowOpenHandler(
-    handler: (details: { url: string }) => { action: 'deny' },
+    handler: NonNullable<FakeWebContents['windowOpenHandler']>,
   ): void {
     this.windowOpenHandler = handler;
+  }
+}
+
+class FakePopupWindow extends EventEmitter {
+  readonly webContents = new FakeWebContents();
+  readonly close = vi.fn(() => this.emit('closed'));
+
+  isDestroyed(): boolean {
+    return false;
   }
 }
 
@@ -106,6 +126,50 @@ describe('Harness product bridge', () => {
     const download = { preventDefault: vi.fn() };
     webContents.session.emit('will-download', download);
     expect(download.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it('permits only a sandboxed hidden placeholder for browser OAuth popups', () => {
+    const webContents = new FakeWebContents();
+    const openExternal = vi.fn();
+    const bridge = createBridge(webContents, { openExternal });
+    bridge.setTrustedOrigin(
+      createTrustedHarnessOrigin('http://127.0.0.1:51234'),
+    );
+
+    expect(webContents.windowOpenHandler?.({ url: 'about:blank' })).toEqual({
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        show: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+          webSecurity: true,
+        },
+      },
+    });
+    expect(webContents.windowOpenHandler?.({ url: 'data:text/html,unsafe' })).toEqual({
+      action: 'deny',
+    });
+    const popup = new FakePopupWindow();
+    webContents.emit(
+      'did-create-window',
+      popup as unknown as BrowserWindow,
+      { url: 'about:blank' },
+    );
+    const navigation = { preventDefault: vi.fn() };
+    popup.webContents.emit(
+      'will-navigate',
+      navigation,
+      'https://auth.openai.com/oauth/authorize',
+    );
+
+    expect(navigation.preventDefault).toHaveBeenCalledOnce();
+    expect(openExternal).toHaveBeenCalledWith(
+      'https://auth.openai.com/oauth/authorize',
+    );
+    expect(popup.close).toHaveBeenCalledOnce();
+    bridge.dispose();
   });
 
   it('validates and routes product messages through one interface', async () => {

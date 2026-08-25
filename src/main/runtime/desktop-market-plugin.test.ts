@@ -456,6 +456,41 @@ describe('desktop community plugin catalog', () => {
     await expect(catalog.read({ refresh: true })).resolves.toMatchObject({ cache: { status: 'stale' } });
   });
 
+  it('returns an expired persistent snapshot immediately while rebuilding it in the background', async () => {
+    const createCatalog = await loadCatalogFactory();
+    const timestamp = Date.parse('2026-08-21T03:00:00.000Z');
+    let persisted: unknown;
+    const seed = createCatalog({
+      now: () => timestamp,
+      requests: requests('dshfind', async () => validDshfindPayload),
+      snapshotStore: {
+        load: async () => undefined,
+        save: async (_sourceId, snapshot) => { persisted = snapshot; },
+      },
+    });
+    await seed.read();
+    let resolveRefresh: ((value: unknown) => void) | undefined;
+    const requestPage = vi.fn(() => new Promise<unknown>((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    const catalog = createCatalog({
+      now: () => timestamp + (25 * 60 * 60 * 1_000),
+      requests: requests('dshfind', requestPage),
+      snapshotStore: {
+        load: async () => ({ storedAt: timestamp, snapshot: persisted }),
+        save: async () => undefined,
+      },
+    });
+
+    const result = await catalog.read();
+    expect(result).toMatchObject({
+      cache: { status: 'stale' },
+      source: { id: 'dshfind', indexedTotal: 1 },
+    });
+    expect(requestPage).toHaveBeenCalledOnce();
+    resolveRefresh?.(validDshfindPayload);
+  });
+
   it('rejects entries outside the fixed dsh-plugin topic and repository origin', async () => {
     const createCatalog = await loadCatalogFactory();
     const wrongTopic = {
@@ -481,12 +516,17 @@ describe('desktop community plugin catalog', () => {
       new URL('../../../runtime/desktop-market-plugin/client.js', import.meta.url),
       'utf8',
     );
+    const hostSource = await readFile(
+      new URL('../../../runtime/desktop-market-plugin/index.js', import.meta.url),
+      'utf8',
+    );
     let plugin: {
       apply(context: unknown): void;
       findInstalledCatalogItem(
         entry: Record<string, unknown>,
         items: readonly Record<string, unknown>[],
       ): Record<string, unknown> | undefined;
+      matchesInstalledScope(entry: Record<string, unknown>, scope: 'user' | 'system' | 'all'): boolean;
     } | undefined;
     const register = vi.fn();
     const React = { createElement: vi.fn(), Fragment: Symbol('fragment') };
@@ -521,10 +561,15 @@ describe('desktop community plugin catalog', () => {
     expect(source).not.toContain('onInstall');
     expect(source).toContain("['discover', 'discover', allItems.length]");
     expect(source).toContain("['installable', 'installable', installable.length]");
-    expect(source).toContain("['installed', 'installed', inventory.entries.length]");
+    expect(source).toContain("['installed', 'installed', userInstalled.length]");
     expect(source).toContain("['sources', 'sources', sourceRecords.entries.length]");
     expect(source).toContain('const filteredInstallable = installable.filter');
-    expect(source).toContain('const filteredInstalled = inventory.entries.filter');
+    expect(source).toContain('const filteredInstalled = scopedInstalled.filter');
+    expect(source).toContain("setCatalog((current) => ({ status: 'loading', snapshot: current.snapshot }))");
+    expect(source).toContain("const [installedScope, setInstalledScope] = React.useState('user')");
+    expect(source).toContain("React.createElement('option', { value: 'user' }, t('installedUser'))");
+    expect(source).toContain("React.createElement('option', { value: 'system' }, t('installedSystem'))");
+    expect(source).toContain("React.createElement('option', { value: 'all' }, t('installedAll'))");
     expect(source).toContain('...visibleInstalled.map((entry) =>');
     expect(source).toContain('dsh-market-toolbar-search-only');
     expect(source).toContain("'x-dsh-desktop-market-mutation': '1'");
@@ -532,6 +577,10 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain("role: 'dialog'");
     expect(source).toContain("referrerPolicy: 'no-referrer'");
     expect(source).toContain("'/plugins/@dsh-desktop/market/install-inspection'");
+    expect(source).toContain("'/plugins/@dsh-desktop/market/update-check'");
+    expect(source).toContain('readInstalledUpdate(packageName, entry.receipt.version)');
+    expect(hostSource).toContain("const UPDATE_CHECK_ROUTE = '/plugins/@dsh-desktop/market/update-check'");
+    expect(hostSource).toContain('const value = await updateChecker.check({');
     expect(source).toContain("'x-dsh-desktop-market-inspection': '1'");
     expect(source).toContain("executionReady !== false");
     expect(source).toContain('formatDateTime(selected.provenance.observedAt)');
@@ -573,6 +622,13 @@ describe('desktop community plugin catalog', () => {
       package: { name: 'dsh-context', version: '0.15.0' },
       summary: 'Context plugin details',
     }])).toMatchObject({ summary: 'Context plugin details' });
+    expect(plugin?.matchesInstalledScope({ ownership: 'managed' }, 'user')).toBe(true);
+    expect(plugin?.matchesInstalledScope({ ownership: 'external' }, 'user')).toBe(true);
+    expect(plugin?.matchesInstalledScope({ ownership: 'system' }, 'user')).toBe(false);
+    expect(plugin?.matchesInstalledScope({ ownership: 'dependency' }, 'user')).toBe(false);
+    expect(plugin?.matchesInstalledScope({ ownership: 'system' }, 'system')).toBe(true);
+    expect(plugin?.matchesInstalledScope({ ownership: 'managed' }, 'system')).toBe(false);
+    expect(plugin?.matchesInstalledScope({ ownership: 'dependency' }, 'all')).toBe(true);
   });
 });
 

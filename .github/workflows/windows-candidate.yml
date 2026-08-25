@@ -43,25 +43,8 @@ jobs:
             throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
           }
           $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Require an unlocked interactive Windows desktop
-        run: |
-          $sessionId = (Get-Process -Id $PID).SessionId
-          if ($sessionId -eq 0) {
-            throw 'Runner is executing in non-interactive Session 0'
-          }
-          $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
-          if ($explorer.Count -eq 0) {
-            throw "No logged-in Windows desktop was found in Session $sessionId"
-          }
-          # LockApp is commonly left suspended after an interactive or remote
-          # session is unlocked. Keep it as diagnostics, not as a lock signal.
-          $lockApp = @(Get-Process LockApp -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
-          "Residual LockApp processes: $($lockApp.Count)"
-          $lockUi = @(Get-Process LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
-          if ($lockUi.Count -ne 0) {
-            throw "Windows desktop Session $sessionId is locked"
-          }
-          "Using unlocked interactive Windows desktop Session $sessionId"
+      - name: Require an interactive Windows runner session
+        run: ./scripts/require-interactive-windows-desktop.ps1
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -90,25 +73,8 @@ jobs:
             throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
           }
           $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Require an unlocked interactive Windows desktop
-        run: |
-          $sessionId = (Get-Process -Id $PID).SessionId
-          if ($sessionId -eq 0) {
-            throw 'Runner is executing in non-interactive Session 0'
-          }
-          $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
-          if ($explorer.Count -eq 0) {
-            throw "No logged-in Windows desktop was found in Session $sessionId"
-          }
-          # LockApp is commonly left suspended after an interactive or remote
-          # session is unlocked. Keep it as diagnostics, not as a lock signal.
-          $lockApp = @(Get-Process LockApp -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
-          "Residual LockApp processes: $($lockApp.Count)"
-          $lockUi = @(Get-Process LogonUI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)
-          if ($lockUi.Count -ne 0) {
-            throw "Windows desktop Session $sessionId is locked"
-          }
-          "Using unlocked interactive Windows desktop Session $sessionId"
+      - name: Require an interactive Windows runner session
+        run: ./scripts/require-interactive-windows-desktop.ps1
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -133,6 +99,7 @@ jobs:
           tests/e2e/packaged-startup.test.ts
           tests/e2e/session-selection-restart.test.ts
           tests/e2e/packaged-app.test.ts
+          tests/e2e/window-state-persistence.test.ts
           --no-file-parallelism
       - name: Upload Windows UI verification screenshots
         if: ${{ always() && hashFiles('out/windows-ui-verification/*.png') != '' }}

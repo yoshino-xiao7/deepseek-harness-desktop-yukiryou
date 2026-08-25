@@ -14,7 +14,7 @@ describe('workspace review UI contract', () => {
     expect(styles).toMatch(/\.window-toolbar\s*\{[^}]*height:\s*44px/s);
     expect(styles).toMatch(/\.windows-menu\s*\{[^}]*-webkit-app-region:\s*no-drag/s);
     expect(styles).toMatch(
-      /:root\[data-appearance-scheme="dark"\]\s*\{[^}]*--toolbar-foreground:\s*#f2f4fa/s,
+      /--toolbar-foreground:\s*var\(--harness-foreground\)/s,
     );
     expect(styles).toMatch(
       /\.windows-menu button\s*\{[^}]*var\(--toolbar-foreground\)/s,
@@ -96,16 +96,27 @@ describe('workspace review UI contract', () => {
     expect(html).toMatch(/data-copy-target="line" disabled>复制行号/);
     expect(html).toMatch(/data-copy-target="path-line" disabled>复制 路径:行号/);
     expect(html).toMatch(/data-testid="preview-copy-feedback"[^>]+aria-live="polite"/);
+    expect(html).toMatch(/data-testid="preview-copy-menu"[\s\S]*?<span>复制<\/span>/);
   });
 
-  it('gives body-level workspace overlays an explicit dark foreground', async () => {
+  it('gives body-level workspace overlays the synchronized Harness foreground', async () => {
     const styles = await readFile(new URL('./styles.css', import.meta.url), 'utf8');
 
     expect(styles).toMatch(
-      /:root\[data-appearance-scheme="dark"\]\s*\{[^}]*--companion-overlay-foreground:\s*#f4f6fb/s,
+      /--companion-overlay-foreground:\s*var\(--harness-foreground\)/s,
     );
     expect(styles).toMatch(
       /\.workspace-context-menu button\s*\{[^}]*color:\s*var\(--companion-overlay-foreground\)/s,
     );
+  });
+
+  it('consumes the live Harness semantic theme and keeps copy feedback prominent', async () => {
+    const styles = await readFile(new URL('./styles.css', import.meta.url), 'utf8');
+
+    expect(styles).toMatch(/--companion-foreground:\s*var\(--harness-foreground\)/);
+    expect(styles).toMatch(/--companion-accent:\s*var\(--harness-accent\)/);
+    expect(styles).toMatch(/\.preview-copy-feedback\s*\{[^}]*color:\s*var\(--harness-accent-foreground\)/s);
+    expect(styles).toMatch(/\.preview-copy-feedback\s*\{[^}]*background:\s*var\(--companion-accent\)/s);
+    expect(styles).toMatch(/\.preview-copy-popover\s*\{[^}]*background:\s*var\(--harness-overlay-background\)/s);
   });
 });

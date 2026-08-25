@@ -26,6 +26,40 @@ describe('Runtime account balance module', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('does not block the official balance request behind a slow local usage scan', async () => {
+    const moduleUrl = pathToFileURL(join(process.cwd(), 'runtime', 'desktop-companion-plugin', 'account-balance.js')).href;
+    const { createAccountBalance } = await import(moduleUrl) as {
+      createAccountBalance(options: Record<string, unknown>): { read(): Promise<unknown> };
+    };
+    let releaseSessions!: (value: unknown[]) => void;
+    const sessions = new Promise<unknown[]>((resolve) => { releaseSessions = resolve; });
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      is_available: true,
+      balance_infos: [{ currency: 'CNY', total_balance: '12.30', granted_balance: '2.30', topped_up_balance: '10.00' }],
+    })));
+    const balance = createAccountBalance({
+      credentials: { resolve: vi.fn(async () => ({ value: 'secret', source: 'test' })) },
+      sessionQuery: { listSessions: () => sessions, readSession: async () => ({ events: [] }) },
+      fetchImpl,
+      now: () => 1_700_000_000_000,
+      todayResponseWaitMs: 1,
+    });
+
+    const read = balance.read();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    await expect(read).resolves.toMatchObject({
+      status: 'ready', balances: [{ total: '12.30' }], today: { status: 'unavailable' },
+    });
+    releaseSessions([]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(balance.read()).resolves.toMatchObject({
+      status: 'ready', balances: [{ total: '12.30' }], today: { status: 'ready', amount: '0' },
+    });
+  });
+
   it('does not contact the API when the credential is absent', async () => {
     const moduleUrl = pathToFileURL(join(process.cwd(), 'runtime', 'desktop-companion-plugin', 'account-balance.js')).href;
     const { createAccountBalance } = await import(moduleUrl) as {

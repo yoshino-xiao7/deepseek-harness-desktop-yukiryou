@@ -21,4 +21,13 @@ describe('desktop window chrome', () => {
     expect(options.autoHideMenuBar).toBe(true);
     expect(options.trafficLightPosition).toBeUndefined();
   });
+
+  it('uses restored normal bounds before showing the desktop window', () => {
+    const options = createDesktopWindowOptions('/tmp/preload.cjs', 'darwin', {
+      bounds: { x: 120, y: 80, width: 1080, height: 720 },
+      maximized: false,
+    });
+
+    expect(options).toMatchObject({ x: 120, y: 80, width: 1080, height: 720 });
+  });
 });

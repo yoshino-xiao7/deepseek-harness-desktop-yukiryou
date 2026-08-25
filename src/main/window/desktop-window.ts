@@ -12,8 +12,9 @@ import {
 import {
   COMPANION_COMMAND_CHANNEL,
   COMPANION_STATE_CHANNEL,
+  WORKSPACE_CHANGED_CHANNEL,
+  createInitialDesktopCompanionSnapshot,
   type CompanionWorkspaceSnapshot,
-  type DesktopCompanionSnapshot,
   type HarnessContextSnapshot,
   validatedCompanionCommand,
   transitionCompanion,
@@ -94,6 +95,7 @@ import type {
   ManagedPluginRollbackResult,
 } from '../../shared/managed-plugin-inventory.js';
 import { TOOLBAR_LOCALE_CHANNEL, type DesktopLocale } from '../../shared/locale-sync.js';
+import type { DesktopWindowState } from './window-state.js';
 
 const PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS = 15_000;
 
@@ -105,6 +107,8 @@ export interface DesktopWindow {
   reveal(): void;
   setUpdateState(state: DesktopUpdateState): void;
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void;
+  notifyWorkspaceChanged(): void;
+  captureWindowState(): void;
   dispose(): void;
 }
 
@@ -113,6 +117,8 @@ export interface DesktopWindowOptions {
   readonly loadingUrl: string;
   readonly shellPreloadPath: string;
   readonly harnessPreloadPath: string;
+  readonly initialWindowState?: DesktopWindowState | undefined;
+  readonly onWindowStateChange?: (state: DesktopWindowState) => void;
   readonly onRetry: () => void;
   readonly onOpenLogs: () => void;
   readonly onCopyDiagnostics: () => void;
@@ -168,16 +174,12 @@ class ElectronDesktopWindow implements DesktopWindow {
   #sidebarWidth: number | undefined;
   #appearance: DesktopAppearanceSnapshot | undefined;
   #locale: DesktopLocale | undefined;
-  #companionState: DesktopCompanionSnapshot = {
-    active: false,
-    open: true,
-    previewOpen: false,
-    panelWidth: 340,
-    workspace: { status: 'none' },
-  };
+  #companionState = createInitialDesktopCompanionSnapshot();
   #reservedRightWidth = 0;
   #layoutAnimationRevision = 0;
   #layoutAnimationTimer: ReturnType<typeof setTimeout> | undefined;
+  #windowStatePublishTimer: ReturnType<typeof setTimeout> | undefined;
+  #lastWindowState: DesktopWindowState | undefined;
   readonly #rendererRecovery = createRendererRecoveryPolicy(
     [250, 1_000],
     30_000,
@@ -188,9 +190,17 @@ class ElectronDesktopWindow implements DesktopWindow {
   constructor(options: DesktopWindowOptions) {
     this.#options = options;
     this.#loadingUrl = options.loadingUrl;
+    this.#lastWindowState = options.initialWindowState;
     this.#window = new BrowserWindow(
-      createDesktopWindowOptions(options.shellPreloadPath),
+      createDesktopWindowOptions(
+        options.shellPreloadPath,
+        process.platform,
+        options.initialWindowState,
+      ),
     );
+    if (options.initialWindowState?.maximized === true) {
+      this.#window.maximize();
+    }
     this.#harnessView = new WebContentsView({
       webPreferences: createProductWebPreferences(options.harnessPreloadPath),
     });
@@ -230,8 +240,17 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#harnessView.setVisible(false);
     this.#layoutHarnessView();
 
-    this.#window.once('ready-to-show', () => this.#window.show());
-    this.#window.on('resize', () => this.#layoutHarnessView());
+    this.#window.once('ready-to-show', () => {
+      this.#window.show();
+      this.#scheduleWindowStatePublish();
+    });
+    this.#window.on('resize', () => {
+      this.#layoutHarnessView();
+      this.#scheduleWindowStatePublish();
+    });
+    this.#window.on('move', () => this.#scheduleWindowStatePublish());
+    this.#window.on('maximize', () => this.#scheduleWindowStatePublish());
+    this.#window.on('unmaximize', () => this.#scheduleWindowStatePublish());
     this.#window.on('close', (event) => {
       if (!this.#disposing) {
         event.preventDefault();
@@ -343,8 +362,22 @@ class ElectronDesktopWindow implements DesktopWindow {
     }
   }
 
+  notifyWorkspaceChanged(): void {
+    if (!this.#window.webContents.isDestroyed()) {
+      this.#window.webContents.send(WORKSPACE_CHANGED_CHANNEL);
+    }
+  }
+
+  captureWindowState(): void {
+    this.#cancelWindowStatePublish();
+    if (this.#lastWindowState !== undefined) {
+      this.#options.onWindowStateChange?.(this.#lastWindowState);
+    }
+  }
+
   dispose(): void {
     this.#disposing = true;
+    this.#cancelWindowStatePublish();
     this.#cancelLayoutAnimation();
     this.#productBridge.dispose();
     ipcMain.removeHandler(WORKSPACE_REVIEW_REQUEST_CHANNEL);
@@ -358,6 +391,35 @@ class ElectronDesktopWindow implements DesktopWindow {
     });
     this.#harnessView.webContents.close({ waitForBeforeUnload: false });
     this.#window.destroy();
+  }
+
+  #publishWindowState(): void {
+    if (
+      this.#window.isDestroyed() ||
+      this.#window.isMinimized() ||
+      this.#window.isFullScreen()
+    ) return;
+    this.#lastWindowState = {
+      bounds: this.#window.getNormalBounds(),
+      maximized: this.#window.isMaximized(),
+    };
+    this.#options.onWindowStateChange?.(this.#lastWindowState);
+  }
+
+  #scheduleWindowStatePublish(): void {
+    this.#cancelWindowStatePublish();
+    this.#windowStatePublishTimer = setTimeout(() => {
+      this.#windowStatePublishTimer = undefined;
+      this.#publishWindowState();
+    }, 0);
+    this.#windowStatePublishTimer.unref();
+  }
+
+  #cancelWindowStatePublish(): void {
+    if (this.#windowStatePublishTimer !== undefined) {
+      clearTimeout(this.#windowStatePublishTimer);
+      this.#windowStatePublishTimer = undefined;
+    }
   }
 
   async #recoverRenderer(target: RendererTarget, reason: string): Promise<void> {

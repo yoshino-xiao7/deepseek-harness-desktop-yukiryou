@@ -78,6 +78,7 @@ let searchRevision = 0;
 let searchTimer: number | undefined;
 let overviewNote = '';
 let latestCompanionSnapshot: DesktopCompanionSnapshot | undefined;
+let workspaceOverviewDirty = true;
 let workspaceLossTimer: number | undefined;
 let copyFeedbackTimer: number | undefined;
 let workspaceContextMenu: HTMLElement | undefined;
@@ -90,6 +91,7 @@ const companionBridge = (
       getSnapshot(): DesktopCompanionSnapshot;
       subscribe(listener: (snapshot: DesktopCompanionSnapshot) => void): () => void;
       subscribeShortcut(listener: (shortcut: WorkspaceReviewShortcut) => void): () => void;
+      subscribeWorkspaceChanged(listener: () => void): () => void;
       toggle(): void;
       setPreviewOpen(open: boolean): void;
       resize(width: number): void;
@@ -134,6 +136,7 @@ function restoredCompanionPanelWidth(): number | undefined {
 }
 
 function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
+  const previous = latestCompanionSnapshot;
   latestCompanionSnapshot = snapshot;
   applyCompanionPanelWidth(snapshot.panelWidth);
   document.body.dataset.companionActive = String(snapshot.active);
@@ -178,9 +181,12 @@ function renderCompanion(snapshot: DesktopCompanionSnapshot): void {
     }
     if (workspace.workspaceId !== loadedWorkspaceId) {
       loadedWorkspaceId = workspace.workspaceId;
+      workspaceOverviewDirty = true;
       applyReviewSnapshot(reviewController.execute({
         kind: 'workspace.select', workspaceId: workspace.workspaceId,
       }).snapshot);
+    }
+    if (snapshot.open && (workspaceOverviewDirty || previous?.open !== true)) {
       void loadOverview(workspace.workspaceId);
     }
   } else {
@@ -225,6 +231,13 @@ if (companionBridge !== undefined) {
   });
   companionBridge.subscribe(renderCompanion);
   companionBridge.subscribeShortcut(handleWorkspaceReviewShortcut);
+  companionBridge.subscribeWorkspaceChanged(() => {
+    workspaceOverviewDirty = true;
+    const workspace = latestCompanionSnapshot?.workspace;
+    if (latestCompanionSnapshot?.open === true && workspace?.status === 'ready') {
+      void loadOverview(workspace.workspaceId);
+    }
+  });
   companionBridge.subscribeReviewTarget((preview) => {
     if (preview === undefined) {
       applyReviewSnapshot(reviewController.execute({ kind: 'preview.clear' }).snapshot);
@@ -293,6 +306,7 @@ async function loadOverview(workspaceId: string): Promise<void> {
     if (reviewNote !== null) reviewNote.textContent = '暂时无法读取工作区，请稍后刷新。';
     return;
   }
+  workspaceOverviewDirty = false;
   const reviewSnapshot = reviewController.execute({ kind: 'overview.replace', overview: response }).snapshot;
   overviewNote = response.truncated
     ? '内容较多，仅显示前一部分。'

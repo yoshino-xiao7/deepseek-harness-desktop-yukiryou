@@ -266,7 +266,7 @@ describe('packaged desktop application', () => {
           () => typeof (window as unknown as { deepSeekYukiRyouBalance?: unknown }).deepSeekYukiRyouBalance,
         ),
       ).toBe('undefined');
-      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
       await expect.poll(() => shellPage!.locator('[data-testid="companion-empty"]').textContent()).toContain('选择一个工作区会话');
       const rejectedPath = await shellPage!.evaluate(async () => {
         const bridge = (window as unknown as { deepSeekYukiRyouCompanion: { request(value: unknown): Promise<unknown> } }).deepSeekYukiRyouCompanion;
@@ -293,18 +293,26 @@ describe('packaged desktop application', () => {
         ));
         return harness?.getBounds().width;
       });
-      const openHarnessWidth = await readHarnessViewWidth();
+      const closedHarnessWidth = await readHarnessViewWidth();
       await shellPage!.locator('[data-testid="companion-toggle"]').click();
       await shellPage!.waitForTimeout(60);
       const animatingHarnessWidth = await readHarnessViewWidth();
-      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
-      const closedHarnessWidth = await readHarnessViewWidth();
-      expect(openHarnessWidth).toBeTypeOf('number');
-      expect(animatingHarnessWidth).toBeGreaterThan(openHarnessWidth!);
-      expect(animatingHarnessWidth).toBeLessThan(closedHarnessWidth!);
-      expect(closedHarnessWidth! - openHarnessWidth!).toBeCloseTo(340, -1);
-      await shellPage!.locator('[data-testid="companion-toggle"]').click();
       await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isVisible()).toBe(true);
+      await expect.poll(
+        async () => closedHarnessWidth! - (await readHarnessViewWidth())!,
+        { timeout: 5_000 },
+      ).toBe(340);
+      const openHarnessWidth = await readHarnessViewWidth();
+      expect(closedHarnessWidth).toBeTypeOf('number');
+      // IPC scheduling can sample anywhere in the 220 ms animation, including
+      // either endpoint on a busy real machine. The easing curve itself is
+      // covered by deterministic layout tests; E2E enforces valid bounds and
+      // the exact final reserved width.
+      expect(animatingHarnessWidth).toBeLessThanOrEqual(closedHarnessWidth!);
+      expect(animatingHarnessWidth).toBeGreaterThanOrEqual(openHarnessWidth!);
+      expect(closedHarnessWidth! - openHarnessWidth!).toBe(340);
+      await shellPage!.locator('[data-testid="companion-toggle"]').click();
+      await expect.poll(() => shellPage!.locator('[data-testid="companion-panel"]').isHidden()).toBe(true);
       await expect
         .poll(readToolbarSidebarWidth, { timeout: 5_000 })
         .toBeCloseTo(280, 1);
@@ -806,23 +814,28 @@ describe('packaged desktop application', () => {
           () =>
             shellPage!
               .locator('[data-testid="window-drag-region"]')
-              .evaluate(() => ({
-                scheme: document.documentElement.dataset.appearanceScheme,
-                menuColor: window.getComputedStyle(
+              .evaluate(() => {
+                const rootStyle = window.getComputedStyle(document.documentElement);
+                const menuColor = window.getComputedStyle(
                   document.querySelector('[data-window-menu]')!,
-                ).color,
-                sidebar: document.documentElement.style.getPropertyValue(
-                  '--toolbar-sidebar-background',
-                ),
-                content: document.documentElement.style.getPropertyValue(
-                  '--toolbar-content-background',
-                ),
-              })),
+                ).color;
+                return {
+                  scheme: document.documentElement.dataset.appearanceScheme,
+                  menuMatchesForeground: menuColor === rootStyle
+                    .getPropertyValue('--harness-foreground').trim(),
+                  sidebar: document.documentElement.style.getPropertyValue(
+                    '--toolbar-sidebar-background',
+                  ),
+                  content: document.documentElement.style.getPropertyValue(
+                    '--toolbar-content-background',
+                  ),
+                };
+              }),
           { timeout: 5_000 },
         )
         .toMatchObject({
           scheme: 'dark',
-          menuColor: 'rgb(242, 244, 250)',
+          menuMatchesForeground: true,
           sidebar: expect.stringMatching(/^rgb/),
           content: expect.stringMatching(/^rgb/),
         });

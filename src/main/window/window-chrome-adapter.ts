@@ -8,6 +8,8 @@ export type DesktopPlatform = 'darwin' | 'win32';
 export type DesktopColorScheme = 'light' | 'dark';
 
 export interface ProductWindowBaseOptions {
+  readonly x?: number;
+  readonly y?: number;
   readonly width: number;
   readonly height: number;
   readonly minWidth: number;
@@ -100,6 +102,8 @@ function baseWindowOptions(
   base: ProductWindowBaseOptions,
 ): BrowserWindowConstructorOptions {
   return {
+    ...(base.x === undefined ? {} : { x: base.x }),
+    ...(base.y === undefined ? {} : { y: base.y }),
     width: base.width,
     height: base.height,
     minWidth: base.minWidth,

@@ -18,6 +18,10 @@ import {
   patchModelCapabilitiesEditor,
 } from '../src/main/runtime/vendor-model-capabilities-patch.ts';
 import {
+  CONTEXT_METER_TOOLTIP_PATCH_DSH_VERSION,
+  patchContextMeterTooltip,
+} from '../src/main/runtime/vendor-context-meter-tooltip-patch.ts';
+import {
   patchSessionSelectionRestore,
   SESSION_SELECTION_PATCH_DSH_VERSION,
 } from '../src/main/runtime/vendor-session-selection-patch.ts';
@@ -145,6 +149,23 @@ await writeFile(
   clientRuntime,
   patchSessionSelectionRestore(await readFile(clientRuntime, 'utf8')),
 );
+if (manifest.dsh.version !== CONTEXT_METER_TOOLTIP_PATCH_DSH_VERSION) {
+  throw new Error(
+    `Temporary context-meter tooltip patch targets dsh ${CONTEXT_METER_TOOLTIP_PATCH_DSH_VERSION}; review it before vendoring ${manifest.dsh.version}`,
+  );
+}
+const conversationClient = join(
+  dshDirectory,
+  'node_modules',
+  '@deepseek-ai',
+  'dsh-client-ui-conversation',
+  'lib',
+  'client.js',
+);
+await writeFile(
+  conversationClient,
+  patchContextMeterTooltip(await readFile(conversationClient, 'utf8')),
+);
 
 await cp(
   join(projectRoot, 'runtime', 'desktop-settings-plugin'),
@@ -181,6 +202,7 @@ for (const file of [
   'package.json',
   'runtime-snapshot.js',
   'source-registry.js',
+  'update-checker.js',
 ]) await copyFile(join(desktopMarketSource, file), join(desktopMarketTarget, file));
 await copyFile(
   join(projectRoot, 'runtime', 'desktop-extensions.patch.yml'),

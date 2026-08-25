@@ -1,6 +1,6 @@
 # 当前实现状态
 
-更新时间：2026-08-23。
+更新时间：2026-08-25。
 
 ## 已完成
 
@@ -37,23 +37,23 @@
 - 启动时校验 Harness `settings.yaml`；语法损坏或根节点类型错误时保留带时间戳的 `.corrupt-*` 原文件，创建权限为 `0600` 的空设置并提示用户，会话、凭据与工作区数据不受影响。
 - 本地顶栏与 Harness renderer 使用独立的 30 秒有界恢复预算；真实打包应用已分别强制崩溃并验证互不重启，顶栏恢复后会重放侧栏宽度和主题快照。
 - 正式签名的 Apple Silicon 版本启动 15 秒后自动检查更新，此后每 6 小时复查；关于页可随时手动检查并在下载完成后直接重启安装。仅在下载或等待安装时，Harness 侧栏右下角显示固定图标入口；侧栏结构不匹配、最新版、空闲和错误状态均失效关闭并移除。开发包明确禁用更新。
-- 上一公开版 `v0.2.3-beta.3` 的 macOS DMG/ZIP 与 Windows Setup/portable ZIP 已完成发布门禁并公开；当前 `v1.0.0` 已完成本地 lint、类型检查、单元测试、集成测试、桌面 E2E、固定 rc.2 Runtime 校验、arm64 打包和 60 秒真实应用 soak，双平台最终候选留给正式 Release 工作流生成。
+- 当前公开版为 `v1.0.0`；`v1.0.1` 已完成本地 lint、类型检查、433 项单元测试、40 项集成测试及固定 rc.2 Runtime 校验，macOS arm64 本机打包/启动与 Windows 11 x64 候选生命周期正在重新执行，全部通过后才允许创建 Draft。
 - 正式发布改为 GitHub Actions 多 runner 强制门禁：Forge 官方签名候选必须先在全新 runner 复制到 `/Applications` 并启动成功，才允许公证；最终 DMG/ZIP 还要在另一个全新 runner 重复安装、Gatekeeper、ticket 与启动验收，之后才创建 Draft。
 - 运行时生产依赖审计为 0 个已知漏洞；内置 pnpm 已从存在高危公告的 10.33.2 升级到 10.34.5。
 
 ## 自动验证现状
 
 ```text
-Unit:        419 passed（92 files）
-Integration: 39 passed（10 files；fake Harness、真实 rc.2 dsh、受管 generation fixture、内置 pnpm、发布/国内镜像与官网清单元数据契约、压力/soak 冒烟）
+Unit:        433 passed（95 files）
+Integration: 40 passed（10 files；fake Harness、真实 rc.2 dsh、受管 generation fixture、内置 pnpm、发布/国内镜像与官网清单元数据契约、压力/soak 冒烟）
 E2E arm64:   7 passed（稳定启动、完整 UI/显式退出、renderer 恢复、Session 选择恢复、Companion 宽度持久化、Workspace 搜索/筛选/预览历史与逐文件审阅、Integrated 单产品窗口/Frame 健康门）
 Upgrade:     3/3 consecutive runs passed（0.2.1-beta.2 → 0.2.2-beta.1；真实非空 Session、相同 origin/current selection/Session 集合、Runtime Home 回退副本）
 Prior stress baseline:    100/100 passed（启动、就绪、停止、端口回收）
 Prior companion baseline: 100/100 passed（审核、工作区切换、面板收起/展开状态循环）
 Prior memory baseline:    2500/2500 passed（总 working set 480.2 → 476.9 MiB，无线性增长）
 Prior app soak baseline:  60s passed（shell/Harness 每秒探测，5 个进程稳定）
-Local package: 1.0.0 arm64 `.app` 生成成功；60 秒真实应用 soak 通过，5 个进程稳定
-Artifacts:   1.0.0 双平台最终产物待正式 Release 工作流生成和验收
+Local package: 1.0.1 arm64 `.app` 本轮待重新生成并执行真实启动验收
+Artifacts:   1.0.1 双平台最终产物待正式 Release 工作流生成和验收
 ```
 
 `verify:release` 会检查桌面可执行文件、内置 Node、`pty.node`、`spawn-helper` 和运行时清单的架构一致性，并用包内 Node 实际运行 PTY、sharp 与 koffi 探针；正式发布模式还会逐项验证原生 PTY 签名，并强制验证 Developer ID 签名与 notarization ticket。全新 runner 安装候选和最终 DMG 后，会启动精确的 `/Applications` 产物并等待 Harness 就绪。
@@ -62,7 +62,7 @@ Artifacts:   1.0.0 双平台最终产物待正式 Release 工作流生成和验�
 
 - 开发版装配的 `resources/runtime/dsh`（Node 24.19.0 + Harness 0.1.1-rc.2）
 
-本地产物只适合开发验证，不应直接作为公开下载版本。上一公开版 `v0.2.3-beta.3` 已通过双平台门禁；`v1.0.0` 必须重新完成 macOS 签名、异机安装、30 分钟真实应用 soak、Apple 公证、最终 DMG/ZIP 复验，以及 Windows 真机 Setup/portable 生命周期验证。已发布标签不可覆盖。
+本地产物只适合开发验证，不应直接作为公开下载版本。当前公开版 `v1.0.0` 保持不变；`v1.0.1` 必须重新完成 macOS 签名、异机安装、30 分钟真实应用 soak、Apple 公证、最终 DMG/ZIP 复验，以及 Windows 真机 Setup/portable 生命周期验证。已发布标签不可覆盖。
 
 ## 已完成的 CI 发布配置
 

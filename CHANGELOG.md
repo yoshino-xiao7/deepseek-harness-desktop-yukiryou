@@ -6,6 +6,30 @@
 
 ## [未发布]
 
+## [1.0.1] - 2026-08-25
+
+### 修复
+
+- 修复账户余额与今日估算消耗首次进入时经常显示“暂时无法查询”、需要反复刷新的问题；余额请求与本机会话统计改为独立缓存和并发读取，慢速统计不再阻塞余额显示。
+- 补齐 DeepSeek V4 Flash、Vision Exp 与 Pro 的 usage 识别和估算路径，避免已产生调用但今日估算仍停留在 `¥0`。
+- Workspace Review 默认保持收起，并监听当前工作区与 Git 状态变化；原生 watcher 丢失嵌套事件时由低频指纹校正，复制路径、行号和文件信息保持清晰可见。
+- 修复主题插件切换模型或深浅色后，本地顶栏与右侧 Workspace Review 没有完整同步前景色、边框、强调色和表面颜色的问题。
+- 修复 OpenAI Codex 登录使用 `about:blank` 中转窗口时被桌面安全策略直接拦截的问题；中转窗口仍限制为一次受控外部 OAuth 导航。
+- 临时禁用 Harness `0.1.1-rc.2` 上会导致上下文容量区域抖动的非 portalled Tooltip，保留原按钮、无障碍标签、原生悬浮说明和点击详情；升级 Harness 时会强制复核并可完整撤回。
+- 记住用户最后一次调整的窗口大小、位置与最大化状态，下次启动自动恢复；外接显示器移除后会把离屏窗口安全移回当前主屏。
+- 修复 macOS 与 Windows 原生应用菜单中英文混杂的问题；正式版移除 Developer Tools 与强制刷新入口，并去除重复的全屏菜单项。
+
+### 插件市场
+
+- “已安装”默认只展示用户自行安装的插件，并可切换查看系统插件、依赖或全部条目，避免 170 余个只读内置模块淹没可管理插件。
+- 已安装受管插件直接查询 npm `latest`，不再等待完整社区目录索引才能检查更新；目录证据和完整安全预检仍是实际更新的强制门禁。
+- 过期的持久目录会立即可用，并在后台非阻塞刷新；刷新期间保留现有搜索、筛选和插件详情，不再让设置页长时间停在空白加载状态。
+
+### 验证
+
+- 完整 lint、类型检查、442 项单元测试和 40 项集成测试通过。
+- macOS Apple Silicon 与 Windows 11 x64 的签名、公证、安装、修复安装、便携版和卸载生命周期由本版本候选工作流重新验证后方可公开。
+
 ## [1.0.0] - 2026-08-23
 
 ### 正式版
@@ -211,6 +235,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[1.0.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.1
 [1.0.0]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.0
 [0.2.3-beta.3]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.3
 [0.2.3-beta.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.2

@@ -7,6 +7,7 @@ import { _electron as electron, type ElectronApplication, type Locator } from 'p
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveE2eExecutablePath } from './executable-path.js';
+import { closeElectronTestApplication } from './electron-cleanup.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,8 +16,7 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
   let userData: string | undefined;
 
   afterEach(async () => {
-    await application?.evaluate(({ app }) => app.exit(0)).catch(() => undefined);
-    await application?.close();
+    await closeElectronTestApplication(application);
     if (userData !== undefined) await rm(userData, { recursive: true, force: true });
   }, 30_000);
 
@@ -49,6 +49,10 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
 
     const shell = application.windows().find((page) => page.url().startsWith('file:'));
     if (shell === undefined) throw new Error('Legacy shell page is missing');
+    const companionToggle = shell.locator('[data-testid="companion-toggle"]');
+    await expect.poll(() => companionToggle.isVisible(), { timeout: 20_000 }).toBe(true);
+    await companionToggle.click();
+    await expect.poll(() => companionToggle.getAttribute('aria-expanded')).toBe('true');
     const search = shell.locator('[data-testid="review-search"]');
     await expect.poll(() => search.isVisible(), { timeout: 20_000 }).toBe(true);
 
@@ -60,6 +64,9 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     const composer = harness.locator('textarea').last();
     await shell.evaluate(() => {
       document.documentElement.dataset.appearanceScheme = 'dark';
+      document.documentElement.style.setProperty('--harness-foreground', 'rgb(244 246 251)');
+      document.documentElement.style.setProperty('--harness-surface-background', 'rgb(24 27 33)');
+      document.documentElement.style.setProperty('--harness-overlay-background', 'rgb(24 27 33)');
     });
     const sourceDirectory = shell.getByRole('button', { name: 'src', exact: true });
     await sourceDirectory.click({ button: 'right' });
@@ -78,6 +85,9 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     ).toEqual(['src/NeedlePanel.ts']);
     await shell.evaluate(() => {
       document.documentElement.dataset.appearanceScheme = 'dark';
+      document.documentElement.style.setProperty('--harness-foreground', 'rgb(244 246 251)');
+      document.documentElement.style.setProperty('--harness-surface-background', 'rgb(24 27 33)');
+      document.documentElement.style.setProperty('--harness-overlay-background', 'rgb(24 27 33)');
     });
     await shell.locator('.search-result').click({ button: 'right' });
     await expect.poll(
