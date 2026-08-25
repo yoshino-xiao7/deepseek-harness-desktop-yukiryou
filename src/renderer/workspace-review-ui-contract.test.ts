@@ -118,5 +118,7 @@ describe('workspace review UI contract', () => {
     expect(styles).toMatch(/\.preview-copy-feedback\s*\{[^}]*color:\s*var\(--harness-accent-foreground\)/s);
     expect(styles).toMatch(/\.preview-copy-feedback\s*\{[^}]*background:\s*var\(--companion-accent\)/s);
     expect(styles).toMatch(/\.preview-copy-popover\s*\{[^}]*background:\s*var\(--harness-overlay-background\)/s);
+    expect(styles).toMatch(/--companion-surface:\s*var\(--toolbar-content-background\)/);
+    expect(styles).toMatch(/\.review-list\s*\{[^}]*scrollbar-color:\s*var\(--companion-muted\) transparent/s);
   });
 });

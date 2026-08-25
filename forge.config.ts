@@ -89,7 +89,10 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     overwrite: true,
-    extraResource: ['resources/runtime'],
+    extraResource: [
+      'resources/runtime',
+      'resources/app-update.yml',
+    ],
     executableName: 'DeepSeek YukiRyou',
     // Electron Packager appends .icns or .ico for the target platform.
     icon: 'resources/icons/deepseek-yukiryou',

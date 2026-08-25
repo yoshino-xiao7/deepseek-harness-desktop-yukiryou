@@ -285,6 +285,10 @@ export class AppCoordinator {
       this.#log?.write('update.state', JSON.stringify(state));
       this.#window?.setUpdateState(state);
     });
+    // Update checks must not wait for the bundled Harness runtime to finish
+    // booting. A slow or failed runtime should never hide an available desktop
+    // update from the user.
+    this.#updater.startAutomaticChecks();
 
     if (recoveredPreferences !== undefined) {
       this.#notifyPreferenceRecovery(recoveredPreferences);
@@ -354,7 +358,6 @@ export class AppCoordinator {
       validatedDesktopLocale(app.getLocale()) ?? 'zh-CN',
     );
     await this.#startRuntime();
-    this.#updater.startAutomaticChecks();
   }
 
   async #readAccountBalance(force: boolean): Promise<AccountBalanceSnapshot> {

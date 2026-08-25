@@ -6,6 +6,24 @@
 
 ## [未发布]
 
+## [1.0.2] - 2026-08-25
+
+### 自动更新
+
+- 修复 Windows 安装版和便携版缺少 `app-update.yml`、导致 `electron-updater` 无法正常初始化的问题；macOS 与 Windows 打包门禁现在都会验证更新引导配置及固定 GitHub 仓库身份。
+- 应用启动后立即检查更新，不再等待内置 Harness Runtime 完成启动；即使本地运行时启动较慢或失败，桌面更新仍可独立发现并提示。
+- 主页更新入口只在检查、下载、可安装或失败重试等有效状态出现，并显示“检查中”“下载更新”“重启更新”等明确文字；确认已是最新版后自动隐藏，手动检查仍保留在“设置 → 关于”。
+
+### 界面
+
+- Workspace Review 的背景、工具栏表面和滚动条继承当前 Harness 主题，第三方浅色、深色和强调色皮肤下不再出现突兀的固定白底或系统滚动条。
+- 重排插件市场“已安装”卡片，把插件身份、受管状态和操作按钮分为稳定的三列布局；窄窗口下自动改为纵向排列，避免按钮漂移和大块空白。
+
+### 验证
+
+- 新增更新引导文件、启动即检查、主页状态按钮、Workspace Review 主题滚动条及已安装插件布局的回归门禁。
+- macOS Apple Silicon 与 Windows 11 x64 仍须完成签名、公证、安装、修复安装、便携版、卸载和自动更新元数据验证后才允许公开。
+
 ## [1.0.1] - 2026-08-25
 
 ### 修复
@@ -235,6 +253,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[1.0.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.2
 [1.0.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.1
 [1.0.0]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.0
 [0.2.3-beta.3]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v0.2.3-beta.3

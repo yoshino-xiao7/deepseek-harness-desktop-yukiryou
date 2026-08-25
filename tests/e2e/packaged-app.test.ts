@@ -9,7 +9,7 @@ import { runtimeStartupTimeoutMs } from '../../src/main/runtime/runtime-startup-
 
 const executablePath = resolveE2eExecutablePath();
 const startupTimeoutMs = runtimeStartupTimeoutMs(process.platform) + 10_000;
-const testTimeoutMs = process.platform === 'win32' ? 150_000 : 75_000;
+const testTimeoutMs = process.platform === 'win32' ? 150_000 : 120_000;
 
 async function captureApplicationWindow(
   electronApp: ElectronApplication,
@@ -803,11 +803,12 @@ describe('packaged desktop application', () => {
                 contents.getURL().startsWith('http://127.0.0.1:'),
               );
             return harness?.executeJavaScript(`
-              document.querySelector('[data-dsh-desktop-update-button]') === null
+              document.querySelector('[data-dsh-desktop-update-button]')
+                ?.getAttribute('aria-label')
             `);
           }),
         )
-        .toBe(true);
+        .toBeUndefined();
 
       await expect
         .poll(

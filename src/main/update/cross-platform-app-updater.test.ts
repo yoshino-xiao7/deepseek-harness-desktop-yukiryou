@@ -15,6 +15,7 @@ class FakeNativeUpdater implements NativeUpdateClient {
   readonly feeds: AllPublishOptions[] = [];
   readonly quitAndInstall = vi.fn();
   readonly results: Array<() => Promise<{ readonly updateInfo: UpdateInfo } | null>> = [];
+  checkCalls = 0;
   readonly #listeners = new Map<string, Set<(value: never) => void>>();
 
   on(event: string, listener: (value: never) => void): unknown {
@@ -32,6 +33,7 @@ class FakeNativeUpdater implements NativeUpdateClient {
   setFeedURL(source: AllPublishOptions): void { this.feeds.push(source); }
 
   async checkForUpdates(): Promise<{ readonly updateInfo: UpdateInfo } | null> {
+    this.checkCalls += 1;
     const result = await this.results.shift()?.();
     if (result !== null && result !== undefined) this.emit('update-available', result.updateInfo);
     return result ?? null;
@@ -45,6 +47,31 @@ class FakeNativeUpdater implements NativeUpdateClient {
 const updateInfo = { version: '0.2.4' } as UpdateInfo;
 
 describe('cross-platform automatic updater', () => {
+  it('checks immediately when automatic checks start', async () => {
+    vi.useFakeTimers();
+    try {
+      const native = new FakeNativeUpdater();
+      native.results.push(async () => null);
+      const updater = new CrossPlatformAppUpdater({
+        enabled: true,
+        currentVersion: '1.0.1',
+        platform: 'darwin',
+        architecture: 'arm64',
+        onError: vi.fn(),
+        createNativeUpdater: () => native,
+      });
+
+      updater.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(native.checkCalls).toBe(1);
+      expect(updater.getState().status).toBe('latest');
+      updater.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('falls back from the China provider and preserves download/restart installation', async () => {
     const native = new FakeNativeUpdater();
     native.results.push(

@@ -33,10 +33,19 @@ describe('desktop update bridge', () => {
     ).toBeUndefined();
   });
 
-  it('shows the compact Harness action only while an update is actionable', () => {
+  it('hides the Harness update action when updates are unavailable or already current', () => {
     expect(
       shouldShowHeaderUpdate({ status: 'latest', currentVersion: '0.1.0' }),
     ).toBe(false);
+    expect(
+      shouldShowHeaderUpdate({ status: 'idle', currentVersion: '0.1.0' }),
+    ).toBe(true);
+    expect(
+      shouldShowHeaderUpdate({ status: 'checking', currentVersion: '0.1.0' }),
+    ).toBe(true);
+    expect(
+      shouldShowHeaderUpdate({ status: 'error', currentVersion: '0.1.0' }),
+    ).toBe(true);
     expect(
       shouldShowHeaderUpdate({ status: 'downloading', currentVersion: '0.1.0' }),
     ).toBe(true);
@@ -46,5 +55,8 @@ describe('desktop update bridge', () => {
     expect(
       shouldShowHeaderUpdate({ status: 'manual', currentVersion: '0.1.0' }),
     ).toBe(true);
+    expect(
+      shouldShowHeaderUpdate({ status: 'disabled', currentVersion: '0.1.0' }),
+    ).toBe(false);
   });
 });
