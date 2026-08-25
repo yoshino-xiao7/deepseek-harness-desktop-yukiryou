@@ -22,7 +22,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases">Download</a>
+  <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest">Download latest</a>
+  ·
+  <a href="#download-and-install">Install guide</a>
+  ·
+  <a href="#available-today">Features</a>
+  ·
+  <a href="#local-development">Local development</a>
   ·
   <a href="docs/README.md">Developer docs</a>
   ·
@@ -31,11 +37,26 @@
   <a href="https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou">⭐ Star this project</a>
 </p>
 
-<p align="center">
-  If this project helps you, consider giving it a Star. It helps other people looking for a DeepSeek Harness desktop client discover the project.
-</p>
-
 ---
+
+## Contents
+
+- [Project positioning](#project-positioning)
+- [Download and install](#download-and-install)
+  - [macOS](#macos)
+  - [Windows](#windows)
+  - [Verify downloads](#verify-downloads)
+- [Available today](#available-today)
+- [Why YukiRyou](#why-yukiryou)
+- [Interface overview](#interface-overview)
+- [Roadmap](#roadmap)
+- [Versions and updates](#versions-and-updates)
+- [Technical architecture](#technical-architecture)
+- [Local development](#local-development)
+- [Pinned runtime](#pinned-runtime)
+- [FAQ](#faq)
+- [Documentation](#documentation)
+- [Get involved](#get-involved)
 
 ## Project positioning
 
@@ -43,41 +64,85 @@ DeepSeek Harness provides a local Web UI, but routine use still involves prepari
 
 This is not a rewrite of Harness and does not change how the agent works. Its job is to deliver Harness to the desktop with predictable startup, recovery, isolation, and updates, while adding desktop capabilities for account status, workspace files, and change review.
 
-> The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS ships signed and notarized DMG and ZIP assets. Windows ships an unsigned installer EXE and portable ZIP with explicit provenance, SHA-256 checksums, and SmartScreen disclosure.
+> Currently supported: Apple Silicon on macOS 14+ and Windows 11 x64. Intel Macs, Windows on Arm, and Linux are not currently supported.
 
 | Ready to open | Native desktop | Inspectable | Trusted releases |
 | --- | --- | --- | --- |
-| Bundled Node.js, pnpm, and pinned Harness | Platform-aware chrome, synchronized themes, responsive Workspace Review | Runtime recovery, rotated logs, redacted diagnostics | Signed/notarized macOS releases; real Windows install-lifecycle candidate gate |
+| Bundled Node.js, pnpm, and pinned Harness | Platform-aware chrome, synchronized themes, responsive Workspace Review | Runtime recovery, rotated logs, redacted diagnostics | Signed/notarized macOS releases; real Windows install-lifecycle candidate gates |
 
 ## Download and install
 
+All public artifacts are available from the [latest GitHub Release](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest).
+
 ### macOS
 
-Open [GitHub Releases](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases) and download the Apple Silicon DMG:
+Requirements: an Apple Silicon Mac (M1 or newer) running macOS 14 or later.
+
+Each release provides two artifacts:
 
 ~~~text
 DeepSeek.YukiRyou-<version>-arm64.dmg
+DeepSeek.YukiRyou-darwin-arm64-<version>.zip
 ~~~
 
-1. Open the DMG.
+**Install with the DMG:**
+
+1. Download and open the DMG.
 2. Drag **DeepSeek YukiRyou** into Applications.
 3. Launch it from Launchpad or Applications.
 4. Complete the required service configuration in Harness and start working.
 
-Requirements: an Apple Silicon Mac (M1 or newer) running macOS 14 or later.
+**Install from the ZIP:**
 
-Every public release includes SHA-256 checksums. macOS app and update artifacts are Developer ID signed and Apple-notarized. GitHub Releases is the global origin; installations in mainland China prefer the ESA-protected `download-cn.suzuki.ink` mirror, which is populated only after the GitHub release is public and fully verified, with GitHub fallback. The website can consume `downloads/latest.json` from the China mirror to obtain versioned direct links, sizes, and SHA-256 digests for all four packages.
+1. Download and extract the ZIP.
+2. Move **DeepSeek YukiRyou.app** into Applications.
+3. Launch it from Applications.
+
+The macOS app and update artifacts are Developer ID signed and Apple-notarized.
 
 ### Windows
 
-Each Windows 11 x64 release provides two public assets:
+Requirements: Windows 11 x64.
+
+Each release provides an installed and a portable build:
 
 ~~~text
 DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe
 DeepSeek.YukiRyou-win32-x64-<version>-portable.zip
 ~~~
 
-The EXE is a guided NSIS installer that lets users choose the install directory; the ZIP runs after extraction without registering an installation. Both contain the same pinned Runtime and are verified on a real Windows runner for packaged startup, session restoration, EXE install/repair/uninstall, and portable ZIP startup. Windows builds are not Authenticode-signed yet, so Windows may show a SmartScreen warning. Download only from this repository's Releases and verify `SHA256SUMS-Windows.txt`; an unsigned artifact does not carry Windows trust endorsement.
+**Installed build:**
+
+1. Download and run `Setup.exe`.
+2. Choose an install directory in the NSIS wizard and finish installation.
+3. Launch **DeepSeek YukiRyou** from the Start menu or install directory.
+
+**Portable build:**
+
+1. Download and fully extract the ZIP.
+2. Run the app from the extracted directory. The portable build does not register an installation.
+
+Windows artifacts are not Authenticode-signed yet and may trigger SmartScreen. Download only from this repository's Releases and verify the SHA-256 digest; an unsigned artifact does not carry Windows publisher trust.
+
+### Verify downloads
+
+Every stable release includes `SHA256SUMS.txt` for macOS and `SHA256SUMS-Windows.txt` for Windows. Download the artifact and its checksum list into the same directory, then run:
+
+**macOS:**
+
+~~~bash
+shasum -a 256 DeepSeek.YukiRyou-<version>-arm64.dmg
+# Compare the result with the matching entry in SHA256SUMS.txt.
+~~~
+
+**Windows PowerShell:**
+
+~~~powershell
+Get-FileHash .\DeepSeek.YukiRyou-<version>-win32-x64-Setup.exe -Algorithm SHA256
+# Compare the result with the matching entry in SHA256SUMS-Windows.txt.
+~~~
+
+GitHub Releases is the global origin. Mainland China automatically prefers the ESA-protected [`download-cn.suzuki.ink`](https://download-cn.suzuki.ink) mirror and falls back to GitHub when necessary. The mirror is populated only after the GitHub Release is public and all checks pass. Its [`downloads/latest.json`](https://download-cn.suzuki.ink/downloads/latest.json) lists versioned direct links, sizes, and SHA-256 digests for the current four installers.
 
 ## Available today
 
@@ -97,10 +162,10 @@ The EXE is a guided NSIS installer that lets users choose the install directory;
 
 ### Settings, security, and releases
 
-- **One appearance entry:** light, dark, and system modes live in General → Appearance; About exposes versions, developer details, and updates. Full UI styles can later ship as optional plugins.
+- **One appearance entry:** light, dark, and system modes live in General → Appearance; About exposes versions, developer details, and updates.
 - **Quiet updates:** background checks do not add a main-window entry unless an installable update is available.
 - **Private diagnostics:** exported diagnostics contain bounded, redacted environment and log data—not source files, sessions, or credentials.
-- **Trusted release pipeline:** candidates are Developer ID signed, installed on a fresh runner, exercised in a real-app soak, Apple-notarized, and verified again before publication.
+- **Trusted release pipeline:** candidates pass platform-specific install, launch, and stability gates. macOS additionally requires Developer ID signing, Apple notarization, and final artifact verification.
 
 ### Plugin marketplace
 
@@ -111,10 +176,22 @@ The EXE is a guided NSIS installer that lets users choose the install directory;
 
 ## Why YukiRyou
 
-- **One product for macOS and Windows:** not a website shortcut. Both platforms share the pinned Harness Runtime, product capabilities, and state contracts, with platform differences isolated to window, path, process, and installer adapters.
-- **A complete workspace review loop:** inspect the file tree, current Git changes, per-turn changes, line statistics, and rendered Markdown without leaving the conversation workflow.
-- **Desktop capabilities that fit Harness:** account balance, the Companion sidebar, settings, and updates follow the existing interface instead of replacing or rewriting Harness's core workflow.
-- **Verifiable releases:** public artifacts are Developer ID signed, Apple-notarized, installed in clean environments, exercised as real apps, and accompanied by SHA-256 checksums.
+- **A real cross-platform desktop product:** not a website shortcut. macOS and Windows share the pinned Harness Runtime, core capabilities, and state contracts; platform differences stay behind window, path, process, and installer adapters.
+- **A complete workspace review loop:** inspect the file tree, Git changes relative to HEAD, per-turn artifacts, line statistics, read-only diffs, and rendered Markdown without leaving the conversation.
+- **Fits Harness instead of replacing it:** account overview, Desktop Companion, settings, the plugin marketplace, and updates follow Harness interaction patterns without rewriting its Agent workflow.
+- **Verifiable releases:** public artifacts come from controlled workflows and include SHA-256 checksums. macOS additionally passes Developer ID signing, Apple notarization, clean-machine installation, and final artifact verification.
+- **Diagnosable and recoverable:** pinned runtimes, process-ownership checks, rotated logs, and redacted diagnostics reduce machine-specific failures that are otherwise difficult to reproduce.
+
+## Interface overview
+
+Harness remains the main workspace while desktop capabilities are added within the same window:
+
+| Area | Main content | Behavior |
+| --- | --- | --- |
+| Desktop title bar | Window dragging, desktop status, and Companion toggle | Always managed by the native desktop shell |
+| Harness workspace | Conversations, Agent tools, settings, and plugins | Preserves the official Harness interaction model |
+| Desktop Companion | Changes and Files views | Collapsible and resizable without covering the main workspace |
+| Workspace Review | File content, read-only diffs, Markdown, and image previews | Opened from Companion or per-turn artifacts; a review surface, not a separate workflow |
 
 ## Roadmap
 
@@ -122,11 +199,25 @@ The EXE is a guided NSIS installer that lets users choose the install directory;
 | --- | --- | --- |
 | Mobile remote control | **Planned** | Explicit pairing and permissions for viewing task status, receiving relevant alerts, and continuing a task after user confirmation—without exposing the local Harness port directly. |
 | Plugin ecosystem | **Ongoing** | Extend the existing discovery, inspection, and managed lifecycle with stronger publisher signals, clearer permissions, and richer compatibility information. |
-| Windows x64 distribution | **Stable** | The same Release ships an unsigned installer EXE and portable ZIP. The installed build supports automatic download and confirmed restart-to-install through both regional channels; independent Windows 11 acceptance remains a per-release gate, and Authenticode can be added when distribution scale warrants it. |
 
 The roadmap describes direction, not committed dates. If the security model, upstream Harness contracts, or required assets are not ready, the feature remains unavailable instead of shipping through brittle DOM injection or weakened system protections.
 
-## How it works
+## Versions and updates
+
+The app checks for updates after startup and can also check from **Settings → About**. Mainland China prefers the domestic mirror, while other regions prefer GitHub; the China source falls back to GitHub when unavailable. Both macOS and installed Windows builds download updates in the background and install only after the user confirms a restart.
+
+The desktop shell, Node.js, pnpm, and Harness form one atomic release unit. Runtime components are never upgraded independently in the background, avoiding unreproducible mixes of old and new components. A stable release notarizes the DMG once, then creates the automatic-update ZIP from the stapled app. See the [release runbook](docs/09-github-and-apple-release.md).
+
+<details>
+<summary><strong>Notes for upgrading from early beta builds</strong></summary>
+
+Before upgrading from `v0.2.1-beta.2` to the first rc.8 build, quit the old app completely from its application menu. The old Runtime has no owner watchdog, and the one-time origin migration relies on the final retained ready record.
+
+If the old app was force-quit, its main process crashed, or desktop logs were manually removed, restart macOS before installing to prevent old and new Runtimes from writing concurrently. If the ready record was already lost, you may need to select the previous session once from the sidebar after upgrading.
+
+</details>
+
+## Technical architecture
 
 ~~~mermaid
 flowchart LR
@@ -139,15 +230,15 @@ flowchart LR
     G --> F
 ~~~
 
-Harness listens on a stable loopback endpoint selected and persisted by the app, never on the LAN. Every Runtime start must prove that the responder possesses the fresh per-start secret through an HMAC challenge. During one-time legacy-log migration, the final ready record in physical log order selects the stable origin, but every distinct ready port retained across rotated logs must first become free; any surviving Runtime fails closed before Runtime Home is copied or opened. Its renderer runs without Node integration, with context isolation, sandboxing, and web security enabled. This is not OS-level process isolation; see the [security design](docs/03-security.md) for the complete trust boundary.
+The runtime boundary has several layers:
 
-## Versions and updates
+- **Local listening:** Harness uses a stable loopback endpoint selected and persisted by the app and is never exposed to the LAN.
+- **Possession proof:** every Runtime start uses a fresh random secret and an HMAC challenge to prove that the responder holds it.
+- **Migration protection:** the final ready record in physical order selects the stable origin during one-time legacy-log migration; all other ready ports retained in rotated logs must first be released.
+- **Fail-closed behavior:** if a legacy Runtime still owns a port, the app stops before copying or opening Runtime Home.
+- **Renderer isolation:** the web view runs without Node integration and with context isolation, sandboxing, and web security enabled; the desktop bridge exposes only a small validated surface.
 
-The app checks for updates after startup and can also be checked from **Settings → About**. Mainland China installations prefer the China mirror while other regions prefer GitHub, with automatic GitHub fallback. Both macOS and installed Windows builds download in the background and install only after user confirmation and restart.
-
-Before upgrading from `v0.2.1-beta.2` to the first rc.8 build, quit the old app completely from its application menu. If the old app was force-quit, its main process crashed, or desktop logs were manually removed, restart macOS before installing. The previous Runtime has no owner watchdog, and this one-time origin migration relies on its retained final ready record. Rebooting prevents old and new Runtimes from writing concurrently; if that record was already lost, you may need to select the previous session once from the sidebar after upgrading.
-
-The desktop shell, Node.js, pnpm, and Harness form one atomic release. Runtime pieces are never upgraded independently in the background. A release is signed, installed and smoke-tested on a fresh runner, soaked, notarized, and verified again before it becomes a draft. Publication is a separate explicit step. See the [release runbook](docs/09-github-and-apple-release.md).
+HMAC possession proof is not operating-system process isolation. See the [security design](docs/03-security.md) for the complete boundary.
 
 ## Local development
 
@@ -158,7 +249,7 @@ The desktop shell, Node.js, pnpm, and Harness form one atomic release. Runtime p
 - macOS development: an Apple Silicon Mac running macOS 14+
 - Windows development: Windows 11 x64; the Windows Runtime must be assembled on a Windows host
 
-### Start the project on macOS
+### macOS: start and validate
 
 ~~~bash
 corepack enable
@@ -167,7 +258,7 @@ pnpm runtime:vendor -- --arch=arm64
 pnpm dev
 ~~~
 
-### Validate changes
+Validate regular changes and macOS packaging:
 
 ~~~bash
 pnpm check
@@ -175,19 +266,38 @@ pnpm test:e2e
 pnpm package:mac -- --arch=arm64
 ~~~
 
-macOS signing, notarization, and public distribution run only through the GitHub Actions **Release desktop (macOS + Windows)** workflow. Local packaging is for development verification and is not a public release artifact.
+macOS signing, notarization, and public distribution run only through the GitHub Actions **Release desktop (macOS + Windows)** workflow. A local machine can create only a non-publishable signed candidate:
 
-Windows development and candidate verification must run on a Windows x64 host:
+~~~bash
+export MACOS_SIGN_IDENTITY="Developer ID Application: ... (...)"
+pnpm release:mac:candidate
+~~~
+
+The workflow uses multiple clean Apple Silicon runners. A candidate must verify and launch after being copied into Applications before it can be submitted to Apple. The notarized DMG and ZIP are then installed again on a separate runner and must pass Gatekeeper and launch checks. Passing all gates creates only a Draft; publication requires explicit approval.
+
+### Windows: start and validate
+
+Run on a Windows x64 host:
 
 ~~~powershell
 corepack enable
 pnpm install --frozen-lockfile
 pnpm runtime:vendor:win
 pnpm runtime:verify
+pnpm dev
+~~~
+
+Create and validate candidate artifacts:
+
+~~~powershell
+pnpm check
+pnpm test:e2e
 pnpm make:win
 ~~~
 
-The **Windows x64 candidate** workflow verifies both the guided NSIS installer EXE and portable ZIP, and installs, launches, repair-installs, and uninstalls the candidate. The desktop release workflow adds only the versioned EXE, portable ZIP, and Windows SHA-256 list to the same GitHub Release as macOS.
+The **Windows x64 candidate** workflow verifies both the guided NSIS installer EXE and portable ZIP, and installs, launches, repair-installs, and uninstalls the candidate. The desktop release workflow adds the versioned EXE, portable ZIP, and Windows SHA-256 list to the same GitHub Release as macOS.
+
+See the [release rules](docs/09-github-and-apple-release.md) and [changelog](CHANGELOG.md) for the complete gates.
 
 ## Pinned runtime
 
@@ -210,9 +320,9 @@ No. This is an independently developed cross-platform community project and is n
 </details>
 
 <details>
-<summary><strong>Which platforms are supported?</strong></summary>
+<summary><strong>Which platforms and installers are supported?</strong></summary>
 
-The product supports Apple Silicon on macOS 14+ and Windows 11 x64. macOS ships signed and notarized DMG and ZIP assets; Windows ships an unsigned installer EXE and portable ZIP with SHA-256 checksums. Intel Macs, Windows on Arm, and Linux are not currently supported.
+Apple Silicon on macOS 14+ and Windows 11 x64 are supported. macOS ships signed and notarized DMG and ZIP assets; Windows ships an unsigned installer EXE and portable ZIP. Every artifact includes SHA-256 verification information. Intel Macs, Windows on Arm, and Linux are not currently supported.
 
 </details>
 
@@ -232,19 +342,20 @@ Export a diagnostics archive from the app, then open a [GitHub Issue](https://gi
 
 ## Documentation
 
-- [Product scope](docs/01-product-scope.md)
-- [Architecture](docs/02-architecture.md)
-- [Security model](docs/03-security.md)
-- [Testing and release](docs/04-testing-and-release.md)
-- [Development guide](docs/06-development-guide.md)
-- [Current implementation status](docs/07-current-status.md)
-- [Appearance extension contract](docs/08-appearance-extension.md)
-- [GitHub and Apple release runbook](docs/09-github-and-apple-release.md)
+See [`docs/README.md`](docs/README.md) for the complete index. Common entry points:
+
+- [Product scope and acceptance criteria](docs/01-product-scope.md)
+- [Architecture](docs/02-architecture.md) and [security model](docs/03-security.md)
+- [Testing and release](docs/04-testing-and-release.md) and the [release runbook](docs/09-github-and-apple-release.md)
+- [Development guide](docs/06-development-guide.md) and [current implementation status](docs/07-current-status.md)
+- [Desktop Companion plan](docs/10-desktop-companion-plan.md)
+- [Integrated shell and plugin marketplace plan](docs/11-integrated-desktop-shell-and-plugin-market.md)
+- [Temporary Harness patches](docs/12-temporary-harness-patches.md)
+- [Developer-verified plugin source](docs/13-developer-curated-plugin-source.md)
 - [中文 README](README.md)
 
 ## Get involved
 
-- If the project solves a problem for you, support it with a [Star](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou).
 - For reproducible problems, use the [bug report form](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=bug-report.yml).
 - For a concrete workflow or product idea, use the [feature request form](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/issues/new?template=feature-request.yml).
 - Before reporting, try the [latest public release](https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/latest) and include the app version, operating-system version, and CPU architecture.
