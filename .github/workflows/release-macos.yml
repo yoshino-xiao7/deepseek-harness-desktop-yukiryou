@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-macos-${{ inputs.version }}
+  group: release-desktop-${{ inputs.version }}
   cancel-in-progress: false
 
 env:
