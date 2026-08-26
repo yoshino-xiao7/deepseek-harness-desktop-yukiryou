@@ -148,14 +148,18 @@ Write-Output "Installed previous public release $previousVersion"
 $candidateSource = Join-Path $repositoryRoot 'out\windows-candidate\DeepSeek-YukiRyou-Setup.exe'
 $candidateAsset = "DeepSeek.YukiRyou-$env:RELEASE_VERSION-win32-x64-Setup.exe"
 if (-not (Test-Path -LiteralPath $candidateSource)) { throw "Candidate installer is missing: $candidateSource" }
+Write-Output "Copying candidate installer into the isolated update mirror"
 Copy-Item -LiteralPath $candidateSource -Destination (Join-Path $assetsRoot $candidateAsset)
+Write-Output "Generating candidate update metadata"
 & node (Join-Path $PSScriptRoot 'prepare-update-metadata.ts') `
   "--assets=$assetsRoot" "--output=$metadataRoot" "--version=$env:RELEASE_VERSION" `
   '--target=win32-x64' "--origin=https://$mirrorHost"
 if ($LASTEXITCODE -ne 0) { throw 'Failed to prepare Windows update metadata' }
+Write-Output "Generated candidate update metadata"
 
 $certificatePath = Join-Path $gateRoot 'server.crt'
 $keyPath = Join-Path $gateRoot 'server.key'
+Write-Output "Generating the isolated update mirror certificate"
 $rsa = [System.Security.Cryptography.RSA]::Create(2048)
 try {
   $request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
@@ -199,9 +203,14 @@ try {
 } finally {
   $rsa.Dispose()
 }
-$trustedCertificate = Import-Certificate `
-  -FilePath $certificatePath `
-  -CertStoreLocation 'Cert:\CurrentUser\Root'
+Write-Output "Trusting the isolated update mirror certificate without an interactive prompt"
+Invoke-Checked (Get-Command certutil.exe).Source @(
+  '-user', '-f', '-addstore', 'Root', $certificatePath
+)
+$trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+  $certificatePath
+)
+Write-Output "Trusted the isolated update mirror certificate"
 @{ certificateThumbprint = $trustedCertificate.Thumbprint } |
   ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
@@ -214,6 +223,7 @@ Copy-Item -LiteralPath $hostsPath -Destination $hostsBackup
 Add-Content -LiteralPath $hostsPath -Value "`r`n127.0.0.1 $mirrorHost # DeepSeek YukiRyou automatic-update gate"
 
 $serverLog = Join-Path $gateRoot 'server.log'
+Write-Output "Starting the isolated HTTPS update mirror"
 $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   (Join-Path $PSScriptRoot 'serve-automatic-update-gate.ts'),
   "--cert=$certificatePath", "--key=$keyPath", "--assets=$assetsRoot",
@@ -232,6 +242,7 @@ Wait-Until {
     (Invoke-WebRequest -Uri "https://$mirrorHost/health" -UseBasicParsing -TimeoutSec 5).Content -eq 'ok'
   } catch { $false }
 } 'The isolated HTTPS update mirror did not become healthy'
+Write-Output "The isolated HTTPS update mirror is healthy"
 
 "DSH_PREVIOUS_EXECUTABLE_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append

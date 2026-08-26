@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -22,6 +22,7 @@ describe('previous public release automatic update', () => {
   afterEach(async () => {
     await closeElectronTestApplication(application);
     if (userData !== undefined) {
+      await preserveDiagnostics(userData);
       await rm(userData, {
         recursive: true,
         force: true,
@@ -54,6 +55,8 @@ describe('previous public release automatic update', () => {
     await invokeUpdate(shell, 'install');
     await expect(closed).resolves.toBeUndefined();
     application = undefined;
+
+    await preserveProcessSnapshot('after-old-process-exit');
 
     // This is intentionally an OS-process assertion, not a second Playwright
     // launch. It proves the updater itself requested a real post-install relaunch.
@@ -120,6 +123,31 @@ async function stopRelaunched(executable: string): Promise<void> {
       process.kill(Number(match[1]), 'SIGTERM');
     }
   }
+}
+
+async function preserveDiagnostics(userDataDirectory: string): Promise<void> {
+  const diagnostics = process.env.DSH_AUTOMATIC_UPDATE_DIAGNOSTICS;
+  if (diagnostics === undefined || diagnostics === '') return;
+  await mkdir(diagnostics, { recursive: true });
+  await copyFile(
+    join(userDataDirectory, 'logs', 'desktop.log'),
+    join(diagnostics, 'desktop.log'),
+  ).catch(() => undefined);
+  await preserveProcessSnapshot('test-cleanup');
+}
+
+async function preserveProcessSnapshot(stage: string): Promise<void> {
+  const diagnostics = process.env.DSH_AUTOMATIC_UPDATE_DIAGNOSTICS;
+  if (diagnostics === undefined || diagnostics === '') return;
+  await mkdir(diagnostics, { recursive: true });
+  const snapshot = process.platform === 'win32'
+    ? await execute('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId,ExecutablePath,CommandLine | Format-List',
+      ])
+    : await execute('/bin/ps', ['-ww', '-axo', 'pid=,ppid=,command=']);
+  await writeFile(join(diagnostics, `processes-${stage}.log`), snapshot.stdout, 'utf8');
 }
 
 function powerShellLiteral(value: string): string {
