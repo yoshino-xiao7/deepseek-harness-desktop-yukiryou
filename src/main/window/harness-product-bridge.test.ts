@@ -29,6 +29,8 @@ import {
   MANAGED_PLUGIN_SET_ENABLED_RESULT_CHANNEL,
   MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL,
   MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL,
+  EXTERNAL_PLUGIN_CONTROL_REQUEST_CHANNEL,
+  EXTERNAL_PLUGIN_CONTROL_RESULT_CHANNEL,
 } from '../../shared/managed-plugin-inventory.js';
 import {
   DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL,
@@ -449,6 +451,7 @@ describe('Harness product bridge', () => {
         rollbackTarget: null,
         lastBlockedAttempt: null,
       }],
+      externalEntries: [],
     }));
     const bridge = createBridge(webContents, { onManagedPluginInventory });
     bridge.setTrustedOrigin(createTrustedHarnessOrigin('http://127.0.0.1:51234'));
@@ -461,6 +464,37 @@ describe('Harness product bridge', () => {
     expect(webContents.sent).toContainEqual({
       channel: MANAGED_PLUGIN_INVENTORY_RESULT_CHANNEL,
       value: expect.objectContaining({ requestId, status: 'ready' }),
+    });
+    bridge.dispose();
+  });
+
+  it('routes an exact external package action through the trusted mutation gate', async () => {
+    const webContents = new FakeWebContents();
+    const requestId = 'request-77777777-7777-4777-8777-777777777777';
+    const onExternalPluginControl = vi.fn(async () => ({
+      requestId,
+      status: 'prepared' as const,
+      restartScheduled: true as const,
+    }));
+    const bridge = createBridge(webContents, { onExternalPluginControl });
+    bridge.setTrustedOrigin(createTrustedHarnessOrigin('http://127.0.0.1:51234'));
+
+    webContents.emit('ipc-message', {}, EXTERNAL_PLUGIN_CONTROL_REQUEST_CHANNEL, {
+      requestId,
+      packageName: 'dsh-grok-provider',
+      version: '0.1.1',
+      entryId: 'llm-grok',
+      action: 'disable',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onExternalPluginControl).toHaveBeenCalledWith(expect.objectContaining({
+      packageName: 'dsh-grok-provider', action: 'disable',
+    }));
+    expect(webContents.sent).toContainEqual({
+      channel: EXTERNAL_PLUGIN_CONTROL_RESULT_CHANNEL,
+      value: { requestId, status: 'prepared', restartScheduled: true },
     });
     bridge.dispose();
   });
@@ -597,6 +631,7 @@ function createBridge(
       status: 'ready',
       currentGeneration: null,
       entries: [],
+      externalEntries: [],
     }),
     onManagedPluginRemove: async (request) => ({
       requestId: request.requestId,
@@ -609,6 +644,11 @@ function createBridge(
       reason: 'runtime-unavailable',
     }),
     onManagedPluginRollback: async (request) => ({
+      requestId: request.requestId,
+      status: 'unavailable',
+      reason: 'runtime-unavailable',
+    }),
+    onExternalPluginControl: async (request) => ({
       requestId: request.requestId,
       status: 'unavailable',
       reason: 'runtime-unavailable',

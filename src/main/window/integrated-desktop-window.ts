@@ -69,6 +69,7 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       onManagedPluginRemove: options.onManagedPluginRemove,
       onManagedPluginSetEnabled: options.onManagedPluginSetEnabled,
       onManagedPluginRollback: options.onManagedPluginRollback,
+      onExternalPluginControl: options.onExternalPluginControl,
     });
     this.#productBridge.setFeaturePreferences(
       options.initialFeaturePreferences ?? { accountBalance: true, workspaceReview: true },

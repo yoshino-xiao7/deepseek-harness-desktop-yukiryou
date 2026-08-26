@@ -14,11 +14,16 @@ export const MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL =
   'deepseek-yukiryou:managed-plugin:rollback-request';
 export const MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL =
   'deepseek-yukiryou:managed-plugin:rollback-result';
+export const EXTERNAL_PLUGIN_CONTROL_REQUEST_CHANNEL =
+  'deepseek-yukiryou:external-plugin:control-request';
+export const EXTERNAL_PLUGIN_CONTROL_RESULT_CHANNEL =
+  'deepseek-yukiryou:external-plugin:control-result';
 
 const REQUEST_ID = /^request-[a-f0-9-]{36}$/u;
 const GENERATION = /^gen-[a-f0-9]{64}$/u;
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/[a-z0-9][a-z0-9._~-]*|[a-z0-9][a-z0-9._~-]*)$/u;
 const SOURCE_ID = /^[a-z0-9][a-z0-9._-]{0,99}$/u;
+const ENTRY_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/u;
 
 export interface ManagedPluginInventoryRequest {
   readonly requestId: string;
@@ -36,6 +41,31 @@ export interface ManagedPluginSetEnabledRequest extends ManagedPluginRemoveReque
 }
 
 export type ManagedPluginRollbackRequest = ManagedPluginRemoveRequest;
+
+export interface ExternalPluginInventoryEntry {
+  readonly packageName: string;
+  readonly version: string;
+  readonly entryIds: readonly string[];
+  readonly enabled: boolean;
+  readonly allowedActions: readonly ('enable' | 'disable' | 'uninstall')[];
+}
+
+export interface ExternalPluginControlRequest {
+  readonly requestId: string;
+  readonly packageName: string;
+  readonly version: string;
+  readonly entryId: string;
+  readonly action: 'enable' | 'disable' | 'uninstall';
+}
+
+export type ExternalPluginControlResult =
+  | { readonly requestId: string; readonly status: 'cancelled' }
+  | { readonly requestId: string; readonly status: 'prepared'; readonly restartScheduled: true }
+  | {
+      readonly requestId: string;
+      readonly status: 'unavailable';
+      readonly reason: 'runtime-unavailable' | 'identity-mismatch' | 'busy' | 'failed';
+    };
 
 export type ManagedPluginRemoveResult =
   | { readonly requestId: string; readonly status: 'cancelled' }
@@ -74,6 +104,7 @@ export type ManagedPluginInventoryResult =
       readonly status: 'ready';
       readonly currentGeneration: string | null;
       readonly entries: readonly ManagedPluginInventoryEntry[];
+      readonly externalEntries: readonly ExternalPluginInventoryEntry[];
     }
   | {
       readonly requestId: string;
@@ -145,7 +176,9 @@ export function validatedManagedPluginInventoryResult(
   }
   if (value.status !== 'ready' ||
     (value.currentGeneration !== null && !validGeneration(value.currentGeneration)) ||
-    !Array.isArray(value.entries) || value.entries.length > 1_000) return undefined;
+    !Array.isArray(value.entries) || value.entries.length > 1_000 ||
+    (value.externalEntries !== undefined &&
+      (!Array.isArray(value.externalEntries) || value.externalEntries.length > 1_000))) return undefined;
   const entries: ManagedPluginInventoryEntry[] = [];
   const packages = new Set<string>();
   for (const item of value.entries) {
@@ -154,11 +187,72 @@ export function validatedManagedPluginInventoryResult(
     packages.add(entry.packageName);
     entries.push(entry);
   }
+  const externalEntries: ExternalPluginInventoryEntry[] = [];
+  const externalPackages = new Set<string>();
+  for (const item of value.externalEntries ?? []) {
+    const entry = validatedExternalEntry(item);
+    if (entry === undefined || externalPackages.has(entry.packageName)) return undefined;
+    externalPackages.add(entry.packageName);
+    externalEntries.push(entry);
+  }
   return {
     requestId,
     status: 'ready',
     currentGeneration: value.currentGeneration,
     entries,
+    externalEntries,
+  };
+}
+
+export function validatedExternalPluginControlRequest(
+  value: unknown,
+): ExternalPluginControlRequest | undefined {
+  if (!isRecord(value) || !validRequestId(value.requestId) ||
+    !validPackageName(value.packageName) || !boundedString(value.version, 100) ||
+    !validEntryId(value.entryId) ||
+    (value.action !== 'enable' && value.action !== 'disable' && value.action !== 'uninstall')) {
+    return undefined;
+  }
+  return {
+    requestId: value.requestId,
+    packageName: value.packageName,
+    version: value.version,
+    entryId: value.entryId,
+    action: value.action,
+  };
+}
+
+export function validatedExternalPluginControlResult(
+  value: unknown,
+): ExternalPluginControlResult | undefined {
+  if (!isRecord(value) || !validRequestId(value.requestId)) return undefined;
+  if (value.status === 'cancelled') return { requestId: value.requestId, status: 'cancelled' };
+  if (value.status === 'prepared' && value.restartScheduled === true) {
+    return { requestId: value.requestId, status: 'prepared', restartScheduled: true };
+  }
+  if (value.status === 'unavailable' &&
+    (value.reason === 'runtime-unavailable' || value.reason === 'identity-mismatch' ||
+      value.reason === 'busy' || value.reason === 'failed')) {
+    return { requestId: value.requestId, status: 'unavailable', reason: value.reason };
+  }
+  return undefined;
+}
+
+function validatedExternalEntry(value: unknown): ExternalPluginInventoryEntry | undefined {
+  if (!isRecord(value) || !validPackageName(value.packageName) ||
+    !boundedString(value.version, 100) || !Array.isArray(value.entryIds) ||
+    value.entryIds.length === 0 || value.entryIds.length > 100 ||
+    !value.entryIds.every(validEntryId) ||
+    typeof value.enabled !== 'boolean' || !Array.isArray(value.allowedActions) ||
+    !value.allowedActions.every((item) => item === 'enable' || item === 'disable' || item === 'uninstall')) {
+    return undefined;
+  }
+  return {
+    packageName: value.packageName,
+    version: value.version,
+    entryIds: value.entryIds,
+    enabled: value.enabled,
+    allowedActions: value.allowedActions,
   };
 }
 
@@ -214,6 +308,10 @@ function validGeneration(value: unknown): value is string {
 
 function validPackageName(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 214 && PACKAGE_NAME.test(value);
+}
+
+function validEntryId(value: unknown): value is string {
+  return typeof value === 'string' && ENTRY_ID.test(value);
 }
 
 function boundedString(value: unknown, maximum: number): value is string {

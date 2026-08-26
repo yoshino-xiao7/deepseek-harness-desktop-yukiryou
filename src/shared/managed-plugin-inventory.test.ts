@@ -7,6 +7,8 @@ import {
   validatedManagedPluginRemoveResult,
   validatedManagedPluginSetEnabledRequest,
   validatedManagedPluginSetEnabledResult,
+  validatedExternalPluginControlRequest,
+  validatedExternalPluginControlResult,
 } from './managed-plugin-inventory.js';
 
 const requestId = 'request-12345678-1234-1234-1234-123456789abc';
@@ -36,10 +38,28 @@ describe('managed plugin inventory boundary', () => {
           blockedAt: '2026-08-22T00:00:00.000Z',
         },
       }],
+      externalEntries: [{
+        packageName: 'dsh-grok-provider', version: '0.1.1', entryIds: ['llm-grok'],
+        enabled: true, allowedActions: ['disable', 'uninstall'],
+      }],
     })).toMatchObject({
       status: 'ready',
       entries: [{ packageName: '@example/dsh-tool', sourceId: 'dshfind', rollbackTarget: { version: '1.2.2' } }],
     });
+  });
+
+  it('validates exact external package controls without accepting path-like identities', () => {
+    expect(validatedExternalPluginControlRequest({
+      requestId, packageName: 'dsh-grok-provider', version: '0.1.1',
+      entryId: 'llm-grok', action: 'disable',
+    })).toMatchObject({ packageName: 'dsh-grok-provider', action: 'disable' });
+    expect(validatedExternalPluginControlRequest({
+      requestId, packageName: '../plugin', version: '0.1.1',
+      entryId: 'llm-grok', action: 'uninstall',
+    })).toBeUndefined();
+    expect(validatedExternalPluginControlResult({
+      requestId, status: 'prepared', restartScheduled: true,
+    })).toEqual({ requestId, status: 'prepared', restartScheduled: true });
   });
 
   it('rejects duplicate packages and malformed timestamps', () => {
@@ -54,6 +74,13 @@ describe('managed plugin inventory boundary', () => {
     expect(validatedManagedPluginInventoryResult({
       requestId, status: 'ready', currentGeneration: generation,
       entries: [{ ...entry, installedAt: '2026-08-21 12:41' }],
+    })).toBeUndefined();
+    expect(validatedManagedPluginInventoryResult({
+      requestId, status: 'ready', currentGeneration: generation, entries: [],
+      externalEntries: [{
+        packageName: 'dsh-grok-provider', version: '0.1.1', entryIds: ['../escape'],
+        enabled: true, allowedActions: ['uninstall'],
+      }],
     })).toBeUndefined();
   });
 

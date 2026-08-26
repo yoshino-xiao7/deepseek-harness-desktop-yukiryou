@@ -34,7 +34,7 @@ window.__ModuleLoader__.load({
         installedVersion: '已安装版本', installedOwnership: '安装类型', installedState: '运行状态',
         installedMetadataUnavailable: '当前来源中没有找到该插件的远程简介；以下仍会显示本机安装信息。',
         system: '系统', dependency: '依赖', managed: '受管安装', external: '外部', readonlyState: '只读状态',
-        runtimeUnavailable: 'Runtime 未加载', installedAt: '安装于 {time}', blockedAttempt: '已自动恢复失败版本 {version}',
+        runtimeUnavailable: 'Runtime 未加载', installedAt: '安装于 {time}', blockedAttempt: '已自动恢复失败版本 {version}', externalState: '外部可管理',
         uninstall: '卸载', uninstalling: '正在卸载…', uninstallUnavailable: '卸载状态已变化，请刷新后重试。',
         enablePlugin: '启用', disablePlugin: '停用', changingPlugin: '正在应用…', enabledUnavailable: '启用状态已变化，请刷新后重试。', managedState: '受管状态',
         rollbackPlugin: '回滚', rollingBack: '正在回滚…', rollbackUnavailable: '回滚目标已变化，请刷新后重试。', rollbackTarget: '可回滚至 {version}',
@@ -96,7 +96,7 @@ window.__ModuleLoader__.load({
         installedVersion: 'Installed version', installedOwnership: 'Install type', installedState: 'Runtime state',
         installedMetadataUnavailable: 'No remote description was found in the recorded source. Local installation details are still shown below.',
         system: 'System', dependency: 'Dependency', managed: 'Managed install', external: 'External', readonlyState: 'Read-only state',
-        runtimeUnavailable: 'Not loaded by Runtime', installedAt: 'Installed {time}', blockedAttempt: 'Recovered failed version {version}',
+        runtimeUnavailable: 'Not loaded by Runtime', installedAt: 'Installed {time}', blockedAttempt: 'Recovered failed version {version}', externalState: 'Controllable external',
         uninstall: 'Uninstall', uninstalling: 'Uninstalling…', uninstallUnavailable: 'Plugin state changed. Refresh and try again.',
         enablePlugin: 'Enable', disablePlugin: 'Disable', changingPlugin: 'Applying…', enabledUnavailable: 'Enabled state changed. Refresh and try again.', managedState: 'Managed state',
         rollbackPlugin: 'Roll back', rollingBack: 'Rolling back…', rollbackUnavailable: 'The rollback target changed. Refresh and try again.', rollbackTarget: 'Can roll back to {version}',
@@ -275,9 +275,12 @@ window.__ModuleLoader__.load({
 
     function mergeInstalledInventory(runtimeEntries, managedSnapshot) {
       const managed = new Map((managedSnapshot?.entries ?? []).map((entry) => [entry.packageName, entry]));
+      const external = new Map((managedSnapshot?.externalEntries ?? []).flatMap((entry) =>
+        entry.entryIds.map((entryId) => [entryId, entry])));
       const seenManaged = new Set();
       const entries = runtimeEntries.map((entry) => {
         const receipt = managed.get(entry.moduleName);
+        const externalControl = external.get(entry.entryId);
         if (receipt !== undefined) seenManaged.add(receipt.packageName);
         return {
           ...entry,
@@ -288,6 +291,7 @@ window.__ModuleLoader__.load({
               ? (entry.enabled ? 'active' : 'runtimeUnavailable')
               : 'disabled',
           receipt,
+          externalControl,
         };
       });
       for (const receipt of managed.values()) {
@@ -615,6 +619,27 @@ window.__ModuleLoader__.load({
           setManagedRollback({ status: 'error', packageName: receipt.packageName });
         }
       };
+      const controlExternalPlugin = async (entry, action) => {
+        const capability = entry.externalControl;
+        if (capability === undefined) return;
+        const updateState = action === 'uninstall' ? setManagedRemove : setManagedActivation;
+        updateState({ status: 'busy', packageName: capability.packageName });
+        try {
+          const result = await window.deepSeekYukiRyouPlugins.controlExternal({
+            packageName: capability.packageName,
+            version: capability.version,
+            entryId: entry.entryId,
+            action,
+          });
+          updateState(result?.status === 'prepared'
+            ? { status: 'prepared', packageName: capability.packageName }
+            : result?.status === 'cancelled'
+              ? { status: 'idle', packageName: null }
+              : { status: 'error', packageName: capability.packageName });
+        } catch {
+          updateState({ status: 'error', packageName: capability.packageName });
+        }
+      };
       const addSource = async (event) => {
         event.preventDefault();
         if (await applySourceMutation({ kind: 'add', displayName: sourceName, url: sourceUrl })) {
@@ -826,7 +851,7 @@ window.__ModuleLoader__.load({
                       ? React.createElement('div', { className: 'dsh-market-message' }, t('empty'))
                       : React.createElement('div', { className: 'dsh-market-installed-list' }, ...visibleInstalled.map((entry) => {
                       const detail = entry.receipt === undefined
-                        ? null
+                        ? entry.externalControl?.version ?? null
                         : `${entry.receipt.version} · ${format(t, 'installedAt', { time: formatDateTime(entry.receipt.installedAt) })}`;
                       return React.createElement('div', { className: 'dsh-market-installed-row', key: entry.entryId },
                         React.createElement('span', { className: 'dsh-market-installed-identity' },
@@ -834,13 +859,13 @@ window.__ModuleLoader__.load({
                           detail && React.createElement('span', { className: 'dsh-market-installed-detail' }, detail),
                           entry.receipt?.lastBlockedAttempt && React.createElement('span', { className: 'dsh-market-installed-detail' }, format(t, 'blockedAttempt', { version: entry.receipt.lastBlockedAttempt.version })),
                           entry.receipt?.rollbackTarget && React.createElement('span', { className: 'dsh-market-installed-detail' }, format(t, 'rollbackTarget', { version: entry.receipt.rollbackTarget.version })),
-                          managedRemove.status === 'error' && managedRemove.packageName === entry.receipt?.packageName && React.createElement('span', { className: 'dsh-market-installed-detail', role: 'alert' }, t('uninstallUnavailable')),
-                          managedActivation.status === 'error' && managedActivation.packageName === entry.receipt?.packageName && React.createElement('span', { className: 'dsh-market-installed-detail', role: 'alert' }, t('enabledUnavailable')),
+                          managedRemove.status === 'error' && managedRemove.packageName === (entry.receipt?.packageName ?? entry.externalControl?.packageName) && React.createElement('span', { className: 'dsh-market-installed-detail', role: 'alert' }, t('uninstallUnavailable')),
+                          managedActivation.status === 'error' && managedActivation.packageName === (entry.receipt?.packageName ?? entry.externalControl?.packageName) && React.createElement('span', { className: 'dsh-market-installed-detail', role: 'alert' }, t('enabledUnavailable')),
                           managedRollback.status === 'error' && managedRollback.packageName === entry.receipt?.packageName && React.createElement('span', { className: 'dsh-market-installed-detail', role: 'alert' }, t('rollbackUnavailable')),
                         ),
                         React.createElement('span', { className: 'dsh-market-installed-status' },
                           React.createElement('span', null, t(entry.ownership)),
-                          React.createElement('span', null, `${t(entry.runtimeState)} · ${t(entry.receipt ? 'managedState' : 'readonlyState')}`),
+                          React.createElement('span', null, `${t(entry.runtimeState)} · ${t(entry.receipt ? 'managedState' : entry.externalControl ? 'externalState' : 'readonlyState')}`),
                         ),
                         React.createElement('span', { className: 'dsh-market-installed-actions' },
                           React.createElement('button', { type: 'button', className: 'dsh-market-button', onClick: () => openInstalledDetails(entry) }, t(entry.receipt ? 'checkUpdates' : 'details')),
@@ -869,6 +894,22 @@ window.__ModuleLoader__.load({
                           }, managedRemove.packageName === entry.receipt.packageName &&
                             (managedRemove.status === 'busy' || managedRemove.status === 'prepared')
                             ? t('uninstalling') : t('uninstall')),
+                          ),
+                          entry.externalControl && React.createElement(React.Fragment, null,
+                            React.createElement('button', {
+                              type: 'button', className: 'dsh-market-button',
+                              disabled: managedRemove.status === 'busy' || managedRemove.status === 'prepared' || managedActivation.status === 'busy' || managedActivation.status === 'prepared',
+                              onClick: () => controlExternalPlugin(entry, entry.externalControl.enabled ? 'disable' : 'enable'),
+                            }, managedActivation.packageName === entry.externalControl.packageName &&
+                              (managedActivation.status === 'busy' || managedActivation.status === 'prepared')
+                              ? t('changingPlugin') : t(entry.externalControl.enabled ? 'disablePlugin' : 'enablePlugin')),
+                            React.createElement('button', {
+                              type: 'button', className: 'dsh-market-button',
+                              disabled: managedRemove.status === 'busy' || managedRemove.status === 'prepared' || managedActivation.status === 'busy' || managedActivation.status === 'prepared',
+                              onClick: () => controlExternalPlugin(entry, 'uninstall'),
+                            }, managedRemove.packageName === entry.externalControl.packageName &&
+                              (managedRemove.status === 'busy' || managedRemove.status === 'prepared')
+                              ? t('uninstalling') : t('uninstall')),
                           ),
                         ),
                       );

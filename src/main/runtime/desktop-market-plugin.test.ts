@@ -594,6 +594,9 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain('window.deepSeekYukiRyouPlugins.remove');
     expect(source).toContain('window.deepSeekYukiRyouPlugins.setEnabled');
     expect(source).toContain('window.deepSeekYukiRyouPlugins.rollback');
+    expect(source).toContain('window.deepSeekYukiRyouPlugins.controlExternal');
+    expect(source).toContain('entry.externalControl.enabled');
+    expect(source).toContain("controlExternalPlugin(entry, 'uninstall')");
     expect(source).toContain("ownership: receipt === undefined ? inferredOwnership(entry.moduleName) : 'managed'");
     expect(source).toContain("format(t, 'installedAt', { time: formatDateTime(entry.receipt.installedAt) })");
     expect(source).toContain("format(t, 'blockedAttempt', { version: entry.receipt.lastBlockedAttempt.version })");

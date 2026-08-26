@@ -10,6 +10,7 @@ export async function writeUpdateMetadata(options: {
   readonly outputDirectory: string;
   readonly version: string;
   readonly origin?: string;
+  readonly target?: 'darwin-arm64' | 'win32-x64';
 }): Promise<readonly string[]> {
   const artifactBase = 'DeepSeek.YukiRyou';
   const targets = [
@@ -25,7 +26,8 @@ export async function writeUpdateMetadata(options: {
     },
   ] as const;
   const written: string[] = [];
-  for (const target of targets) {
+  for (const target of targets.filter((candidate) =>
+    options.target === undefined || candidate.directory === options.target)) {
     const source = join(options.sourceDirectory, target.artifact);
     const output = join(options.outputDirectory, target.directory);
     const size = (await stat(source)).size;
