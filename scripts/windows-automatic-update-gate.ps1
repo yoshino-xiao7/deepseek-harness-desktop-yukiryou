@@ -102,19 +102,59 @@ if ($LASTEXITCODE -ne 0) { throw 'Failed to prepare Windows update metadata' }
 
 $certificatePath = Join-Path $gateRoot 'server.crt'
 $keyPath = Join-Path $gateRoot 'server.key'
-& openssl req -x509 -newkey rsa:2048 -nodes -days 1 `
-  -subj '/CN=DeepSeek YukiRyou update gate' `
-  -addext "subjectAltName=DNS:$mirrorHost" `
-  -keyout $keyPath -out $certificatePath
-if ($LASTEXITCODE -ne 0) { throw 'Failed to create update-gate certificate' }
-$certificate = Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root'
-@{ certificateThumbprint = $certificate.Thumbprint } |
+$rsa = [System.Security.Cryptography.RSA]::Create(2048)
+try {
+  $request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
+    'CN=DeepSeek YukiRyou update gate',
+    $rsa,
+    [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+    [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+  )
+  $subjectAlternativeName =
+    [System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
+  $subjectAlternativeName.AddDnsName($mirrorHost)
+  $request.CertificateExtensions.Add($subjectAlternativeName.Build())
+  $serverAuthentication = [System.Security.Cryptography.OidCollection]::new()
+  [void]$serverAuthentication.Add(
+    [System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.1')
+  )
+  $request.CertificateExtensions.Add(
+    [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new(
+      $serverAuthentication,
+      $false
+    )
+  )
+  $generatedCertificate = $request.CreateSelfSigned(
+    [System.DateTimeOffset]::UtcNow.AddMinutes(-5),
+    [System.DateTimeOffset]::UtcNow.AddDays(1)
+  )
+  try {
+    [System.IO.File]::WriteAllText(
+      $certificatePath,
+      $generatedCertificate.ExportCertificatePem(),
+      [System.Text.Encoding]::ASCII
+    )
+    [System.IO.File]::WriteAllText(
+      $keyPath,
+      $rsa.ExportPkcs8PrivateKeyPem(),
+      [System.Text.Encoding]::ASCII
+    )
+  } finally {
+    $generatedCertificate.Dispose()
+  }
+} finally {
+  $rsa.Dispose()
+}
+$trustedCertificate = Import-Certificate `
+  -FilePath $certificatePath `
+  -CertStoreLocation 'Cert:\CurrentUser\Root'
+@{ certificateThumbprint = $trustedCertificate.Thumbprint } |
   ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
 $hostsBackup = Join-Path $gateRoot 'hosts.before'
 Copy-Item -LiteralPath $hostsPath -Destination $hostsBackup
 @{
-  certificateThumbprint = $certificate.Thumbprint
+  certificateThumbprint = $trustedCertificate.Thumbprint
   hostsBackup = $hostsBackup
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 Add-Content -LiteralPath $hostsPath -Value "`r`n127.0.0.1 $mirrorHost # DeepSeek YukiRyou automatic-update gate"
@@ -128,7 +168,7 @@ $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
 
 @{
   serverPid = $server.Id
-  certificateThumbprint = $certificate.Thumbprint
+  certificateThumbprint = $trustedCertificate.Thumbprint
   hostsBackup = $hostsBackup
   installRoot = $installRoot
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
