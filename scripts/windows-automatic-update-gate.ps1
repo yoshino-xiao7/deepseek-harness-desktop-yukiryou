@@ -204,20 +204,33 @@ try {
   $rsa.Dispose()
 }
 Write-Output "Trusting the isolated update mirror certificate without an interactive prompt"
-Invoke-Checked (Get-Command certutil.exe).Source @(
-  '-user', '-f', '-addstore', 'Root', $certificatePath
-)
 $trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
   $certificatePath
 )
+$certificateThumbprint = $trustedCertificate.Thumbprint
+$rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+  [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+  [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+)
+try {
+  $rootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+  $rootStore.Add($trustedCertificate)
+} finally {
+  $rootStore.Close()
+  $trustedCertificate.Dispose()
+}
+$trustedCertificatePath = "Cert:\CurrentUser\Root\$certificateThumbprint"
+if (-not (Test-Path -LiteralPath $trustedCertificatePath)) {
+  throw 'The isolated update mirror certificate was not added to the current-user root store'
+}
 Write-Output "Trusted the isolated update mirror certificate"
-@{ certificateThumbprint = $trustedCertificate.Thumbprint } |
+@{ certificateThumbprint = $certificateThumbprint } |
   ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
 $hostsBackup = Join-Path $gateRoot 'hosts.before'
 Copy-Item -LiteralPath $hostsPath -Destination $hostsBackup
 @{
-  certificateThumbprint = $trustedCertificate.Thumbprint
+  certificateThumbprint = $certificateThumbprint
   hostsBackup = $hostsBackup
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 Add-Content -LiteralPath $hostsPath -Value "`r`n127.0.0.1 $mirrorHost # DeepSeek YukiRyou automatic-update gate"
@@ -232,7 +245,7 @@ $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
 
 @{
   serverPid = $server.Id
-  certificateThumbprint = $trustedCertificate.Thumbprint
+  certificateThumbprint = $certificateThumbprint
   hostsBackup = $hostsBackup
   installRoot = $installRoot
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8

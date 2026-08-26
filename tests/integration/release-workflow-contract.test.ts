@@ -75,7 +75,10 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('download-cn.suzuki.ink/releases/$previousTag');
     expect(windowsGate).toContain("'--max-time', '480'");
     expect(windowsGate).toContain('Previous release asset SHA-256 mismatch');
-    expect(windowsGate).toContain("'-user', '-f', '-addstore', 'Root'");
+    expect(windowsGate).toContain('X509Store');
+    expect(windowsGate).toContain('StoreLocation]::CurrentUser');
+    expect(windowsGate).toContain('OpenFlags]::ReadWrite');
+    expect(windowsGate).not.toContain('certutil.exe');
     expect(windowsGate).not.toContain('Import-Certificate');
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(releaseSource).toContain('Capture Squirrel.Mac diagnostics');
