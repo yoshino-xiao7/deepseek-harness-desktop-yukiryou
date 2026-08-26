@@ -65,6 +65,11 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('SubjectAlternativeNameBuilder');
     expect(windowsGate).toContain('ExportPkcs8PrivateKeyPem');
     expect(windowsGate).not.toContain('& openssl');
+    expect(windowsGate).toContain('$env:GITHUB_RUN_ID');
+    expect(windowsGate).toContain('$env:GITHUB_RUN_ATTEMPT');
+    expect(windowsGate).not.toContain(
+      "Join-Path ([System.IO.Path]::GetTempPath()) 'dsh-yukiryou-automatic-update'",
+    );
   });
 
   it('keeps both READMEs linked and the current release notes bilingual', async () => {
