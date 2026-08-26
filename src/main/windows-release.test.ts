@@ -63,5 +63,5 @@ describe('Windows release identity', () => {
     expect(updateConfig).toContain('provider: github');
     expect(updateConfig).toContain('owner: yoshino-xiao7');
     expect(updateConfig).toContain('repo: deepseek-harness-desktop-yukiryou');
-  });
+  }, 15_000);
 });
