@@ -3,12 +3,32 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   CrossPlatformAppUpdater,
+  type MacInstallReadiness,
   type NativeUpdateClient,
 } from './app-updater.js';
+
+class FakeMacInstallReadiness implements MacInstallReadiness {
+  readonly #listeners = new Set<() => void>();
+
+  on(_event: 'update-downloaded', listener: () => void): unknown {
+    this.#listeners.add(listener);
+    return this;
+  }
+
+  removeListener(_event: 'update-downloaded', listener: () => void): unknown {
+    this.#listeners.delete(listener);
+    return this;
+  }
+
+  markReady(): void {
+    for (const listener of this.#listeners) listener();
+  }
+}
 
 class FakeNativeUpdater implements NativeUpdateClient {
   autoDownload = false;
   autoInstallOnAppQuit = false;
+  autoRunAppAfterInstall = false;
   channel: string | null = null;
   allowDowngrade = true;
   disableDifferentialDownload = false;
@@ -70,6 +90,31 @@ describe('cross-platform automatic updater', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('does not offer restart on macOS before Squirrel finishes staging the update', () => {
+    const native = new FakeNativeUpdater();
+    const readiness = new FakeMacInstallReadiness();
+    const updater = new CrossPlatformAppUpdater({
+      enabled: true,
+      currentVersion: '1.0.2',
+      platform: 'darwin',
+      architecture: 'arm64',
+      onError: vi.fn(),
+      createNativeUpdater: () => native,
+      macInstallReadiness: readiness,
+    });
+
+    native.emit('update-available', { version: '1.0.3' } as UpdateInfo);
+    native.emit('update-downloaded', { version: '1.0.3' } as UpdateInfo);
+
+    expect(updater.getState().status).toBe('downloading');
+    readiness.markReady();
+    expect(updater.getState().status).toBe('downloaded');
+    updater.quitAndInstall();
+    expect(native.autoRunAppAfterInstall).toBe(true);
+    expect(native.quitAndInstall).toHaveBeenCalledWith(false, true);
+    updater.dispose();
   });
 
   it('falls back from the China provider and preserves download/restart installation', async () => {
