@@ -54,6 +54,9 @@ describe('macOS release workflow contract', () => {
     expect(windowsSource).toContain('tests/release/automatic-update.test.ts');
     expect(windowsSource).toContain('DSH_DESKTOP_DISTRIBUTION_REGION: china');
     expect(windowsSource).toContain("inputs.release_version != ''");
+    expect(windowsSource).toContain(
+      'Exact candidate version when manually exercising the release updater gate',
+    );
     expect(windows.with?.release_version).toBe('${{ inputs.version }}');
     expect(windowsWorkflow.jobs?.build_candidate?.steps?.find(
       (step) => step.name === 'Prepare previous public release and isolated update mirror',

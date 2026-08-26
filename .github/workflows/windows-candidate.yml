@@ -9,6 +9,12 @@ on:
         type: string
         default: ''
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: Exact candidate version when manually exercising the release updater gate
+        required: false
+        type: string
+        default: ''
   pull_request:
     branches:
       - main
