@@ -8,7 +8,12 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $gateRoot = Join-Path $repositoryRoot 'out\windows-automatic-update-gate'
 $statePath = Join-Path $gateRoot 'state.json'
-$installRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'dsh-yukiryou-automatic-update'
+$gateIdentity = if ($env:GITHUB_RUN_ID -and $env:GITHUB_RUN_ATTEMPT) {
+  "$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
+} else {
+  'local'
+}
+$installRoot = Join-Path ([System.IO.Path]::GetTempPath()) "dsh-yukiryou-automatic-update-$gateIdentity"
 $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
 $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
