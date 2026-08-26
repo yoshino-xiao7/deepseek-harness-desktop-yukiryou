@@ -9,6 +9,14 @@ type ElementNode = {
   readonly children: readonly unknown[];
 };
 
+function elements(value: unknown): ElementNode[] {
+  if (value === null || value === undefined || value === false) return [];
+  if (Array.isArray(value)) return value.flatMap(elements);
+  if (typeof value !== 'object') return [];
+  const node = value as ElementNode;
+  return [node, ...elements(node.children)];
+}
+
 describe('desktop plugin management tab', () => {
   it('registers Windows-specific About and manual update copy', async () => {
     const source = await readFile(
@@ -63,6 +71,20 @@ describe('desktop plugin management tab', () => {
     expect(source).toContain("className: 'dsh-desktop-plugin-name',\n                              title: entry.displayName");
   });
 
+  it('uses the Harness general-row typography for desktop feature controls', async () => {
+    const source = (await readFile(
+      new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),
+      'utf8',
+    )).replaceAll('\r\n', '\n');
+
+    expect(source).toContain('.dsh-desktop-feature-title {');
+    expect(source).toContain('font-weight: 400;\n        line-height: 22px;');
+    expect(source).toContain('.dsh-desktop-feature-description {');
+    expect(source).toContain('color: var(--dsw-alias-label-tertiary);');
+    expect(source).not.toContain("React.createElement('strong', null, t(title))");
+    expect(source).not.toContain("React.createElement('small', null, t(description))");
+  });
+
   it('mounts a read-only explanation through the official plugins tab', async () => {
     const source = await readFile(
       new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),
@@ -98,6 +120,7 @@ describe('desktop plugin management tab', () => {
       },
       useCallback: <T>(callback: T): T => callback,
       useEffect: (effect: () => unknown): void => { effect(); },
+      useRef: <T>(value: T): { current: T } => ({ current: value }),
       useState: <T>(initial: T | (() => T)): [T, ReturnType<typeof vi.fn>] => [
         typeof initial === 'function' ? (initial as () => T)() : initial,
         vi.fn(),
@@ -109,7 +132,13 @@ describe('desktop plugin management tab', () => {
       head: { appendChild: vi.fn() },
       querySelector: vi.fn().mockReturnValue(null),
     };
+    const setFeaturePreference = vi.fn();
     const window = {
+      deepSeekYukiRyouFeatures: {
+        getSnapshot: () => ({ accountBalance: true, workspaceReview: true }),
+        subscribe: vi.fn().mockReturnValue(vi.fn()),
+        set: setFeaturePreference,
+      },
       __ModuleLoader__: {
         load: ({ factory }: { factory(require: (id: string) => unknown): unknown }) => {
           plugin = factory(() => React) as typeof plugin;
@@ -155,5 +184,23 @@ describe('desktop plugin management tab', () => {
     management?.component({ t: (key: string) => key, ...injected });
     expect(list).toHaveBeenCalledOnce();
     expect(registrations.has('settings.section:desktop-appearance')).toBe(false);
+    const features = registrations.get('settings.general.item:desktop-features');
+    expect(features?.descriptor).toMatchObject({
+      name: 'settings.general.item',
+      id: 'desktop-features',
+      order: 80,
+    });
+    const featureTree = features?.component({ t: (key: string) => key });
+    const switches = elements(featureTree).filter((node) => node.props.role === 'switch');
+    expect(switches).toHaveLength(2);
+    expect(switches.map((node) => node.props['aria-checked'])).toEqual([true, true]);
+    (switches[0]?.props.onClick as (() => void) | undefined)?.();
+    (switches[0]?.props.onClick as (() => void) | undefined)?.();
+    (switches[1]?.props.onClick as (() => void) | undefined)?.();
+    expect(setFeaturePreference.mock.calls).toEqual([
+      [{ key: 'accountBalance', enabled: false }],
+      [{ key: 'accountBalance', enabled: true }],
+      [{ key: 'workspaceReview', enabled: false }],
+    ]);
   });
 });

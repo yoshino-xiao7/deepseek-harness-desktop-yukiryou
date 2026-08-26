@@ -30,6 +30,10 @@ import {
   MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL,
   MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL,
 } from '../../shared/managed-plugin-inventory.js';
+import {
+  DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL,
+  DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL,
+} from '../../shared/desktop-feature-preferences.js';
 import { createHarnessProductBridge } from './harness-product-bridge.js';
 import { createTrustedHarnessOrigin } from './trusted-navigation.js';
 
@@ -248,6 +252,81 @@ describe('Harness product bridge', () => {
     });
     expect(webContents.listenerCount('ipc-message')).toBe(0);
     expect(webContents.session.permissionHandler).toBeNull();
+  });
+
+  it('persists feature commands and stops balance work when its switch is off', async () => {
+    const webContents = new FakeWebContents();
+    const onFeaturePreferencesChange = vi.fn();
+    const onAccountBalanceRequest = vi.fn(async () => ({
+      status: 'unavailable' as const,
+      reason: 'network' as const,
+      today: { status: 'unavailable' as const },
+    }));
+    const bridge = createBridge(webContents, {
+      onFeaturePreferencesChange,
+      onAccountBalanceRequest,
+    });
+
+    webContents.emit('ipc-message', {}, DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL, {
+      key: 'accountBalance',
+      enabled: false,
+    });
+    webContents.emit('ipc-message', {}, ACCOUNT_BALANCE_REQUEST_CHANNEL, true);
+
+    expect(onFeaturePreferencesChange).toHaveBeenCalledWith({
+      accountBalance: false,
+      workspaceReview: true,
+    });
+    expect(onAccountBalanceRequest).not.toHaveBeenCalled();
+    expect(webContents.sent).toContainEqual({
+      channel: DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL,
+      value: { accountBalance: false, workspaceReview: true },
+    });
+    bridge.dispose();
+  });
+
+  it('discards an in-flight balance result when balance is disabled', async () => {
+    const webContents = new FakeWebContents();
+    let resolveBalance: ((value: AccountBalanceSnapshot) => void) | undefined;
+    const bridge = createBridge(webContents, {
+      onAccountBalanceRequest: () => new Promise((resolve) => {
+        resolveBalance = resolve;
+      }),
+    });
+
+    webContents.emit('ipc-message', {}, ACCOUNT_BALANCE_REQUEST_CHANNEL, true);
+    webContents.emit('ipc-message', {}, DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL, {
+      key: 'accountBalance',
+      enabled: false,
+    });
+    resolveBalance?.({
+      status: 'ready',
+      isAvailable: true,
+      balances: [{ currency: 'CNY', total: '100', granted: '100', toppedUp: '0' }],
+      today: {
+        status: 'ready', currency: 'CNY', amount: '1', requestCount: 1,
+        unpricedRequestCount: 0, partial: false, since: '2026-08-26T00:00:00.000Z',
+      },
+      fetchedAt: '2026-08-26T00:00:01.000Z',
+      stale: false,
+    });
+    await Promise.resolve();
+
+    expect(webContents.sent).not.toContainEqual({
+      channel: ACCOUNT_BALANCE_STATE_CHANNEL,
+      value: {
+        status: 'ready',
+        isAvailable: true,
+        balances: [{ currency: 'CNY', total: '100', granted: '100', toppedUp: '0' }],
+        today: {
+          status: 'ready', currency: 'CNY', amount: '1', requestCount: 1,
+          unpricedRequestCount: 0, partial: false, since: '2026-08-26T00:00:00.000Z',
+        },
+        fetchedAt: '2026-08-26T00:00:01.000Z',
+        stale: false,
+      },
+    });
+    bridge.dispose();
   });
 
   it('routes bounded managed previews and sends only validated results', async () => {
@@ -498,6 +577,7 @@ function createBridge(
     onAccountBalanceRequest: async () => ({
       status: 'unavailable', reason: 'network', today: { status: 'unavailable' },
     }),
+    onFeaturePreferencesChange: vi.fn(),
     onHarnessContext: vi.fn(),
     onHarnessReviewIntent: async () => ({ kind: 'unavailable', reason: 'no-workspace' }),
     onHarnessReviewResponse: vi.fn(),

@@ -7,6 +7,7 @@ import { isAbsolute } from 'node:path';
 const ROUTE = '/plugins/@dsh-desktop/companion/rpc';
 const MAX_RESPONSE_BYTES = 32 * 1024;
 const ACCOUNT_BALANCE_TIMEOUT_MS = 7_500;
+const WORKSPACE_AUTHORIZATION_TIMEOUT_MS = 2_000;
 
 export interface RuntimeCompanionClient {
   readAccountBalance(origin: string, force: boolean): Promise<AccountBalanceSnapshot>;
@@ -52,7 +53,7 @@ export function createRuntimeCompanionClient(token: string): RuntimeCompanionCli
           kind: 'workspace.authorize',
           sessionId: input.sessionId,
           ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
-        });
+        }, WORKSPACE_AUTHORIZATION_TIMEOUT_MS);
         if (!isRecord(payload) || payload.status !== 'authorized') return undefined;
         if (
           typeof payload.workspaceId !== 'string' || payload.workspaceId.length > 128 ||
@@ -71,11 +72,16 @@ function unavailableBalance(): AccountBalanceSnapshot {
   return { status: 'unavailable', reason: 'network', today: { status: 'unavailable' } };
 }
 
-async function execute(origin: string, token: string, request: unknown): Promise<unknown> {
+async function execute(
+  origin: string,
+  token: string,
+  request: unknown,
+  timeoutMs = 5_000,
+): Promise<unknown> {
   const response = await fetch(new URL(ROUTE, origin), {
     method: 'POST', redirect: 'error',
     headers: { accept: 'application/json', 'content-type': 'application/json', 'x-dsh-desktop-companion-token': token },
-    body: JSON.stringify(request), signal: AbortSignal.timeout(5_000),
+    body: JSON.stringify(request), signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) throw new Error('companion request failed');
   return JSON.parse(await readBoundedBody(response, MAX_RESPONSE_BYTES));

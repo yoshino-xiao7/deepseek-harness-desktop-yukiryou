@@ -10,6 +10,10 @@ import { createAppLog, redact, type AppLog } from './diagnostics/app-log.js';
 import { createDiagnosticArchive } from './diagnostics/diagnostic-archive.js';
 import { recoverInvalidPreferences } from './preferences/preferences-recovery.js';
 import {
+  createDesktopFeaturePreferencesPersistence,
+  type DesktopFeaturePreferencesPersistence,
+} from './preferences/desktop-feature-preferences.js';
+import {
   createRuntimeSupervisor,
   type RuntimeFailure,
   type RuntimeSupervisor,
@@ -107,12 +111,26 @@ import {
   createWorkspaceChangeMonitor,
   type WorkspaceChangeMonitor,
 } from './workspace/workspace-change-monitor.js';
+import {
+  runtimeAuthorityIdentityMatches,
+  reusableWorkspaceAuthority,
+  shouldRetryWorkspaceAuthority,
+  workspaceRetryDelay,
+  type ActiveWorkspaceAuthority,
+} from './workspace/workspace-authority-recovery.js';
 import { createApplicationMenuTemplate } from './application-menu-template.js';
+import {
+  DEFAULT_DESKTOP_FEATURE_PREFERENCES,
+  type DesktopFeaturePreferences,
+} from '../shared/desktop-feature-preferences.js';
 
 const moduleDirectory = __dirname;
 export class AppCoordinator {
   #window: DesktopWindow | undefined;
   #windowState: WindowStatePersistence | undefined;
+  #featurePreferences: DesktopFeaturePreferencesPersistence | undefined;
+  #desktopFeaturePreferences: DesktopFeaturePreferences =
+    DEFAULT_DESKTOP_FEATURE_PREFERENCES;
   #runtime: RuntimeSupervisor | undefined;
   #log: AppLog | undefined;
   #updater: AppUpdater | undefined;
@@ -125,6 +143,9 @@ export class AppCoordinator {
     onLine: (line) => this.#log?.write('runtime.stderr', line),
   });
   #workspaceAuthorityRevision = 0;
+  #latestHarnessContext: HarnessContextSnapshot | undefined;
+  #activeWorkspaceAuthority: ActiveWorkspaceAuthority | undefined;
+  #workspaceAuthorityRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #workspaceInspector: WorkspaceInspector | undefined;
   #workspaceChangeMonitor: WorkspaceChangeMonitor | undefined;
   #pluginProfileBootstrap: PluginProfileBootstrap | undefined;
@@ -183,6 +204,14 @@ export class AppCoordinator {
         error instanceof Error ? error.message : String(error),
       ),
     );
+    this.#featurePreferences = await createDesktopFeaturePreferencesPersistence(
+      join(userData, 'desktop-features.json'),
+      (error) => this.#log?.write(
+        'desktop.feature-preferences-error',
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
+    this.#desktopFeaturePreferences = this.#featurePreferences.initialState;
     this.#updater = createAppUpdater({
       enabled:
         process.env.DSH_DESKTOP_E2E !== '1' &&
@@ -209,6 +238,7 @@ export class AppCoordinator {
       shellPreloadPath: join(moduleDirectory, 'shell-preload-entry.cjs'),
       harnessPreloadPath: join(moduleDirectory, 'harness-preload-entry.cjs'),
       initialWindowState: this.#windowState.initialState,
+      initialFeaturePreferences: this.#desktopFeaturePreferences,
       onWindowStateChange: (state) => this.#windowState?.update(state),
       onRetry: () => void this.#retryStartup(),
       onOpenLogs: () => void shell.openPath(logDirectory),
@@ -216,6 +246,8 @@ export class AppCoordinator {
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
       onUpdateCommand: (command) => void this.#handleUpdateCommand(command),
       onAccountBalanceRequest: (force) => this.#readAccountBalance(force),
+      onFeaturePreferencesChange: (preferences) =>
+        this.#setDesktopFeaturePreferences(preferences),
       onHarnessContext: (snapshot) => void this.#handleHarnessContext(snapshot),
       onLocale: (locale) => this.#installMenu(logDirectory, locale),
       onWorkspaceReviewRequest: (request) => this.#handleWorkspaceReviewRequest(request),
@@ -334,6 +366,16 @@ export class AppCoordinator {
     this.#runtime.subscribe((state) => {
       if (state.kind === 'stopped' || state.kind === 'failed') {
         this.#runtimeStderr.flush();
+        this.#companionToken = '';
+        this.#workspaceAuthorityRevision += 1;
+        this.#clearWorkspaceAuthorityRetry();
+        this.#clearWorkspaceAuthority();
+        this.#window?.setCompanionWorkspace(
+          this.#desktopFeaturePreferences.workspaceReview &&
+          this.#latestHarnessContext?.sessionId !== undefined
+            ? { status: 'unavailable', running: this.#latestHarnessContext.running }
+            : { status: 'none' },
+        );
         this.#managedInstallConfirmation = undefined;
         this.#managedPluginRemoval = undefined;
         this.#managedPluginActivation = undefined;
@@ -361,6 +403,13 @@ export class AppCoordinator {
   }
 
   async #readAccountBalance(force: boolean): Promise<AccountBalanceSnapshot> {
+    if (!this.#desktopFeaturePreferences.accountBalance) {
+      return {
+        status: 'unavailable',
+        reason: 'network',
+        today: { status: 'unavailable' },
+      };
+    }
     const state = this.#runtime?.getState();
     if (state?.kind !== 'ready' || this.#companionToken === '') {
       return {
@@ -376,52 +425,92 @@ export class AppCoordinator {
   }
 
   async #handleHarnessContext(snapshot: HarnessContextSnapshot): Promise<void> {
-    const requestRevision = ++this.#workspaceAuthorityRevision;
-    if (snapshot.sessionId === undefined) {
-      this.#workspaceChangeMonitor?.close();
-      this.#workspaceChangeMonitor = undefined;
-      this.#workspaceInspector = undefined;
+    this.#latestHarnessContext = snapshot;
+    this.#clearWorkspaceAuthorityRetry();
+    if (!this.#desktopFeaturePreferences.workspaceReview || snapshot.sessionId === undefined) {
+      this.#workspaceAuthorityRevision += 1;
+      this.#clearWorkspaceAuthority();
       this.#window?.setCompanionWorkspace({ status: 'none' });
       return;
     }
-    this.#window?.setCompanionWorkspace({
-      status: 'authorizing',
-      running: snapshot.running,
-    });
-    const state = this.#runtime?.getState();
-    if (state?.kind !== 'ready' || this.#companionToken === '') {
-      this.#workspaceChangeMonitor?.close();
-      this.#workspaceChangeMonitor = undefined;
-      this.#workspaceInspector = undefined;
+    const reusable = reusableWorkspaceAuthority(this.#activeWorkspaceAuthority, snapshot);
+    if (reusable !== undefined && this.#workspaceInspector !== undefined) {
       this.#window?.setCompanionWorkspace({
-        status: 'unavailable',
+        status: 'ready',
+        sessionId: reusable.sessionId,
+        workspaceId: reusable.workspaceId,
+        title: reusable.title,
         running: snapshot.running,
       });
       return;
     }
-    const authority = await createRuntimeCompanionClient(this.#companionToken).authorizeWorkspace(
+    const requestRevision = ++this.#workspaceAuthorityRevision;
+    this.#clearWorkspaceAuthority();
+    this.#window?.setCompanionWorkspace({
+      status: 'authorizing',
+      running: snapshot.running,
+    });
+    await this.#authorizeWorkspace(snapshot, requestRevision, 0);
+  }
+
+  async #authorizeWorkspace(
+    snapshot: HarnessContextSnapshot,
+    requestRevision: number,
+    retryAttempt: number,
+  ): Promise<void> {
+    if (
+      snapshot.sessionId === undefined ||
+      !this.#desktopFeaturePreferences.workspaceReview ||
+      requestRevision !== this.#workspaceAuthorityRevision
+    ) return;
+    const state = this.#runtime?.getState();
+    if (state?.kind !== 'ready' || this.#companionToken === '') {
+      this.#window?.setCompanionWorkspace({
+        status: 'unavailable',
+        running: snapshot.running,
+      });
+      if (shouldRetryWorkspaceAuthority(retryAttempt)) {
+        this.#scheduleWorkspaceAuthorityRetry(snapshot, requestRevision, retryAttempt);
+      }
+      return;
+    }
+    const runtimeIdentity = { origin: state.origin, token: this.#companionToken };
+    const authority = await createRuntimeCompanionClient(runtimeIdentity.token).authorizeWorkspace(
       state.origin,
       {
         sessionId: snapshot.sessionId,
         ...(snapshot.workspaceId === undefined ? {} : { workspaceId: snapshot.workspaceId }),
       },
     );
-    if (requestRevision !== this.#workspaceAuthorityRevision) return;
+    const currentRuntime = this.#runtime?.getState();
+    if (
+      requestRevision !== this.#workspaceAuthorityRevision ||
+      !runtimeAuthorityIdentityMatches(
+        runtimeIdentity,
+        currentRuntime?.kind === 'ready'
+          ? { origin: currentRuntime.origin, token: this.#companionToken }
+          : undefined,
+      )
+    ) return;
     if (
       authority === undefined ||
       (snapshot.workspaceId !== undefined && authority.workspaceId !== snapshot.workspaceId)
     ) {
-      this.#workspaceChangeMonitor?.close();
-      this.#workspaceChangeMonitor = undefined;
-      this.#workspaceInspector = undefined;
       this.#window?.setCompanionWorkspace({
         status: 'unavailable',
         running: snapshot.running,
       });
+      if (shouldRetryWorkspaceAuthority(retryAttempt)) {
+        this.#scheduleWorkspaceAuthorityRetry(snapshot, requestRevision, retryAttempt);
+      }
       return;
     }
     this.#workspaceChangeMonitor?.close();
     this.#workspaceInspector = createWorkspaceInspector(authority.root);
+    this.#activeWorkspaceAuthority = {
+      ...authority,
+      sessionId: snapshot.sessionId,
+    };
     this.#workspaceChangeMonitor = createWorkspaceChangeMonitor(authority.root, () => {
       if (requestRevision === this.#workspaceAuthorityRevision) {
         this.#window?.notifyWorkspaceChanged();
@@ -434,6 +523,50 @@ export class AppCoordinator {
       title: authority.title,
       running: snapshot.running,
     });
+  }
+
+  #scheduleWorkspaceAuthorityRetry(
+    snapshot: HarnessContextSnapshot,
+    requestRevision: number,
+    retryAttempt: number,
+  ): void {
+    this.#clearWorkspaceAuthorityRetry();
+    this.#workspaceAuthorityRetryTimer = setTimeout(() => {
+      this.#workspaceAuthorityRetryTimer = undefined;
+      void this.#authorizeWorkspace(snapshot, requestRevision, retryAttempt + 1);
+    }, workspaceRetryDelay(retryAttempt));
+    this.#workspaceAuthorityRetryTimer.unref();
+  }
+
+  #clearWorkspaceAuthorityRetry(): void {
+    if (this.#workspaceAuthorityRetryTimer !== undefined) {
+      clearTimeout(this.#workspaceAuthorityRetryTimer);
+      this.#workspaceAuthorityRetryTimer = undefined;
+    }
+  }
+
+  #clearWorkspaceAuthority(): void {
+    this.#workspaceChangeMonitor?.close();
+    this.#workspaceChangeMonitor = undefined;
+    this.#workspaceInspector = undefined;
+    this.#activeWorkspaceAuthority = undefined;
+  }
+
+  #setDesktopFeaturePreferences(preferences: DesktopFeaturePreferences): void {
+    const previous = this.#desktopFeaturePreferences;
+    this.#desktopFeaturePreferences = preferences;
+    this.#featurePreferences?.update(preferences);
+    if (previous.workspaceReview === preferences.workspaceReview) return;
+    if (!preferences.workspaceReview) {
+      this.#workspaceAuthorityRevision += 1;
+      this.#clearWorkspaceAuthorityRetry();
+      this.#clearWorkspaceAuthority();
+      this.#window?.setCompanionWorkspace({ status: 'none' });
+      return;
+    }
+    if (this.#latestHarnessContext !== undefined) {
+      void this.#handleHarnessContext(this.#latestHarnessContext);
+    }
   }
 
   async #handleWorkspaceReviewRequest(
@@ -1115,6 +1248,7 @@ export class AppCoordinator {
     this.#quitting = true;
     this.#workspaceChangeMonitor?.close();
     this.#workspaceChangeMonitor = undefined;
+    this.#clearWorkspaceAuthorityRetry();
     this.#log?.write('app.quit');
     try {
       await this.#runtime?.stop('quit');
@@ -1137,6 +1271,12 @@ export class AppCoordinator {
     await this.#windowState?.flush().catch((error: unknown) => {
       this.#log?.write(
         'desktop.window-state-flush-error',
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    await this.#featurePreferences?.flush().catch((error: unknown) => {
+      this.#log?.write(
+        'desktop.feature-preferences-flush-error',
         error instanceof Error ? error.message : String(error),
       );
     });

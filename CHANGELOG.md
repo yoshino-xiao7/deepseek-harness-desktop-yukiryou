@@ -6,6 +6,26 @@
 
 ## [未发布]
 
+## [1.0.3] - 2026-08-26
+
+### Workspace Review
+
+- 修复 Runtime 短暂重连或切换会话后 Workspace Review 长时间停在“正在重新确认工作区”的问题：首次授权请求使用 2 秒上限，失败会立即退出阻塞状态，并在后台按最多 5 个阶段有界重试。
+- Runtime 停止、失败或身份变化时会清除旧令牌、工作区能力、文件监视器和待执行重试；恢复后只接受当前会话与工作区身份对应的授权，避免旧响应重新挂回界面。
+- 修复从 Harness 使用文件搜索快捷键时，WebContents 切焦未触发后续 `focus` 事件而偶发丢失快捷键的问题。
+- “通用设置”新增默认开启的 Workspace Review 开关；关闭后隐藏入口、收起面板并释放工作区能力，且不能通过旧入口再次展开。
+
+### 账户概览与界面
+
+- “通用设置”新增默认开启的账户余额开关；关闭后隐藏侧栏余额与今日估算消耗，同时停止主进程查询并使在途响应失效，避免与同类插件重复或冲突。
+- 两个开关使用 Harness 原生通用设置行的字号、字重、间距和颜色；设置弹窗继续保留 Harness 原生纯 `×` 关闭按钮，不注入额外文字样式。
+- 桌面功能偏好使用原子持久化，快速连续切换时按最新状态生效，重启应用后保持用户选择。
+
+### 验证
+
+- 新增偏好持久化、Runtime 身份隔离、授权超时与恢复、快速切换，以及设置插件 UI 契约的回归测试。
+- macOS Apple Silicon 与 Windows 11 x64 仍须完成签名、公证、安装、修复安装、便携版、卸载和自动更新元数据验证后才允许公开。
+
 ## [1.0.2] - 2026-08-25
 
 ### 自动更新
@@ -253,6 +273,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[1.0.3]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.3
 [1.0.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.2
 [1.0.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.1
 [1.0.0]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.0

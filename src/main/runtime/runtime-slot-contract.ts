@@ -121,6 +121,17 @@ export const RUNTIME_DESKTOP_SLOT_CONTRACT = [
     childSlots: ['settings.general.item', 'settings.plugins.tab'],
   },
   {
+    key: 'settings.general.item',
+    purpose: 'One additive row inside the built-in General settings section.',
+    kind: 'list',
+    scope: 'root',
+    ownerProps: ['children?: never'],
+    occupant: [],
+    declaredBy: 'settings.section general entry',
+    replaceRisk: 'none',
+    childSlots: [],
+  },
+  {
     key: 'settings.plugins.tab',
     purpose: 'One additive page inside the built-in Plugins settings section.',
     kind: 'list',

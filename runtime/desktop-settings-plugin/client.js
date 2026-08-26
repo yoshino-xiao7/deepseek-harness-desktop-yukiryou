@@ -10,6 +10,10 @@ window.__ModuleLoader__.load({
     const namespace = 'settings.desktop';
     const dictionaries = {
       zh: {
+        'features.balance.title': '显示账户余额',
+        'features.balance.description': '在主侧栏显示账户余额与今日消耗；关闭后也停止桌面端余额查询，避免与插件提供的同类功能冲突。',
+        'features.workspace.title': '启用 Workspace Review',
+        'features.workspace.description': '显示右侧只读工作区、变更和文件预览；关闭后隐藏入口且不能再展开工作区。',
         'plugins.tab': '管理说明',
         'plugins.title': '插件管理',
         'plugins.description': '基于当前 Harness Loader 的真实快照，说明每个插件的来源、状态和为什么不能操作。',
@@ -72,6 +76,10 @@ window.__ModuleLoader__.load({
         'about.footer': 'Built with DeepSeek Harness · Designed by YukiRyou',
       },
       en: {
+        'features.balance.title': 'Show account balance',
+        'features.balance.description': 'Show balance and today’s spend in the main sidebar. Turning this off also stops desktop balance requests to avoid conflicts with similar plugins.',
+        'features.workspace.title': 'Enable Workspace Review',
+        'features.workspace.description': 'Show the read-only workspace, changes, and file preview panel. Turning this off hides and disables its entry point.',
         'plugins.tab': 'Management',
         'plugins.title': 'Plugin management',
         'plugins.description': 'A live Harness Loader snapshot that explains each plugin’s provenance, state, and available actions.',
@@ -173,6 +181,75 @@ window.__ModuleLoader__.load({
         font-size: 20px;
         font-weight: 600;
         line-height: 30px;
+      }
+      .dsh-desktop-feature-settings {
+        width: 100%;
+        border-bottom: 1px solid var(--dsw-alias-border-l2);
+      }
+      .dsh-desktop-feature-setting {
+        display: flex;
+        padding: 16px 0;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .dsh-desktop-feature-setting + .dsh-desktop-feature-setting {
+        border-top: 1px solid var(--dsw-alias-border-l2);
+      }
+      .dsh-desktop-feature-copy {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        flex-direction: column;
+        gap: 4px;
+        padding-right: 48px;
+      }
+      .dsh-desktop-feature-title {
+        display: block;
+        color: var(--dsw-alias-label-primary);
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 22px;
+      }
+      .dsh-desktop-feature-description {
+        display: block;
+        max-width: 560px;
+        color: var(--dsw-alias-label-tertiary);
+        font-size: 12px;
+        font-weight: 400;
+        line-height: 18px;
+      }
+      .dsh-desktop-feature-switch {
+        position: relative;
+        width: 42px;
+        height: 24px;
+        flex: none;
+        border: 0;
+        border-radius: 999px;
+        background: var(--dsw-alias-border-l3, rgb(127 127 127 / 28%));
+        cursor: pointer;
+      }
+      .dsh-desktop-feature-switch::after {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
+        content: '';
+        transition: transform 150ms ease;
+      }
+      .dsh-desktop-feature-switch[aria-checked='true'] {
+        background: var(--dsw-static-deepseek-500, #4d6bfe);
+      }
+      .dsh-desktop-feature-switch[aria-checked='true']::after {
+        transform: translateX(18px);
+      }
+      .dsh-desktop-feature-switch:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--dsw-static-deepseek-500, #4d6bfe) 48%, transparent);
+        outline-offset: 2px;
       }
       .dsh-desktop-settings-description {
         margin: 6px 0 24px;
@@ -599,6 +676,51 @@ window.__ModuleLoader__.load({
       return 'external';
     }
 
+    function DesktopFeatureSettingsRow({ t }) {
+      const bridge = window.deepSeekYukiRyouFeatures;
+      const [features, setFeatures] = React.useState(
+        () => bridge?.getSnapshot() ?? { accountBalance: true, workspaceReview: true },
+      );
+      const featuresRef = React.useRef(features);
+      React.useEffect(
+        () => bridge?.subscribe((next) => {
+          featuresRef.current = next;
+          setFeatures(next);
+        }),
+        [bridge],
+      );
+      const setting = (key, title, description) => React.createElement(
+        'div',
+        { className: 'dsh-desktop-feature-setting', key },
+        React.createElement(
+          'span',
+          { className: 'dsh-desktop-feature-copy' },
+          React.createElement('div', { className: 'dsh-desktop-feature-title' }, t(title)),
+          React.createElement('div', { className: 'dsh-desktop-feature-description' }, t(description)),
+        ),
+        React.createElement('button', {
+          type: 'button',
+          role: 'switch',
+          className: 'dsh-desktop-feature-switch',
+          'aria-label': t(title),
+          'aria-checked': features[key],
+          onClick: () => {
+            const enabled = !featuresRef.current[key];
+            const next = { ...featuresRef.current, [key]: enabled };
+            featuresRef.current = next;
+            setFeatures(next);
+            bridge?.set({ key, enabled });
+          },
+        }),
+      );
+      return React.createElement(
+        'div',
+        { className: 'dsh-desktop-feature-settings' },
+        setting('accountBalance', 'features.balance.title', 'features.balance.description'),
+        setting('workspaceReview', 'features.workspace.title', 'features.workspace.description'),
+      );
+    }
+
     function explainPlugin(entry) {
       const ownership = pluginOwnership(entry.moduleName);
       const state = !entry.enabled
@@ -954,6 +1076,17 @@ window.__ModuleLoader__.load({
             inject: () => ({ list: listPlugins }),
           },
           PluginManagementTab,
+        ),
+      );
+      ctx.slots.inject('settings.general.item', () =>
+        ctx.slots.register(
+          {
+            name: 'settings.general.item',
+            id: 'desktop-features',
+            order: 80,
+            locale: namespace,
+          },
+          DesktopFeatureSettingsRow,
         ),
       );
       ctx.slots.inject('settings.section', () =>

@@ -86,6 +86,13 @@ import {
   validatedManagedPluginRollbackRequest,
   validatedManagedPluginRollbackResult,
 } from '../../shared/managed-plugin-inventory.js';
+import {
+  DEFAULT_DESKTOP_FEATURE_PREFERENCES,
+  DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL,
+  DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL,
+  type DesktopFeaturePreferences,
+  validatedDesktopFeaturePreferenceCommand,
+} from '../../shared/desktop-feature-preferences.js';
 
 export interface HarnessProductBridgeOptions {
   readonly webContents: WebContents;
@@ -98,6 +105,9 @@ export interface HarnessProductBridgeOptions {
   readonly onAccountBalanceRequest: (
     force: boolean,
   ) => Promise<AccountBalanceSnapshot>;
+  readonly onFeaturePreferencesChange: (
+    preferences: DesktopFeaturePreferences,
+  ) => void;
   readonly onHarnessContext: (snapshot: HarnessContextSnapshot) => void;
   readonly onHarnessReviewIntent: (
     intent: ChangedFileReviewIntent,
@@ -127,6 +137,7 @@ export interface HarnessProductBridgeOptions {
 export interface HarnessProductBridge {
   setTrustedOrigin(origin: TrustedHarnessOrigin | undefined): void;
   setUpdateState(state: DesktopUpdateState): void;
+  setFeaturePreferences(preferences: DesktopFeaturePreferences): void;
   restoreAfterLoad(): void;
   dispose(): void;
 }
@@ -151,6 +162,7 @@ export function createHarnessProductBridge(
   let trustedOrigin: TrustedHarnessOrigin | undefined;
   let trustedOriginRevision = 0;
   let updateState: DesktopUpdateState | undefined;
+  let featurePreferences = DEFAULT_DESKTOP_FEATURE_PREFERENCES;
   let balanceRequestRevision = 0;
   let lastHarnessContextRevision = -1;
   let contextRateWindowStartedAt = 0;
@@ -271,6 +283,19 @@ export function createHarnessProductBridge(
     if (channel === UPDATE_COMMAND_CHANNEL) {
       const command = validatedUpdateCommand(value);
       if (command !== undefined) options.onUpdateCommand(command);
+      return;
+    }
+    if (channel === DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL) {
+      const command = validatedDesktopFeaturePreferenceCommand(value);
+      if (command === undefined) return;
+      featurePreferences = { ...featurePreferences, [command.key]: command.enabled };
+      if (command.key === 'accountBalance' && !command.enabled) {
+        balanceRequestRevision += 1;
+      }
+      options.onFeaturePreferencesChange(featurePreferences);
+      if (!webContents.isDestroyed()) {
+        webContents.send(DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL, featurePreferences);
+      }
       return;
     }
     if (channel === HARNESS_CONTEXT_CHANNEL) {
@@ -542,6 +567,7 @@ export function createHarnessProductBridge(
     if (channel !== ACCOUNT_BALANCE_REQUEST_CHANNEL || typeof value !== 'boolean') {
       return;
     }
+    if (!featurePreferences.accountBalance) return;
     const revision = ++balanceRequestRevision;
     webContents.send(ACCOUNT_BALANCE_STATE_CHANNEL, { status: 'loading' });
     void options.onAccountBalanceRequest(value).then((snapshot) => {
@@ -613,10 +639,19 @@ export function createHarnessProductBridge(
       updateState = state;
       if (!webContents.isDestroyed()) webContents.send(UPDATE_STATE_CHANNEL, state);
     },
+    setFeaturePreferences(preferences) {
+      featurePreferences = preferences;
+      if (!webContents.isDestroyed()) {
+        webContents.send(DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL, preferences);
+      }
+    },
     restoreAfterLoad() {
       lastHarnessContextRevision = -1;
       if (updateState !== undefined && !webContents.isDestroyed()) {
         webContents.send(UPDATE_STATE_CHANNEL, updateState);
+      }
+      if (!webContents.isDestroyed()) {
+        webContents.send(DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL, featurePreferences);
       }
     },
     dispose() {
