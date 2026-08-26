@@ -19,6 +19,10 @@ interface WorkflowJob {
 }
 
 interface ReleaseWorkflow {
+  concurrency?: {
+    group?: string;
+    'cancel-in-progress'?: boolean;
+  };
   jobs?: Record<string, WorkflowJob>;
 }
 
@@ -36,6 +40,10 @@ describe('macOS release workflow contract', () => {
       with?: Record<string, string>;
     };
 
+    expect(workflow.concurrency).toEqual({
+      group: 'release-desktop-${{ inputs.version }}',
+      'cancel-in-progress': false,
+    });
     expect(releaseSource).not.toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
     expect(releaseSource).toContain('gh api "repos/${GITHUB_REPOSITORY}/releases/latest"');
     expect(releaseSource).toContain('tests/release/automatic-update.test.ts');
