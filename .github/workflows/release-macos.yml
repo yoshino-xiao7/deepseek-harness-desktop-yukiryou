@@ -397,8 +397,17 @@ jobs:
           DSH_PREVIOUS_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
           DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
           DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION: ${{ env.RELEASE_VERSION }}
+          DSH_AUTOMATIC_UPDATE_DIAGNOSTICS: ${{ runner.temp }}/update-gate/diagnostics
           DSH_DESKTOP_DISTRIBUTION_REGION: china
         run: pnpm exec vitest run tests/release/automatic-update.test.ts --no-file-parallelism
+      - name: Capture Squirrel.Mac diagnostics
+        if: ${{ failure() }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/update-gate/diagnostics"
+          cp -R "${HOME}/Library/Caches/com.yukiryou.deepseek.yukiryou.ShipIt" \
+            "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt" 2>/dev/null || true
+          defaults read com.yukiryou.deepseek.yukiryou.ShipIt \
+            > "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt-preferences.txt" 2>&1 || true
       - name: Upload updater gate diagnostics
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4

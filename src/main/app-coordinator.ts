@@ -129,6 +129,7 @@ import {
   DEFAULT_DESKTOP_FEATURE_PREFERENCES,
   type DesktopFeaturePreferences,
 } from '../shared/desktop-feature-preferences.js';
+import { acquireSingleInstanceLock } from './single-instance-lock.js';
 
 const moduleDirectory = __dirname;
 export class AppCoordinator {
@@ -168,7 +169,10 @@ export class AppCoordinator {
   #distributionRegion: DistributionRegion = 'global';
 
   async run(): Promise<void> {
-    if (!app.requestSingleInstanceLock()) {
+    if (!await acquireSingleInstanceLock({
+      request: () => app.requestSingleInstanceLock(),
+      maxAttempts: process.platform === 'darwin' && app.isPackaged ? 9 : 1,
+    })) {
       app.quit();
       return;
     }
