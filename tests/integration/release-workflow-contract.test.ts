@@ -80,6 +80,8 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('Previous release asset SHA-256 mismatch');
     expect(windowsGate).toContain('X509Store');
     expect(windowsGate).toContain('StoreLocation]::CurrentUser');
+    expect(windowsGate).toContain('StoreName]::TrustedPeople');
+    expect(windowsGate).not.toContain('StoreName]::Root');
     expect(windowsGate).toContain('OpenFlags]::ReadWrite');
     expect(windowsGate).not.toContain('certutil.exe');
     expect(windowsGate).not.toContain('Import-Certificate');

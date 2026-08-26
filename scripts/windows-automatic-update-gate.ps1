@@ -66,7 +66,7 @@ if ($Action -eq 'Cleanup') {
       Stop-Process -Id ([int]$state.serverPid) -Force -ErrorAction SilentlyContinue
     }
     if ($state.certificateThumbprint) {
-      $certificatePath = "Cert:\CurrentUser\Root\$($state.certificateThumbprint)"
+      $certificatePath = "Cert:\CurrentUser\TrustedPeople\$($state.certificateThumbprint)"
       if (Test-Path -LiteralPath $certificatePath) {
         Remove-Item -LiteralPath $certificatePath -Force
       }
@@ -208,20 +208,20 @@ $trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certifi
   $certificatePath
 )
 $certificateThumbprint = $trustedCertificate.Thumbprint
-$rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-  [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+$trustedPeopleStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+  [System.Security.Cryptography.X509Certificates.StoreName]::TrustedPeople,
   [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
 )
 try {
-  $rootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-  $rootStore.Add($trustedCertificate)
+  $trustedPeopleStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+  $trustedPeopleStore.Add($trustedCertificate)
 } finally {
-  $rootStore.Close()
+  $trustedPeopleStore.Close()
   $trustedCertificate.Dispose()
 }
-$trustedCertificatePath = "Cert:\CurrentUser\Root\$certificateThumbprint"
+$trustedCertificatePath = "Cert:\CurrentUser\TrustedPeople\$certificateThumbprint"
 if (-not (Test-Path -LiteralPath $trustedCertificatePath)) {
-  throw 'The isolated update mirror certificate was not added to the current-user root store'
+  throw 'The isolated update mirror certificate was not added to the current-user trusted-people store'
 }
 Write-Output "Trusted the isolated update mirror certificate"
 @{ certificateThumbprint = $certificateThumbprint } |
