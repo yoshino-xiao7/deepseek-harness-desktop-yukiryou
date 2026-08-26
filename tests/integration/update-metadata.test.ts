@@ -44,6 +44,29 @@ describe('cross-platform update metadata', () => {
       .resolves.toContain(`version: ${version}`);
   });
 
+  it('can generate one platform gate without requiring the other platform artifact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'update-metadata-target-'));
+    const assets = join(root, 'assets');
+    const output = join(root, 'output');
+    await mkdir(assets);
+    const version = '1.2.4';
+    await writeFile(
+      join(assets, `DeepSeek.YukiRyou-${version}-win32-x64-Setup.exe`),
+      'windows-only-candidate',
+    );
+
+    await writeUpdateMetadata({
+      sourceDirectory: assets,
+      outputDirectory: output,
+      version,
+      target: 'win32-x64',
+      origin: 'https://download-cn.suzuki.ink',
+    });
+
+    await expect(readFile(join(output, 'win32-x64', 'latest.yml'), 'utf8'))
+      .resolves.toContain(`version: ${version}`);
+  });
+
   it('runs the China mirror CLI with the repository Node runtime', async () => {
     const root = await mkdtemp(join(tmpdir(), 'china-mirror-cli-'));
     const assets = join(root, 'assets');

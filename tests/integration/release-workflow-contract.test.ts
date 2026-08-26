@@ -23,6 +23,37 @@ interface ReleaseWorkflow {
 }
 
 describe('macOS release workflow contract', () => {
+  it('blocks release on a real previous-public-version automatic update and relaunch gate', async () => {
+    const [releaseSource, windowsSource, automaticUpdateTest] = await Promise.all([
+      readFile(join(process.cwd(), '.github', 'workflows', 'release-macos.yml'), 'utf8'),
+      readFile(join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'), 'utf8'),
+      readFile(join(process.cwd(), 'tests', 'release', 'automatic-update.test.ts'), 'utf8'),
+    ]);
+    const workflow = parse(releaseSource) as ReleaseWorkflow;
+    const release = workflow.jobs?.release;
+    const windows = workflow.jobs?.windows as WorkflowJob & {
+      with?: Record<string, string>;
+    };
+
+    expect(releaseSource).not.toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
+    expect(releaseSource).toContain('gh api "repos/${GITHUB_REPOSITORY}/releases/latest"');
+    expect(releaseSource).toContain('tests/release/automatic-update.test.ts');
+    expect(releaseSource).toContain('DSH_DESKTOP_DISTRIBUTION_REGION: china');
+    expect(releaseSource).toContain('download-cn.suzuki.ink');
+    expect(windowsSource).toContain('tests/release/automatic-update.test.ts');
+    expect(windowsSource).toContain('DSH_DESKTOP_DISTRIBUTION_REGION: china');
+    expect(windowsSource).toContain("inputs.release_version != ''");
+    expect(windows.with?.release_version).toBe('${{ inputs.version }}');
+    expect(release?.needs).toEqual(expect.arrayContaining([
+      'verify_final', 'windows', 'verify_macos_automatic_update',
+    ]));
+    expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'check')");
+    expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'install')");
+    expect(automaticUpdateTest).toContain('updates[value]()');
+    expect(automaticUpdateTest).toContain('relaunch');
+    expect(automaticUpdateTest).not.toContain("DSH_DESKTOP_E2E: '1'");
+  });
+
   it('keeps both READMEs linked and the current release notes bilingual', async () => {
     const packageJson = JSON.parse(
       await readFile(join(process.cwd(), 'package.json'), 'utf8'),
@@ -60,7 +91,11 @@ describe('macOS release workflow contract', () => {
       .map((step) => step.run?.trim() ?? '')
       .join('\n');
 
-    expect(release?.needs).toEqual(['verify_final', 'windows']);
+    expect(release?.needs).toEqual([
+      'verify_final',
+      'windows',
+      'verify_macos_automatic_update',
+    ]);
     expect(commands).toContain('Windows candidate does not match this release');
     expect(commands).toContain('-win32-x64-Setup.exe');
     expect(commands).toContain('-portable.zip');
@@ -319,7 +354,7 @@ describe('macOS release workflow contract', () => {
       step.run?.includes('tests/e2e/session-selection-restart.test.ts'),
     );
     const downloadIndex = steps.findIndex((step) =>
-      step.run?.includes('gh release download "v${UPGRADE_FROM_VERSION}"'),
+      step.run?.includes('gh release download "${previous_tag}"'),
     );
     const upgradeIndex = steps.findIndex(
       (step) => step.run?.trim() === 'pnpm test:upgrade',
@@ -329,9 +364,10 @@ describe('macOS release workflow contract', () => {
     expect(downloadIndex).toBeGreaterThan(restartIndex);
     expect(upgradeIndex).toBeGreaterThan(downloadIndex);
     expect(steps[downloadIndex]?.run).toContain(
-      '${ARTIFACT_NAME}-darwin-arm64-${UPGRADE_FROM_VERSION}.zip',
+      '${ARTIFACT_NAME}-darwin-arm64-${previous_version}.zip',
     );
-    expect(workflowSource).toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
+    expect(workflowSource).toContain('repos/${GITHUB_REPOSITORY}/releases/latest');
+    expect(workflowSource).not.toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
     expect(workflow.jobs?.soak_candidate?.needs).toBe('verify_candidate');
     expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
   });

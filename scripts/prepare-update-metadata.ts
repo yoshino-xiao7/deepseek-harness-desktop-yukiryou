@@ -7,7 +7,17 @@ await writeUpdateMetadata({
   outputDirectory: resolve(requiredArgument('--output')),
   version: requiredArgument('--version'),
   origin: argument('--origin'),
+  target: targetArgument(),
 });
+
+function targetArgument(): 'darwin-arm64' | 'win32-x64' | undefined {
+  const value = argument('--target');
+  if (value === undefined) return undefined;
+  if (value !== 'darwin-arm64' && value !== 'win32-x64') {
+    throw new Error(`Unsupported --target=${value}`);
+  }
+  return value;
+}
 
 function requiredArgument(name: string): string {
   const value = argument(name);

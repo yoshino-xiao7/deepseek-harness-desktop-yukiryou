@@ -36,6 +36,12 @@ export interface AppUpdaterOptions {
     platform: NodeJS.Platform,
     source: AllPublishOptions,
   ) => NativeUpdateClient;
+  readonly macInstallReadiness?: MacInstallReadiness;
+}
+
+export interface MacInstallReadiness {
+  on(event: 'update-downloaded', listener: () => void): unknown;
+  removeListener(event: 'update-downloaded', listener: () => void): unknown;
 }
 
 export function createAppUpdater(options: AppUpdaterOptions): AppUpdater {
@@ -48,6 +54,7 @@ export function createAppUpdater(options: AppUpdaterOptions): AppUpdater {
 export interface NativeUpdateClient {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
+  autoRunAppAfterInstall: boolean;
   channel: string | null;
   allowDowngrade: boolean;
   disableDifferentialDownload: boolean;
@@ -63,11 +70,14 @@ export interface NativeUpdateClient {
 export class CrossPlatformAppUpdater implements AppUpdater {
   readonly #options: AppUpdaterOptions;
   readonly #native: NativeUpdateClient;
+  readonly #macInstallReadiness: MacInstallReadiness | undefined;
   readonly #listeners = new Set<(state: DesktopUpdateState) => void>();
   readonly #sources: readonly DesktopUpdateSource[];
   #sourceIndex = 0;
   #checking = false;
   #recovering = false;
+  #macInstallReady = false;
+  #macDownloadedInfo: UpdateInfo | undefined;
   #state: DesktopUpdateState;
   #initialTimer: ReturnType<typeof setTimeout> | undefined;
   #intervalTimer: ReturnType<typeof setInterval> | undefined;
@@ -87,6 +97,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
         : new MacUpdater(source));
     this.#native.autoDownload = true;
     this.#native.autoInstallOnAppQuit = true;
+    this.#native.autoRunAppAfterInstall = true;
     this.#native.channel = 'latest';
     this.#native.allowDowngrade = false;
     this.#native.disableDifferentialDownload = true;
@@ -94,10 +105,18 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     this.#native.on('update-not-available', this.#handleNotAvailable);
     this.#native.on('update-downloaded', this.#handleDownloaded);
     this.#native.on('error', this.#handleError);
+    this.#macInstallReadiness = options.platform === 'darwin'
+      ? options.macInstallReadiness ?? autoUpdater
+      : undefined;
+    this.#macInstallReadiness?.on('update-downloaded', this.#handleMacInstallReady);
     this.#state = { status: 'idle', currentVersion: options.currentVersion };
   }
 
   readonly #handleAvailable = (info: UpdateInfo): void => {
+    if (this.#options.platform === 'darwin') {
+      this.#macInstallReady = false;
+      this.#macDownloadedInfo = undefined;
+    }
     this.#setState({
       status: 'downloading',
       currentVersion: this.#options.currentVersion,
@@ -116,6 +135,25 @@ export class CrossPlatformAppUpdater implements AppUpdater {
   };
 
   readonly #handleDownloaded = (info: UpdateInfo): void => {
+    if (this.#options.platform === 'darwin') {
+      // MacUpdater emits its public event before Squirrel.Mac has fetched,
+      // unpacked, and validated the ZIP through Electron's native updater.
+      // Offering restart at this point can hide the app for minutes while no
+      // installer owns the quit yet. Wait for the native readiness event.
+      this.#macDownloadedInfo = info;
+      if (!this.#macInstallReady) return;
+    }
+    this.#publishDownloaded(info);
+  };
+
+  readonly #handleMacInstallReady = (): void => {
+    this.#macInstallReady = true;
+    if (this.#macDownloadedInfo !== undefined) {
+      this.#publishDownloaded(this.#macDownloadedInfo);
+    }
+  };
+
+  #publishDownloaded(info: UpdateInfo): void {
     this.#setState({
       status: 'downloaded',
       currentVersion: this.#options.currentVersion,
@@ -123,7 +161,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
       ...optionalReleaseNotes(info),
       checkedAt: new Date().toISOString(),
     });
-  };
+  }
 
   readonly #handleError = (error: Error): void => {
     if (this.#checking || this.#recovering) return;
@@ -191,6 +229,10 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     this.#native.removeListener('update-not-available', this.#handleNotAvailable);
     this.#native.removeListener('update-downloaded', this.#handleDownloaded);
     this.#native.removeListener('error', this.#handleError);
+    this.#macInstallReadiness?.removeListener(
+      'update-downloaded',
+      this.#handleMacInstallReady,
+    );
     this.#listeners.clear();
   }
 

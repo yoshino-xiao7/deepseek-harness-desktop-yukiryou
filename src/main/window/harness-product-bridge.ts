@@ -69,6 +69,8 @@ import {
   MANAGED_PLUGIN_SET_ENABLED_RESULT_CHANNEL,
   MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL,
   MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL,
+  EXTERNAL_PLUGIN_CONTROL_REQUEST_CHANNEL,
+  EXTERNAL_PLUGIN_CONTROL_RESULT_CHANNEL,
   type ManagedPluginInventoryRequest,
   type ManagedPluginInventoryResult,
   type ManagedPluginRemoveRequest,
@@ -77,6 +79,8 @@ import {
   type ManagedPluginSetEnabledResult,
   type ManagedPluginRollbackRequest,
   type ManagedPluginRollbackResult,
+  type ExternalPluginControlRequest,
+  type ExternalPluginControlResult,
   validatedManagedPluginInventoryRequest,
   validatedManagedPluginInventoryResult,
   validatedManagedPluginRemoveRequest,
@@ -85,6 +89,8 @@ import {
   validatedManagedPluginSetEnabledResult,
   validatedManagedPluginRollbackRequest,
   validatedManagedPluginRollbackResult,
+  validatedExternalPluginControlRequest,
+  validatedExternalPluginControlResult,
 } from '../../shared/managed-plugin-inventory.js';
 import {
   DEFAULT_DESKTOP_FEATURE_PREFERENCES,
@@ -132,6 +138,9 @@ export interface HarnessProductBridgeOptions {
   readonly onManagedPluginRollback: (
     request: ManagedPluginRollbackRequest,
   ) => Promise<ManagedPluginRollbackResult>;
+  readonly onExternalPluginControl: (
+    request: ExternalPluginControlRequest,
+  ) => Promise<ExternalPluginControlResult>;
 }
 
 export interface HarnessProductBridge {
@@ -251,6 +260,13 @@ export function createHarnessProductBridge(
     const validated = validatedManagedPluginRollbackResult(result);
     if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
       webContents.send(MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL, validated);
+    }
+  };
+
+  const sendExternalControlResult = (result: ExternalPluginControlResult): void => {
+    const validated = validatedExternalPluginControlResult(result);
+    if (!disposed && validated !== undefined && !webContents.isDestroyed()) {
+      webContents.send(EXTERNAL_PLUGIN_CONTROL_RESULT_CHANNEL, validated);
     }
   };
 
@@ -556,6 +572,47 @@ export function createHarnessProductBridge(
         .catch(() => {
           if (originRevision !== trustedOriginRevision) return;
           sendManagedRollbackResult({
+            requestId: request.requestId,
+            status: 'unavailable',
+            reason: 'failed',
+          });
+        })
+        .finally(() => { managedMutationActive = false; });
+      return;
+    }
+    if (channel === EXTERNAL_PLUGIN_CONTROL_REQUEST_CHANNEL) {
+      const request = validatedExternalPluginControlRequest(value);
+      if (request === undefined) return;
+      if (trustedOrigin === undefined) {
+        sendExternalControlResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'runtime-unavailable',
+        });
+        return;
+      }
+      if (!acceptManagedExecute() || managedMutationActive) {
+        sendExternalControlResult({
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'busy',
+        });
+        return;
+      }
+      const originRevision = trustedOriginRevision;
+      managedMutationActive = true;
+      void options.onExternalPluginControl(request)
+        .then((result) => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendExternalControlResult(
+            result.requestId === request.requestId
+              ? result
+              : { requestId: request.requestId, status: 'unavailable', reason: 'failed' },
+          );
+        })
+        .catch(() => {
+          if (originRevision !== trustedOriginRevision) return;
+          sendExternalControlResult({
             requestId: request.requestId,
             status: 'unavailable',
             reason: 'failed',

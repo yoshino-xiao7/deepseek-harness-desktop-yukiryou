@@ -93,6 +93,8 @@ import type {
   ManagedPluginSetEnabledResult,
   ManagedPluginRollbackRequest,
   ManagedPluginRollbackResult,
+  ExternalPluginControlRequest,
+  ExternalPluginControlResult,
 } from '../../shared/managed-plugin-inventory.js';
 import { TOOLBAR_LOCALE_CHANNEL, type DesktopLocale } from '../../shared/locale-sync.js';
 import type { DesktopWindowState } from './window-state.js';
@@ -161,6 +163,9 @@ export interface DesktopWindowOptions {
   readonly onManagedPluginRollback: (
     request: ManagedPluginRollbackRequest,
   ) => Promise<ManagedPluginRollbackResult>;
+  readonly onExternalPluginControl: (
+    request: ExternalPluginControlRequest,
+  ) => Promise<ExternalPluginControlResult>;
 }
 
 export function createDesktopWindow(
@@ -251,6 +256,7 @@ class ElectronDesktopWindow implements DesktopWindow {
       onManagedPluginRemove: options.onManagedPluginRemove,
       onManagedPluginSetEnabled: options.onManagedPluginSetEnabled,
       onManagedPluginRollback: options.onManagedPluginRollback,
+      onExternalPluginControl: options.onExternalPluginControl,
     });
     this.#productBridge.setFeaturePreferences(this.#featurePreferences);
     this.#window.contentView.addChildView(this.#harnessView);

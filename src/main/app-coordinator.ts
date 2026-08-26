@@ -55,6 +55,10 @@ import {
 } from './runtime/managed-plugin-rollback.js';
 import { createRuntimeStderrScrubber } from './runtime/runtime-stderr-scrubber.js';
 import {
+  createExternalPluginControl,
+  type ExternalPluginControl,
+} from './runtime/external-plugin-control.js';
+import {
   resolveStableRuntimePort,
   StableRuntimePortOccupiedError,
 } from './runtime/runtime-port.js';
@@ -101,6 +105,8 @@ import type {
   ManagedPluginSetEnabledResult,
   ManagedPluginRollbackRequest,
   ManagedPluginRollbackResult,
+  ExternalPluginControlRequest,
+  ExternalPluginControlResult,
 } from '../shared/managed-plugin-inventory.js';
 import {
   WINDOW_MENU_CHANNEL,
@@ -155,6 +161,7 @@ export class AppCoordinator {
   #managedPluginRemoval: ManagedPluginRemoval | undefined;
   #managedPluginActivation: ManagedPluginActivation | undefined;
   #managedPluginRollback: ManagedPluginRollback | undefined;
+  #externalPluginControl: ExternalPluginControl | undefined;
   #pluginRestartScheduled = false;
   #runtimeRoot = '';
   #carrierMode: ReturnType<typeof resolveDesktopCarrierMode> = 'legacy';
@@ -192,6 +199,11 @@ export class AppCoordinator {
     });
     const userData = app.getPath('userData');
     const runtimeHome = join(userData, 'runtime');
+    const runtimeRoot = app.isPackaged
+      ? join(process.resourcesPath, 'runtime')
+      : join(app.getAppPath(), 'resources', 'runtime');
+    this.#runtimeRoot = runtimeRoot;
+    this.#externalPluginControl = createExternalPluginControl({ runtimeHome, runtimeRoot });
     const logDirectory = join(userData, 'logs');
     await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
     this.#log = await createAppLog(logDirectory);
@@ -262,6 +274,7 @@ export class AppCoordinator {
       onManagedPluginRemove: (request) => this.#removeManagedPlugin(request),
       onManagedPluginSetEnabled: (request) => this.#setManagedPluginEnabled(request),
       onManagedPluginRollback: (request) => this.#rollbackManagedPlugin(request),
+      onExternalPluginControl: (request) => this.#controlExternalPlugin(request),
     });
     await this.#window.showLoading();
 
@@ -326,15 +339,12 @@ export class AppCoordinator {
       this.#notifyPreferenceRecovery(recoveredPreferences);
     }
 
-    const runtimeRoot = app.isPackaged
-      ? join(process.resourcesPath, 'runtime')
-      : join(app.getAppPath(), 'resources', 'runtime');
-    this.#runtimeRoot = runtimeRoot;
     await ensureBundledRuntimeExtensions(runtimeHome, runtimeRoot);
+    const externalPluginPatches = await this.#externalPluginControl.patchPaths();
     const runtimeCommand = createHarnessRuntimeCommand(
       runtimeRoot,
       carrierMode,
-      managedPluginPatches,
+      [...managedPluginPatches, ...externalPluginPatches],
     );
     this.#runtime = createRuntimeSupervisor({
       command: runtimeCommand.command,
@@ -676,7 +686,8 @@ export class AppCoordinator {
     }
     try {
       const snapshot = await bootstrap.inventory();
-      return { requestId: request.requestId, status: 'ready', ...snapshot };
+      const externalEntries = await this.#externalPluginControl?.inventory() ?? [];
+      return { requestId: request.requestId, status: 'ready', ...snapshot, externalEntries };
     } catch (error) {
       this.#log?.write(
         'plugin-profile.inventory-failed',
@@ -745,6 +756,76 @@ export class AppCoordinator {
       `package=${request.packageName} status=${result.status}${result.status === 'unavailable' ? ` reason=${result.reason}` : ''}`,
     );
     return result;
+  }
+
+  async #controlExternalPlugin(
+    request: ExternalPluginControlRequest,
+  ): Promise<ExternalPluginControlResult> {
+    const control = this.#externalPluginControl;
+    if (control === undefined || this.#runtime === undefined) {
+      return { requestId: request.requestId, status: 'unavailable', reason: 'runtime-unavailable' };
+    }
+    let entry;
+    try {
+      entry = (await control.inventory()).find(
+        (candidate) => candidate.packageName === request.packageName &&
+          candidate.version === request.version && candidate.entryIds.includes(request.entryId),
+      );
+    } catch {
+      entry = undefined;
+    }
+    if (entry === undefined || !entry.allowedActions.includes(request.action)) {
+      return { requestId: request.requestId, status: 'unavailable', reason: 'identity-mismatch' };
+    }
+    const confirmed = await this.#confirmExternalPluginControl(request);
+    if (!confirmed) return { requestId: request.requestId, status: 'cancelled' };
+    try {
+      if (request.action === 'uninstall') {
+        await this.#runtime.stop('restart');
+        await control.remove(request);
+      } else {
+        await control.setEnabled({ ...request, enabled: request.action === 'enable' });
+      }
+      this.#log?.write(
+        'plugin-market.external-control-prepared',
+        `package=${request.packageName} action=${request.action}`,
+      );
+      this.#schedulePluginProfileRestart();
+      return { requestId: request.requestId, status: 'prepared', restartScheduled: true };
+    } catch (error) {
+      this.#log?.write(
+        'plugin-market.external-control-failed',
+        error instanceof Error ? error.message : String(error),
+      );
+      if (this.#runtime.getState().kind === 'stopped') void this.#restartPluginProfileRuntime();
+      return { requestId: request.requestId, status: 'unavailable', reason: 'failed' };
+    }
+  }
+
+  async #confirmExternalPluginControl(request: ExternalPluginControlRequest): Promise<boolean> {
+    const chinese = app.getLocale().toLowerCase().startsWith('zh');
+    const action = request.action === 'uninstall'
+      ? (chinese ? '卸载' : 'Uninstall')
+      : request.action === 'disable'
+        ? (chinese ? '停用' : 'Disable')
+        : (chinese ? '启用' : 'Enable');
+    const response = await dialog.showMessageBox({
+      type: 'warning',
+      title: chinese ? `${action}外部插件` : `${action} external plugin`,
+      message: `${action} ${request.packageName}@${request.version}?`,
+      detail: request.action === 'uninstall'
+        ? (chinese
+            ? '将通过 Harness 官方插件命令从 web 配置中移除这个顶层包，并重启应用。其子入口不会被单独卸载。'
+            : 'The top-level package will be removed from the web profile through the official Harness plugin command, then the app will restart. Nested entries are never uninstalled separately.')
+        : (chinese
+            ? '桌面端只会写入自己的覆盖配置，不修改插件代码或用户原有配置；随后应用将重启。'
+            : 'The desktop writes only its own overlay and does not modify plugin code or existing user configuration; the app will then restart.'),
+      buttons: chinese ? ['取消', `${action}并重启`] : ['Cancel', `${action} and restart`],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    return response.response === 1;
   }
 
   async #executeManagedPlugin(
@@ -916,7 +997,10 @@ export class AppCoordinator {
       const command = createHarnessRuntimeCommand(
         this.#runtimeRoot,
         this.#carrierMode,
-        launchPlan.patchPaths,
+        [
+          ...launchPlan.patchPaths,
+          ...(await this.#externalPluginControl?.patchPaths() ?? []),
+        ],
       );
       this.#runtime.configureLaunch(command.command, command.args);
       this.#log?.write(

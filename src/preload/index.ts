@@ -64,10 +64,13 @@ import {
   MANAGED_PLUGIN_SET_ENABLED_RESULT_CHANNEL,
   MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL,
   MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL,
+  EXTERNAL_PLUGIN_CONTROL_REQUEST_CHANNEL,
+  EXTERNAL_PLUGIN_CONTROL_RESULT_CHANNEL,
   type ManagedPluginInventoryResult,
   type ManagedPluginRemoveResult,
   type ManagedPluginSetEnabledResult,
   type ManagedPluginRollbackResult,
+  type ExternalPluginControlResult,
   validatedManagedPluginInventoryResult,
   validatedManagedPluginRemoveRequest,
   validatedManagedPluginRemoveResult,
@@ -75,6 +78,8 @@ import {
   validatedManagedPluginSetEnabledResult,
   validatedManagedPluginRollbackRequest,
   validatedManagedPluginRollbackResult,
+  validatedExternalPluginControlRequest,
+  validatedExternalPluginControlResult,
 } from '../shared/managed-plugin-inventory.js';
 import { runWhenDocumentReady } from './document-readiness.js';
 import { resolvedHarnessAppearance } from './harness-appearance.js';
@@ -117,6 +122,10 @@ const pendingManagedPluginPreviews = new Map<
 const pendingManagedPluginExecutions = new Map<
   string,
   { readonly resolve: (result: ManagedPluginExecuteResult) => void; readonly timer: ReturnType<typeof setTimeout> }
+>();
+const pendingExternalPluginControls = new Map<
+  string,
+  { readonly resolve: (result: ExternalPluginControlResult) => void; readonly timer: ReturnType<typeof setTimeout> }
 >();
 const pendingManagedPluginInventories = new Map<
   string,
@@ -222,6 +231,16 @@ ipcRenderer.on(MANAGED_PLUGIN_ROLLBACK_RESULT_CHANNEL, (_event, value: unknown) 
   pending.resolve(result);
 });
 
+ipcRenderer.on(EXTERNAL_PLUGIN_CONTROL_RESULT_CHANNEL, (_event, value: unknown) => {
+  const result = validatedExternalPluginControlResult(value);
+  if (result === undefined) return;
+  const pending = pendingExternalPluginControls.get(result.requestId);
+  if (pending === undefined) return;
+  pendingExternalPluginControls.delete(result.requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(result);
+});
+
 contextBridge.exposeInMainWorld('deepSeekYukiRyouPlugins', {
   inventory: (): Promise<ManagedPluginInventoryResult> => {
     const requestId = `request-${globalThis.crypto.randomUUID()}`;
@@ -295,6 +314,26 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouPlugins', {
       }, 6 * 60 * 1_000);
       pendingManagedPluginRollbacks.set(requestId, { resolve, timer });
       ipcRenderer.send(MANAGED_PLUGIN_ROLLBACK_REQUEST_CHANNEL, request);
+    });
+  },
+  controlExternal: (value: unknown): Promise<ExternalPluginControlResult> => {
+    const requestId = `request-${globalThis.crypto.randomUUID()}`;
+    const request = validatedExternalPluginControlRequest(
+      typeof value === 'object' && value !== null ? { ...value, requestId } : value,
+    );
+    if (request === undefined) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'identity-mismatch' });
+    }
+    if (pendingExternalPluginControls.size >= 1) {
+      return Promise.resolve({ requestId, status: 'unavailable', reason: 'busy' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingExternalPluginControls.delete(requestId);
+        resolve({ requestId, status: 'unavailable', reason: 'runtime-unavailable' });
+      }, 6 * 60 * 1_000);
+      pendingExternalPluginControls.set(requestId, { resolve, timer });
+      ipcRenderer.send(EXTERNAL_PLUGIN_CONTROL_REQUEST_CHANNEL, request);
     });
   },
   preview: (value: unknown): Promise<ManagedPluginPreviewResult> => {

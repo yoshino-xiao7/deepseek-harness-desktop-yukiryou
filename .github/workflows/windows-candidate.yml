@@ -2,6 +2,12 @@ name: Windows x64 candidate
 
 on:
   workflow_call:
+    inputs:
+      release_version:
+        description: Exact candidate version when invoked as a release gate
+        required: false
+        type: string
+        default: ''
   workflow_dispatch:
   pull_request:
     branches:
@@ -142,6 +148,32 @@ jobs:
           const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
           if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==2||!m.artifacts.some(a=>a.file.endsWith('-portable.zip')))
           throw new Error('Windows candidate provenance mismatch')"
+      - name: Prepare previous public release and isolated update mirror
+        if: ${{ inputs.release_version != '' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          "RELEASE_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          ./scripts/windows-automatic-update-gate.ps1 -Action Prepare
+      - name: Upgrade the previous public Windows release and verify updater relaunch
+        if: ${{ inputs.release_version != '' }}
+        env:
+          DSH_DESKTOP_DISTRIBUTION_REGION: china
+        run: pnpm exec vitest run tests/release/automatic-update.test.ts --no-file-parallelism
+      - name: Clean the isolated automatic-update gate
+        if: ${{ always() && inputs.release_version != '' && hashFiles('out/windows-automatic-update-gate/state.json') != '' }}
+        shell: pwsh
+        run: ./scripts/windows-automatic-update-gate.ps1 -Action Cleanup
+      - name: Upload automatic-update diagnostics
+        if: ${{ failure() && inputs.release_version != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-automatic-update-diagnostics
+          path: out/windows-automatic-update-gate/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Recover an interrupted lifecycle test installation
         shell: pwsh
         run: ./scripts/windows-nsis-lifecycle.ps1 -Action Recover
