@@ -24,10 +24,11 @@ interface ReleaseWorkflow {
 
 describe('macOS release workflow contract', () => {
   it('blocks release on a real previous-public-version automatic update and relaunch gate', async () => {
-    const [releaseSource, windowsSource, automaticUpdateTest] = await Promise.all([
+    const [releaseSource, windowsSource, automaticUpdateTest, windowsGate] = await Promise.all([
       readFile(join(process.cwd(), '.github', 'workflows', 'release-macos.yml'), 'utf8'),
       readFile(join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'), 'utf8'),
       readFile(join(process.cwd(), 'tests', 'release', 'automatic-update.test.ts'), 'utf8'),
+      readFile(join(process.cwd(), 'scripts', 'windows-automatic-update-gate.ps1'), 'utf8'),
     ]);
     const workflow = parse(releaseSource) as ReleaseWorkflow;
     const release = workflow.jobs?.release;
@@ -52,6 +53,10 @@ describe('macOS release workflow contract', () => {
     expect(automaticUpdateTest).toContain('updates[value]()');
     expect(automaticUpdateTest).toContain('relaunch');
     expect(automaticUpdateTest).not.toContain("DSH_DESKTOP_E2E: '1'");
+    expect(windowsGate).toContain('CertificateRequest');
+    expect(windowsGate).toContain('SubjectAlternativeNameBuilder');
+    expect(windowsGate).toContain('ExportPkcs8PrivateKeyPem');
+    expect(windowsGate).not.toContain('& openssl');
   });
 
   it('keeps both READMEs linked and the current release notes bilingual', async () => {
