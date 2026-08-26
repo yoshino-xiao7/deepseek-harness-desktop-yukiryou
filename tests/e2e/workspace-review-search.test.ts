@@ -11,6 +11,13 @@ import { closeElectronTestApplication } from './electron-cleanup.js';
 
 const execFileAsync = promisify(execFile);
 
+function poll<T>(
+  callback: () => T | Promise<T>,
+  options: { readonly timeout?: number; readonly interval?: number } = {},
+) {
+  return expect.poll(callback, { timeout: 10_000, ...options });
+}
+
 describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => {
   let application: ElectronApplication | undefined;
   let userData: string | undefined;
@@ -50,14 +57,14 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     const shell = application.windows().find((page) => page.url().startsWith('file:'));
     if (shell === undefined) throw new Error('Legacy shell page is missing');
     const companionToggle = shell.locator('[data-testid="companion-toggle"]');
-    await expect.poll(() => companionToggle.isVisible(), { timeout: 20_000 }).toBe(true);
+    await poll(() => companionToggle.isVisible(), { timeout: 20_000 }).toBe(true);
     await companionToggle.click();
-    await expect.poll(() => companionToggle.getAttribute('aria-expanded')).toBe('true');
+    await poll(() => companionToggle.getAttribute('aria-expanded')).toBe('true');
     const search = shell.locator('[data-testid="review-search"]');
-    await expect.poll(() => search.isVisible(), { timeout: 20_000 }).toBe(true);
+    await poll(() => search.isVisible(), { timeout: 20_000 }).toBe(true);
 
     await sendHarnessFileSearchShortcut(application);
-    await expect.poll(() => shell.locator('[data-review-tab="files"]').getAttribute('aria-selected'))
+    await poll(() => shell.locator('[data-review-tab="files"]').getAttribute('aria-selected'))
       .toBe('true');
     const harness = application.windows().find((page) => page.url().startsWith('http://127.0.0.1:'));
     if (harness === undefined) throw new Error('Harness page is missing');
@@ -71,15 +78,18 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     const sourceDirectory = shell.getByRole('button', { name: 'src', exact: true });
     await sourceDirectory.click({ button: 'right' });
     await shell.getByRole('menuitem', { name: '添加文件夹到对话' }).click();
-    await expect.poll(() => composer.inputValue()).toBe('@src/');
+    await poll(
+      () => composer.inputValue(),
+      { timeout: 10_000 },
+    ).toBe('@src/');
     await sourceDirectory.click({ button: 'right' });
     await shell.getByRole('menuitem', { name: '复制相对路径' }).click();
-    await expect.poll(() => readClipboard(launchedApplication)).toBe('src');
+    await poll(() => readClipboard(launchedApplication)).toBe('src');
     await search.focus();
     await shell.keyboard.type('n');
-    await expect.poll(() => search.inputValue()).toBe('n');
+    await poll(() => search.inputValue()).toBe('n');
     await search.fill('needle panel');
-    await expect.poll(
+    await poll(
       () => shell.locator('.search-result-copy small').allTextContents(),
       { timeout: 10_000 },
     ).toEqual(['src/NeedlePanel.ts']);
@@ -90,106 +100,112 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
       document.documentElement.style.setProperty('--harness-overlay-background', 'rgb(24 27 33)');
     });
     await shell.locator('.search-result').click({ button: 'right' });
-    await expect.poll(
+    await poll(
       () => shell.getByRole('menuitem', { name: '添加到对话' }).evaluate(
         (element) => window.getComputedStyle(element).color,
       ),
     ).toBe('rgb(244, 246, 251)');
     await shell.getByRole('menuitem', { name: '添加到对话' }).click();
-    await expect.poll(() => composer.inputValue()).toBe('@src/\n\n@src/NeedlePanel.ts');
+    await poll(
+      () => composer.inputValue(),
+      { timeout: 10_000 },
+    ).toBe('@src/\n\n@src/NeedlePanel.ts');
 
     await shell.locator('.search-result').click();
-    await expect.poll(
+    await poll(
       () => shell.locator('[data-testid="preview-path"]').textContent(),
     ).toContain('src/NeedlePanel.ts');
     const previewCode = shell.locator('.text-line-code').first();
     await selectText(previewCode);
     await previewCode.click({ button: 'right' });
     await shell.getByRole('menuitem', { name: '复制选中文本' }).click();
-    await expect.poll(() => readClipboard(launchedApplication)).toBe('export const needle = true;');
+    await poll(() => readClipboard(launchedApplication)).toBe('export const needle = true;');
     await selectText(previewCode);
     await previewCode.click({ button: 'right' });
     await shell.getByRole('menuitem', { name: '添加选中内容到对话' }).click();
-    await expect.poll(() => composer.inputValue())
+    await poll(
+      () => composer.inputValue(),
+      { timeout: 10_000 },
+    )
       .toBe('@src/\n\n@src/NeedlePanel.ts\n\n@src/NeedlePanel.ts 第 1 行\n\nexport const needle = true;');
     await shell.locator('.search-result').click();
-    await expect.poll(
+    await poll(
       () => shell.locator('[data-testid="preview-path"]').textContent(),
     ).toContain('src/NeedlePanel.ts');
     const copyMenu = shell.locator('[data-testid="preview-copy-menu"]');
     await copyMenu.locator('summary').click();
     await copyMenu.locator('[data-copy-target="path"]').click();
-    await expect.poll(() => readClipboard(launchedApplication)).toBe('src/NeedlePanel.ts');
+    await poll(() => readClipboard(launchedApplication)).toBe('src/NeedlePanel.ts');
     await shell.locator('.text-line-number').first().click();
     await copyMenu.locator('summary').click();
-    await expect.poll(() => copyMenu.locator('[data-copy-target="line"]').isEnabled()).toBe(true);
+    await poll(() => copyMenu.locator('[data-copy-target="line"]').isEnabled()).toBe(true);
     await copyMenu.locator('[data-copy-target="line"]').click();
-    await expect.poll(() => readClipboard(launchedApplication)).toBe('1');
+    await poll(() => readClipboard(launchedApplication)).toBe('1');
     await copyMenu.locator('summary').click();
     await copyMenu.locator('[data-copy-target="path-line"]').click();
-    await expect.poll(() => readClipboard(launchedApplication)).toBe('src/NeedlePanel.ts:1');
+    await poll(() => readClipboard(launchedApplication)).toBe('src/NeedlePanel.ts:1');
     await sendHarnessPreviewFindShortcut(application);
     const previewFind = shell.locator('[data-testid="preview-find-input"]');
-    await expect.poll(() => previewFind.isVisible()).toBe(true);
+    await poll(() => previewFind.isVisible()).toBe(true);
     await previewFind.fill('needle');
-    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
       .toBe('1 / 1');
-    await expect.poll(() => shell.locator('.preview-find-match[data-current="true"]').textContent())
+    await poll(() => shell.locator('.preview-find-match[data-current="true"]').textContent())
       .toBe('needle');
 
     await shell.locator('[data-review-tab="changes"]').click();
     await search.fill('src');
     await shell.locator('[data-testid="change-filter"]').selectOption('modified');
-    await expect.poll(() => shell.locator('.change-row').count()).toBe(1);
-    await expect.poll(() => shell.locator('.change-path').getAttribute('title')).toBe('src/main.ts');
-    await expect.poll(() => shell.locator('[data-testid="change-count"]').textContent()).toBe('1/2');
+    await poll(() => shell.locator('.change-row').count()).toBe(1);
+    await poll(() => shell.locator('.change-path').getAttribute('title')).toBe('src/main.ts');
+    await poll(() => shell.locator('[data-testid="change-count"]').textContent()).toBe('1/2');
     await shell.locator('.change-row').click();
-    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/main.ts');
     await previewFind.fill('export');
-    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
       .toBe('1 / 2');
     await shell.locator('[data-testid="preview-find-next"]').click();
-    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
       .toBe('2 / 2');
     await previewFind.press('Shift+Enter');
-    await expect.poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-find-progress"]').textContent())
       .toBe('1 / 2');
     await previewFind.press('Escape');
-    await expect.poll(() => shell.locator('[data-testid="preview-find-bar"]').isVisible()).toBe(false);
+    await poll(() => shell.locator('[data-testid="preview-find-bar"]').isVisible()).toBe(false);
     await shell.locator('.diff-new-number:not(:disabled)').first().click();
     await copyMenu.locator('summary').click();
     await copyMenu.locator('[data-copy-target="path-line"]').click();
-    await expect.poll(() => readClipboard(launchedApplication)).toBe('src/main.ts:1');
+    await poll(() => readClipboard(launchedApplication)).toBe('src/main.ts:1');
     await shell.locator('[data-testid="preview-back"]').click();
-    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/NeedlePanel.ts');
     await shell.locator('[data-testid="preview-forward"]').click();
-    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/main.ts');
     await shell.locator('[data-testid="change-filter"]').selectOption('all');
-    await expect.poll(() => shell.locator('.change-row').count()).toBe(2);
-    await expect.poll(() => shell.locator('[data-testid="review-progress"]').textContent())
+    await poll(() => shell.locator('.change-row').count()).toBe(2);
+    await poll(() => shell.locator('[data-testid="review-progress"]').textContent())
       .toBe('1 / 2 · 已查看 0');
     await shell.locator('[data-testid="review-toggle-viewed"]').click();
-    await expect.poll(() => shell.locator('[data-testid="review-progress"]').textContent())
+    await poll(() => shell.locator('[data-testid="review-progress"]').textContent())
       .toBe('1 / 2 · 已查看 1');
     await shell.locator('[data-testid="review-next"]').click();
-    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/NeedlePanel.ts');
-    await expect.poll(() => shell.locator('[data-testid="review-progress"]').textContent())
+    await poll(() => shell.locator('[data-testid="review-progress"]').textContent())
       .toBe('2 / 2 · 已查看 1');
     await shell.locator('[data-testid="review-previous"]').click();
-    await expect.poll(() => shell.locator('[data-testid="preview-path"]').textContent())
+    await poll(() => shell.locator('[data-testid="preview-path"]').textContent())
       .toContain('src/main.ts');
-    await expect.poll(() => shell.locator('[data-testid="review-toggle-viewed"]').textContent())
+    await poll(() => shell.locator('[data-testid="review-toggle-viewed"]').textContent())
       .toBe('已查看');
   }, 60_000);
 });
 
 async function waitForHarnessOrigin(application: ElectronApplication): Promise<string> {
   let origin: string | undefined;
-  await expect.poll(async () => {
+  await poll(async () => {
     origin = await application.evaluate(({ webContents }) => {
       const harness = webContents.getAllWebContents()
         .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));

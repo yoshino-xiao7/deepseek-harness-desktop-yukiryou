@@ -79,6 +79,15 @@ import {
 import { runWhenDocumentReady } from './document-readiness.js';
 import { resolvedHarnessAppearance } from './harness-appearance.js';
 import { HARNESS_LOCALE_CHANNEL, validatedDesktopLocale } from '../shared/locale-sync.js';
+import {
+  DEFAULT_DESKTOP_FEATURE_PREFERENCES,
+  DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL,
+  DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL,
+  type DesktopFeaturePreferenceCommand,
+  type DesktopFeaturePreferences,
+  validatedDesktopFeaturePreferenceCommand,
+  validatedDesktopFeaturePreferences,
+} from '../shared/desktop-feature-preferences.js';
 
 let updateState: DesktopUpdateState = {
   status: 'disabled',
@@ -90,6 +99,10 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouPlatform', Object.freeze({
   architecture: process.arch,
 }));
 const updateListeners = new Set<(state: DesktopUpdateState) => void>();
+let featurePreferences = DEFAULT_DESKTOP_FEATURE_PREFERENCES;
+const featurePreferenceListeners = new Set<(
+  state: DesktopFeaturePreferences,
+) => void>();
 let balanceState: AccountBalanceSnapshot = { status: 'loading' };
 const balanceListeners = new Set<(state: AccountBalanceSnapshot) => void>();
 const workspaceReferenceListeners = new Map<
@@ -121,6 +134,33 @@ const pendingManagedPluginRollbacks = new Map<
   string,
   { readonly resolve: (result: ManagedPluginRollbackResult) => void; readonly timer: ReturnType<typeof setTimeout> }
 >();
+
+ipcRenderer.on(DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL, (_event, value: unknown) => {
+  const snapshot = validatedDesktopFeaturePreferences(value);
+  if (snapshot === undefined) return;
+  featurePreferences = snapshot;
+  for (const listener of featurePreferenceListeners) listener(snapshot);
+});
+
+contextBridge.exposeInMainWorld('deepSeekYukiRyouFeatures', {
+  getSnapshot: (): DesktopFeaturePreferences => featurePreferences,
+  subscribe: (
+    listener: (state: DesktopFeaturePreferences) => void,
+  ): (() => void) => {
+    featurePreferenceListeners.add(listener);
+    return () => featurePreferenceListeners.delete(listener);
+  },
+  set: (value: unknown): boolean => {
+    const command = validatedDesktopFeaturePreferenceCommand(value);
+    if (command === undefined) return false;
+    ipcRenderer.send(DESKTOP_FEATURE_PREFERENCES_COMMAND_CHANNEL, command);
+    return true;
+  },
+} satisfies {
+  getSnapshot(): DesktopFeaturePreferences;
+  subscribe(listener: (state: DesktopFeaturePreferences) => void): () => void;
+  set(command: DesktopFeaturePreferenceCommand): boolean;
+});
 
 ipcRenderer.on(MANAGED_PLUGIN_PREVIEW_RESULT_CHANNEL, (_event, value: unknown) => {
   const result = validatedManagedPluginPreviewResult(value);

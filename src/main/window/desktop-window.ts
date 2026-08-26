@@ -96,6 +96,10 @@ import type {
 } from '../../shared/managed-plugin-inventory.js';
 import { TOOLBAR_LOCALE_CHANNEL, type DesktopLocale } from '../../shared/locale-sync.js';
 import type { DesktopWindowState } from './window-state.js';
+import {
+  DEFAULT_DESKTOP_FEATURE_PREFERENCES,
+  type DesktopFeaturePreferences,
+} from '../../shared/desktop-feature-preferences.js';
 
 const PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS = 15_000;
 
@@ -106,6 +110,7 @@ export interface DesktopWindow {
   reload(): void;
   reveal(): void;
   setUpdateState(state: DesktopUpdateState): void;
+  setFeaturePreferences(preferences: DesktopFeaturePreferences): void;
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void;
   notifyWorkspaceChanged(): void;
   captureWindowState(): void;
@@ -118,6 +123,7 @@ export interface DesktopWindowOptions {
   readonly shellPreloadPath: string;
   readonly harnessPreloadPath: string;
   readonly initialWindowState?: DesktopWindowState | undefined;
+  readonly initialFeaturePreferences?: DesktopFeaturePreferences | undefined;
   readonly onWindowStateChange?: (state: DesktopWindowState) => void;
   readonly onRetry: () => void;
   readonly onOpenLogs: () => void;
@@ -127,6 +133,9 @@ export interface DesktopWindowOptions {
   readonly onAccountBalanceRequest: (
     force: boolean,
   ) => Promise<AccountBalanceSnapshot>;
+  readonly onFeaturePreferencesChange: (
+    preferences: DesktopFeaturePreferences,
+  ) => void;
   readonly onHarnessContext: (snapshot: HarnessContextSnapshot) => void;
   readonly onLocale: (locale: DesktopLocale) => void;
   readonly onWorkspaceReviewRequest: (
@@ -175,6 +184,7 @@ class ElectronDesktopWindow implements DesktopWindow {
   #appearance: DesktopAppearanceSnapshot | undefined;
   #locale: DesktopLocale | undefined;
   #companionState = createInitialDesktopCompanionSnapshot();
+  #featurePreferences = DEFAULT_DESKTOP_FEATURE_PREFERENCES;
   #reservedRightWidth = 0;
   #layoutAnimationRevision = 0;
   #layoutAnimationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -191,6 +201,8 @@ class ElectronDesktopWindow implements DesktopWindow {
     this.#options = options;
     this.#loadingUrl = options.loadingUrl;
     this.#lastWindowState = options.initialWindowState;
+    this.#featurePreferences = options.initialFeaturePreferences ??
+      DEFAULT_DESKTOP_FEATURE_PREFERENCES;
     this.#window = new BrowserWindow(
       createDesktopWindowOptions(
         options.shellPreloadPath,
@@ -223,6 +235,10 @@ class ElectronDesktopWindow implements DesktopWindow {
       },
       onUpdateCommand: options.onUpdateCommand,
       onAccountBalanceRequest: options.onAccountBalanceRequest,
+      onFeaturePreferencesChange: (preferences) => {
+        options.onFeaturePreferencesChange(preferences);
+        this.setFeaturePreferences(preferences);
+      },
       onHarnessContext: options.onHarnessContext,
       onHarnessReviewIntent: options.onHarnessReviewIntent,
       onHarnessReviewResponse: (response) => this.#handleHarnessReviewResponse(response),
@@ -236,6 +252,7 @@ class ElectronDesktopWindow implements DesktopWindow {
       onManagedPluginSetEnabled: options.onManagedPluginSetEnabled,
       onManagedPluginRollback: options.onManagedPluginRollback,
     });
+    this.#productBridge.setFeaturePreferences(this.#featurePreferences);
     this.#window.contentView.addChildView(this.#harnessView);
     this.#harnessView.setVisible(false);
     this.#layoutHarnessView();
@@ -311,7 +328,10 @@ class ElectronDesktopWindow implements DesktopWindow {
       throw new Error('Legacy product window did not reach document readiness');
     }
     this.#showingHarness = true;
-    this.#companionState = { ...this.#companionState, active: true };
+    this.#companionState = {
+      ...this.#companionState,
+      active: this.#featurePreferences.workspaceReview,
+    };
     this.#sendCompanionState();
     this.#layoutHarnessView();
     this.#harnessView.webContents.focus();
@@ -351,6 +371,23 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   setUpdateState(state: DesktopUpdateState): void {
     this.#productBridge.setUpdateState(state);
+  }
+
+  setFeaturePreferences(preferences: DesktopFeaturePreferences): void {
+    const workspaceChanged =
+      preferences.workspaceReview !== this.#featurePreferences.workspaceReview;
+    this.#featurePreferences = preferences;
+    this.#productBridge.setFeaturePreferences(preferences);
+    if (!workspaceChanged) return;
+    this.#companionState = {
+      ...this.#companionState,
+      active: this.#showingHarness && preferences.workspaceReview,
+      ...(!preferences.workspaceReview
+        ? { open: false, previewOpen: false, workspace: { status: 'none' as const } }
+        : {}),
+    };
+    this.#sendCompanionState();
+    this.#layoutHarnessView(true);
   }
 
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void {
@@ -535,6 +572,7 @@ class ElectronDesktopWindow implements DesktopWindow {
         return;
       }
       if (channel !== COMPANION_COMMAND_CHANNEL) return;
+      if (!this.#featurePreferences.workspaceReview) return;
       const command = validatedCompanionCommand(value);
       if (command === undefined) return;
       this.#companionState = transitionCompanion(this.#companionState, command);
@@ -558,6 +596,7 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   #installWorkspaceReviewShortcuts(): void {
     this.#harnessView.webContents.on('before-input-event', (event, input) => {
+      if (!this.#featurePreferences.workspaceReview) return;
       if (input.type !== 'keyDown') return;
       const shortcut = workspaceReviewShortcut(input);
       if (shortcut === undefined || shortcut === 'close-preview') return;
@@ -567,18 +606,24 @@ class ElectronDesktopWindow implements DesktopWindow {
         if (this.#window.webContents.isDestroyed()) return;
         this.#window.webContents.send(WORKSPACE_REVIEW_SHORTCUT_CHANNEL, shortcut);
       };
-      if ((shortcut === 'file-search' || shortcut === 'preview-find') && !this.#window.webContents.isFocused()) {
-        this.#window.webContents.once('focus', deliver);
+      if (
+        (shortcut === 'file-search' || shortcut === 'preview-find') &&
+        !this.#window.webContents.isFocused()
+      ) {
+        // WebContentsView -> BrowserWindow focus transitions do not always emit
+        // a later `focus` event. Waiting for that event can silently discard the
+        // shortcut, so request focus and deliver immediately; the renderer then
+        // focuses the actual search control.
         this.#window.webContents.focus();
-      } else {
-        deliver();
       }
+      deliver();
     });
   }
 
   #handleHarnessReviewResponse(response: WorkspaceReviewResponse): void {
     if (
       response.kind !== 'preview' ||
+      !this.#featurePreferences.workspaceReview ||
       this.#disposing ||
       this.#window.webContents.isDestroyed()
     ) return;

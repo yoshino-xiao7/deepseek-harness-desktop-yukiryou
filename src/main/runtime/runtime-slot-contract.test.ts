@@ -37,6 +37,7 @@ describe('Runtime desktop slot contract', () => {
   it.each([
     'shell.overlay',
     'settings.section',
+    'settings.general.item',
     'settings.plugins.tab',
     'sidebar.footer.action',
     'conversation.chat.turnTail',
@@ -58,6 +59,7 @@ describe('Runtime desktop slot contract', () => {
         'shell.overlay',
         'conversation.details.tool',
         'settings.section',
+        'settings.general.item',
         'settings.plugins.tab',
         'sidebar.footer.action',
         'conversation.chat.turnTail',

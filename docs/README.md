@@ -25,7 +25,7 @@
 - 分发方式：站外直接下载签名、公证后的 DMG/ZIP，不进入 Mac App Store。
 - 运行方式：桌面壳启动随包固定版本的官方 Harness，再加载其本地 Web UI。
 - 更新单位：整个应用原子更新；不单独在线升级 Harness。
-- 当前阶段：`yukiryou/v1.0.2` 正在完成稳定版修复候选门禁；macOS arm64 与 Windows x64 共用 Harness 0.1.1-rc.2、账户概览、受管插件市场和双区域自动更新链。实时事实以 [`07-current-status.md`](07-current-status.md) 为准。
+- 当前阶段：`yukiryou/v1.0.3` 正在完成稳定版修复候选门禁；macOS arm64 与 Windows x64 共用 Harness 0.1.1-rc.2、可选账户概览、可选 Workspace Review、受管插件市场和双区域自动更新链。实时事实以 [`07-current-status.md`](07-current-status.md) 为准。
 - 下一阶段：按已接受的 [`11-integrated-desktop-shell-and-plugin-market.md`](11-integrated-desktop-shell-and-plugin-market.md) 推进一体化窗口、插件目录与 Windows 11 x64 发行适配。宠物实验已归档，不属于当前产品路线。
 
 ## 发行配置

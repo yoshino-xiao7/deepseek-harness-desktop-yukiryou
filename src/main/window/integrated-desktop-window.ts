@@ -3,6 +3,7 @@ import { BrowserWindow, shell } from 'electron';
 import type { RuntimeFailure } from '../runtime/runtime-supervisor.js';
 import type { DesktopUpdateState } from '../../shared/update-bridge.js';
 import type { DesktopWindow, DesktopWindowOptions } from './desktop-window.js';
+import type { DesktopFeaturePreferences } from '../../shared/desktop-feature-preferences.js';
 import { createDesktopWindowOptions } from './desktop-window-options.js';
 import { createHarnessProductBridge } from './harness-product-bridge.js';
 import { createProductWindowReadiness, type ProductWindowState } from './product-window-readiness.js';
@@ -55,6 +56,7 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       onLocale: options.onLocale,
       onUpdateCommand: options.onUpdateCommand,
       onAccountBalanceRequest: options.onAccountBalanceRequest,
+      onFeaturePreferencesChange: options.onFeaturePreferencesChange,
       onHarnessContext: options.onHarnessContext,
       onHarnessReviewIntent: options.onHarnessReviewIntent,
       onHarnessReviewResponse: () => {},
@@ -68,6 +70,9 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       onManagedPluginSetEnabled: options.onManagedPluginSetEnabled,
       onManagedPluginRollback: options.onManagedPluginRollback,
     });
+    this.#productBridge.setFeaturePreferences(
+      options.initialFeaturePreferences ?? { accountBalance: true, workspaceReview: true },
+    );
     this.#productWindow.webContents.on('did-finish-load', () => {
       this.#productBridge.restoreAfterLoad();
     });
@@ -146,6 +151,10 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
 
   setUpdateState(state: DesktopUpdateState): void {
     this.#productBridge.setUpdateState(state);
+  }
+
+  setFeaturePreferences(preferences: DesktopFeaturePreferences): void {
+    this.#productBridge.setFeaturePreferences(preferences);
   }
 
   setCompanionWorkspace(): void {}

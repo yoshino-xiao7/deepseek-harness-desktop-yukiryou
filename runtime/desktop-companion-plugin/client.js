@@ -225,20 +225,28 @@ window.__ModuleLoader__.load({
 
     function BalanceCard({ wide }) {
       const bridge = window.deepSeekYukiRyouBalance;
+      const featureBridge = window.deepSeekYukiRyouFeatures;
+      const [features, setFeatures] = React.useState(
+        () => featureBridge?.getSnapshot() ?? { accountBalance: true, workspaceReview: true },
+      );
       const [snapshot, setSnapshot] = React.useState(
         () => bridge?.getSnapshot() ?? {
           status: 'unavailable', reason: 'network', today: { status: 'unavailable' },
         },
       );
       const todayRetryCount = React.useRef(0);
+      React.useEffect(
+        () => featureBridge?.subscribe((next) => setFeatures(next)),
+        [featureBridge],
+      );
       React.useEffect(() => {
-        if (bridge === undefined) return undefined;
+        if (bridge === undefined || !features.accountBalance) return undefined;
         const unsubscribe = bridge.subscribe((next) => setSnapshot(next));
         bridge.refresh(false);
         return unsubscribe;
-      }, [bridge]);
+      }, [bridge, features.accountBalance]);
       React.useEffect(() => {
-        if (bridge === undefined || snapshot.status !== 'ready') return undefined;
+        if (bridge === undefined || !features.accountBalance || snapshot.status !== 'ready') return undefined;
         if (snapshot.today.status === 'ready') {
           todayRetryCount.current = 0;
           return undefined;
@@ -247,7 +255,8 @@ window.__ModuleLoader__.load({
         todayRetryCount.current += 1;
         const timer = setTimeout(() => bridge.refresh(false), 1_000);
         return () => clearTimeout(timer);
-      }, [bridge, snapshot]);
+      }, [bridge, features.accountBalance, snapshot]);
+      if (!features.accountBalance) return null;
       const language = document.documentElement.lang.toLowerCase();
       const zh = !language.startsWith('en');
       const shown = snapshot.status === 'unavailable' && snapshot.lastGood ? snapshot.lastGood : snapshot;
