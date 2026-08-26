@@ -1,11 +1,14 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { closeElectronTestApplication } from '../e2e/electron-cleanup.js';
+import { waitForUpdateShell } from './update-shell.js';
 
 const execute = promisify(execFile);
 const previousExecutable = requiredEnvironment('DSH_PREVIOUS_EXECUTABLE_PATH');
@@ -14,15 +17,22 @@ const expectedVersion = requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_VERSI
 
 describe('previous public release automatic update', () => {
   let application: ElectronApplication | undefined;
+  let userData: string | undefined;
 
   afterEach(async () => {
-    if (application !== undefined) {
-      try { await application.close(); } catch { /* updater may already own shutdown */ }
+    await closeElectronTestApplication(application);
+    if (userData !== undefined) {
+      await rm(userData, {
+        recursive: true,
+        force: true,
+        maxRetries: process.platform === 'win32' ? 20 : 0,
+        retryDelay: 100,
+      });
     }
-  });
+  }, 30_000);
 
   it('downloads, installs, relaunches, and replaces the old public application', async () => {
-    const userData = await mkdtemp(join(tmpdir(), 'dsh-real-update-gate-'));
+    userData = await mkdtemp(join(tmpdir(), 'dsh-real-update-gate-'));
     application = await electron.launch({
       executablePath: previousExecutable,
       args: [`--user-data-dir=${userData}`],
@@ -31,7 +41,8 @@ describe('previous public release automatic update', () => {
         DSH_DESKTOP_DISTRIBUTION_REGION: 'china',
       },
     });
-    const shell = await application.firstWindow();
+    await application.firstWindow();
+    const shell = await waitForUpdateShell(application);
 
     await invokeUpdate(shell, 'check');
     await expect.poll(() => readUpdateStatus(shell), {

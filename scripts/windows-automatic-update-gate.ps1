@@ -40,6 +40,15 @@ function Wait-Until([scriptblock]$Condition, [string]$FailureMessage) {
   throw $FailureMessage
 }
 
+function Invoke-BoundedDownload([string]$Url, [string]$Destination) {
+  Write-Output "Downloading previous release from $Url"
+  Invoke-Checked (Get-Command curl.exe).Source @(
+    '--fail', '--location', '--silent', '--show-error',
+    '--retry', '3', '--retry-all-errors', '--connect-timeout', '20',
+    '--max-time', '480', '--output', $Destination, $Url
+  )
+}
+
 function Remove-GateInstallation {
   Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object { $_.ExecutablePath -eq $executable } |
@@ -85,16 +94,56 @@ $previousRoot = Join-Path $gateRoot 'previous'
 New-Item -ItemType Directory -Path $assetsRoot, $metadataRoot, $previousRoot -Force | Out-Null
 @{} | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
-$previousTag = (& gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name).Trim()
+$previousRelease = (& gh api "repos/$env:GITHUB_REPOSITORY/releases/latest") |
+  ConvertFrom-Json
+$previousTag = ([string]$previousRelease.tag_name).Trim()
 if (-not $previousTag.StartsWith('v')) { throw "Invalid previous release tag: $previousTag" }
 $previousVersion = $previousTag.Substring(1)
 if ($previousVersion -eq $env:RELEASE_VERSION) { throw 'Previous and candidate versions must differ' }
 $previousAsset = "DeepSeek.YukiRyou-$previousVersion-win32-x64-Setup.exe"
-& gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern $previousAsset --dir $previousRoot
-if ($LASTEXITCODE -ne 0) { throw "Failed to download $previousAsset" }
+$previousReleaseAsset = @(
+  $previousRelease.assets | Where-Object { $_.name -eq $previousAsset }
+)[0]
+if ($null -eq $previousReleaseAsset) {
+  throw "Previous release asset is missing: $previousAsset"
+}
+$previousInstaller = Join-Path $previousRoot $previousAsset
+$downloadSources = @(
+  "https://download-cn.suzuki.ink/releases/$previousTag/$previousAsset",
+  [string]$previousReleaseAsset.browser_download_url
+)
+$downloaded = $false
+foreach ($source in $downloadSources) {
+  try {
+    Invoke-BoundedDownload $source $previousInstaller
+    $downloaded = $true
+    break
+  } catch {
+    Write-Warning "Previous-release download failed from $source`: $($_.Exception.Message)"
+    Remove-Item -LiteralPath $previousInstaller -Force -ErrorAction SilentlyContinue
+  }
+}
+if (-not $downloaded) { throw "Failed to download $previousAsset from all bounded sources" }
 
-Invoke-Checked (Join-Path $previousRoot $previousAsset) @('/S', '/currentuser', "/D=$installRoot")
+$expectedSize = [long]$previousReleaseAsset.size
+$actualSize = (Get-Item -LiteralPath $previousInstaller).Length
+if ($actualSize -ne $expectedSize) {
+  throw "Previous release asset size mismatch: expected $expectedSize, got $actualSize"
+}
+$expectedDigest = [string]$previousReleaseAsset.digest
+if (-not $expectedDigest.StartsWith('sha256:')) {
+  throw "Previous release asset has no SHA-256 digest: $previousAsset"
+}
+$actualDigest = (Get-FileHash -LiteralPath $previousInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualDigest -ne $expectedDigest.Substring(7).ToLowerInvariant()) {
+  throw "Previous release asset SHA-256 mismatch: $previousAsset"
+}
+Write-Output "Verified previous release asset $previousAsset ($actualSize bytes)"
+
+Write-Output "Installing previous public release $previousVersion into $installRoot"
+Invoke-Checked $previousInstaller @('/S', '/currentuser', "/D=$installRoot")
 Wait-Until { (Test-Path -LiteralPath $executable) -and (Test-Path -LiteralPath $uninstaller) } 'Previous release did not install into the isolated directory'
+Write-Output "Installed previous public release $previousVersion"
 
 $candidateSource = Join-Path $repositoryRoot 'out\windows-candidate\DeepSeek-YukiRyou-Setup.exe'
 $candidateAsset = "DeepSeek.YukiRyou-$env:RELEASE_VERSION-win32-x64-Setup.exe"
