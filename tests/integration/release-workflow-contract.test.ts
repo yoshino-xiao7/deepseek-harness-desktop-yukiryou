@@ -9,6 +9,7 @@ interface WorkflowStep {
   run?: string;
   uses?: string;
   with?: Record<string, string>;
+  'timeout-minutes'?: number;
 }
 
 interface WorkflowJob {
@@ -35,6 +36,7 @@ describe('macOS release workflow contract', () => {
       readFile(join(process.cwd(), 'scripts', 'windows-automatic-update-gate.ps1'), 'utf8'),
     ]);
     const workflow = parse(releaseSource) as ReleaseWorkflow;
+    const windowsWorkflow = parse(windowsSource) as ReleaseWorkflow;
     const release = workflow.jobs?.release;
     const windows = workflow.jobs?.windows as WorkflowJob & {
       with?: Record<string, string>;
@@ -53,6 +55,9 @@ describe('macOS release workflow contract', () => {
     expect(windowsSource).toContain('DSH_DESKTOP_DISTRIBUTION_REGION: china');
     expect(windowsSource).toContain("inputs.release_version != ''");
     expect(windows.with?.release_version).toBe('${{ inputs.version }}');
+    expect(windowsWorkflow.jobs?.build_candidate?.steps?.find(
+      (step) => step.name === 'Prepare previous public release and isolated update mirror',
+    )?.['timeout-minutes']).toBe(20);
     expect(release?.needs).toEqual(expect.arrayContaining([
       'verify_final', 'windows', 'verify_macos_automatic_update',
     ]));
@@ -67,6 +72,10 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).not.toContain('& openssl');
     expect(windowsGate).toContain('$env:GITHUB_RUN_ID');
     expect(windowsGate).toContain('$env:GITHUB_RUN_ATTEMPT');
+    expect(windowsGate).toContain('download-cn.suzuki.ink/releases/$previousTag');
+    expect(windowsGate).toContain("'--max-time', '480'");
+    expect(windowsGate).toContain('Previous release asset SHA-256 mismatch');
+    expect(windowsGate).not.toContain('& gh release download');
     expect(windowsGate).not.toContain(
       "Join-Path ([System.IO.Path]::GetTempPath()) 'dsh-yukiryou-automatic-update'",
     );

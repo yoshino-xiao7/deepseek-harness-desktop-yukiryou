@@ -150,6 +150,7 @@ jobs:
           throw new Error('Windows candidate provenance mismatch')"
       - name: Prepare previous public release and isolated update mirror
         if: ${{ inputs.release_version != '' }}
+        timeout-minutes: 20
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
