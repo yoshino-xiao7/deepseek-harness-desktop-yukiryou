@@ -312,7 +312,7 @@ async function preserveProcessSnapshot(stage: string): Promise<void> {
         '-NoProfile',
         '-Command',
         [
-          "$names = @('DeepSeek YukiRyou', 'DeepSeek-YukiRyou-Setup', 'cmd', 'conhost')",
+          "$names = @('DeepSeek YukiRyou', 'DeepSeek-YukiRyou-Setup', 'cmd', 'conhost');",
           'Get-Process -ErrorAction SilentlyContinue |',
           'Where-Object { $names -contains $_.ProcessName -or $_.ProcessName -like "*nsis*" } |',
           'Select-Object Id,ProcessName,Path,StartTime,Responding |',

@@ -68,7 +68,6 @@ export async function waitForApplicationExitCleanup(
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<void>((resolve) => {
     timeout = setTimeout(resolve, timeoutMs);
-    timeout.unref();
   });
   try {
     await Promise.race([
