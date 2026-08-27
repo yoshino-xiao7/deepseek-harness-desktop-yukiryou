@@ -18,8 +18,8 @@ $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
 $mirrorHost = 'localhost'
 $mirrorPort = 41337
-$mirrorBasePath = '/mirror'
-$mirrorOrigin = "https://$mirrorHost`:$mirrorPort$mirrorBasePath"
+$mirrorBasePath = '/mirrorx'
+$mirrorOrigin = "http://$mirrorHost`:$mirrorPort$mirrorBasePath"
 
 function Invoke-Checked(
   [string]$FilePath,
@@ -135,12 +135,6 @@ if ($Action -eq 'Cleanup') {
     if ($state.serverPid) {
       Stop-Process -Id ([int]$state.serverPid) -Force -ErrorAction SilentlyContinue
     }
-    if ($state.certificateThumbprint) {
-      $certificatePath = "Cert:\CurrentUser\Root\$($state.certificateThumbprint)"
-      if (Test-Path -LiteralPath $certificatePath) {
-        Remove-Item -LiteralPath $certificatePath -Force
-      }
-    }
   }
   Remove-GateInstallation $installRoot
   Write-Output 'Cleaned the isolated Windows automatic-update gate'
@@ -232,86 +226,8 @@ Write-Output "Generating candidate update metadata"
 if ($LASTEXITCODE -ne 0) { throw 'Failed to prepare Windows update metadata' }
 Write-Output "Generated candidate update metadata"
 
-$certificatePath = Join-Path $gateRoot 'server.crt'
-$keyPath = Join-Path $gateRoot 'server.key'
-$certificateSpkiPin = $null
-Write-Output "Generating the isolated update mirror certificate"
-$rsa = [System.Security.Cryptography.RSA]::Create(2048)
-try {
-  $request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
-    'CN=DeepSeek YukiRyou update gate',
-    $rsa,
-    [System.Security.Cryptography.HashAlgorithmName]::SHA256,
-    [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
-  )
-  $subjectAlternativeName =
-    [System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
-  $subjectAlternativeName.AddDnsName($mirrorHost)
-  $request.CertificateExtensions.Add($subjectAlternativeName.Build())
-  $serverAuthentication = [System.Security.Cryptography.OidCollection]::new()
-  [void]$serverAuthentication.Add(
-    [System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.1')
-  )
-  $request.CertificateExtensions.Add(
-    [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new(
-      $serverAuthentication,
-      $false
-    )
-  )
-  $generatedCertificate = $request.CreateSelfSigned(
-    [System.DateTimeOffset]::UtcNow.AddMinutes(-5),
-    [System.DateTimeOffset]::UtcNow.AddDays(1)
-  )
-  $certificateSpkiPin = [System.Convert]::ToBase64String(
-    [System.Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo())
-  )
-  try {
-    [System.IO.File]::WriteAllText(
-      $certificatePath,
-      $generatedCertificate.ExportCertificatePem(),
-      [System.Text.Encoding]::ASCII
-    )
-    [System.IO.File]::WriteAllText(
-      $keyPath,
-      $rsa.ExportPkcs8PrivateKeyPem(),
-      [System.Text.Encoding]::ASCII
-    )
-  } finally {
-    $generatedCertificate.Dispose()
-  }
-} finally {
-  $rsa.Dispose()
-}
-Write-Output "Trusting the isolated update mirror certificate without an interactive prompt"
-$trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-  $certificatePath
-)
-try {
-  $certificateThumbprint = $trustedCertificate.Thumbprint
-} finally {
-  $trustedCertificate.Dispose()
-}
-# X509Store.Add can display an invisible root-certificate confirmation dialog
-# in an interactive Windows runner session. certutil's force flag performs the
-# same current-user import explicitly and non-interactively; keep a short bound
-# so a certificate-store regression cannot consume the whole release gate.
-Invoke-Checked (Get-Command certutil.exe).Source @(
-  '-user', '-f', '-addstore', 'Root', $certificatePath
-) 60
-$trustedCertificatePath = "Cert:\CurrentUser\Root\$certificateThumbprint"
-if (-not (Test-Path -LiteralPath $trustedCertificatePath)) {
-  throw 'The isolated update mirror certificate was not added to the current-user root store'
-}
-# The previous public updater uses Electron's native Windows HTTP executor, so
-# Chromium's SPKI allowlist alone cannot authorize this loopback endpoint. Trust
-# only this ephemeral certificate for the runner user and remove it by exact
-# thumbprint in the workflow cleanup step.
-Write-Output "Trusted the isolated update mirror certificate root"
-@{ certificateThumbprint = $certificateThumbprint } |
-  ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
-
 $serverLog = Join-Path $gateRoot 'server.log'
-Write-Output "Starting the isolated HTTPS update mirror"
+Write-Output "Starting the isolated loopback update mirror"
 $noProxy = @($env:NO_PROXY, $mirrorHost) |
   Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
   Join-String -Separator ','
@@ -321,42 +237,40 @@ $env:no_proxy = $noProxy
 "no_proxy=$noProxy" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   (Join-Path $PSScriptRoot 'serve-automatic-update-gate.ts'),
-  "--cert=$certificatePath", "--key=$keyPath", "--assets=$assetsRoot",
+  '--protocol=http', "--assets=$assetsRoot",
   "--metadata=$metadataRoot", '--target=win32-x64', "--version=$env:RELEASE_VERSION",
   "--port=$mirrorPort", "--base-path=$mirrorBasePath"
 ) -RedirectStandardOutput $serverLog -RedirectStandardError (Join-Path $gateRoot 'server-error.log') -PassThru
 
 @{
   serverPid = $server.Id
-  certificateThumbprint = $certificateThumbprint
   installRoot = $installRoot
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
 try {
   Wait-Until {
     if ($server.HasExited) {
-      throw "The isolated HTTPS update mirror exited with code $($server.ExitCode)"
+      throw "The isolated loopback update mirror exited with code $($server.ExitCode)"
     }
     try {
       $health = & (Get-Command curl.exe).Source @(
         '--fail', '--silent', '--show-error', '--noproxy', '*',
         '--resolve', "$mirrorHost`:$mirrorPort`:127.0.0.1",
-        '--cacert', $certificatePath, "$mirrorOrigin/health"
+        "$mirrorOrigin/health"
       )
       $LASTEXITCODE -eq 0 -and $health -eq 'ok'
     } catch { $false }
-  } 'The isolated HTTPS update mirror did not become healthy'
+  } 'The isolated loopback update mirror did not become healthy'
 } catch {
   Get-Content -LiteralPath $serverLog -ErrorAction SilentlyContinue
   Get-Content -LiteralPath (Join-Path $gateRoot 'server-error.log') -ErrorAction SilentlyContinue
   throw
 }
-Write-Output "The isolated HTTPS update mirror is healthy"
+Write-Output "The isolated loopback update mirror is healthy"
 
 "DSH_PREVIOUS_EXECUTABLE_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_MIRROR_HOST=$mirrorHost" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-"DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN=$certificateSpkiPin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_DIAGNOSTICS=$(Join-Path $gateRoot 'diagnostics')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 Write-Output "Prepared real Windows automatic update from $previousVersion to $env:RELEASE_VERSION"

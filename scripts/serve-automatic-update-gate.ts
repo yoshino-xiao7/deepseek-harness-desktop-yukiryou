@@ -1,10 +1,13 @@
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { createServer } from 'node:https';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { basename, join, resolve } from 'node:path';
 
-const certificate = await readFile(required('--cert'));
-const key = await readFile(required('--key'));
+const protocol = argument('--protocol') ?? 'https';
+if (protocol !== 'http' && protocol !== 'https') fail(`Unsupported protocol ${protocol}`);
+const certificate = protocol === 'https' ? await readFile(required('--cert')) : undefined;
+const key = protocol === 'https' ? await readFile(required('--key')) : undefined;
 const assets = resolve(required('--assets'));
 const metadata = resolve(required('--metadata'));
 const target = required('--target');
@@ -21,8 +24,8 @@ const routes = new Map([
   [`${basePath}/releases/v${version}/${artifactName}`, join(assets, artifactName)],
 ]);
 
-const server = createServer({ cert: certificate, key }, async (request, response) => {
-  const pathname = new URL(request.url ?? '/', 'https://download-cn.suzuki.ink').pathname;
+const handler: Parameters<typeof createHttpServer>[0] = async (request, response) => {
+  const pathname = new URL(request.url ?? '/', `${protocol}://download-cn.suzuki.ink`).pathname;
   if (pathname === `${basePath}/health`) {
     logRequest(request.method, pathname, 200);
     response.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
@@ -55,7 +58,10 @@ const server = createServer({ cert: certificate, key }, async (request, response
     response.writeHead(404, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
     response.end('not found');
   }
-});
+};
+const server = protocol === 'https'
+  ? createHttpsServer({ cert: certificate, key }, handler)
+  : createHttpServer(handler);
 
 function logRequest(method: string | undefined, pathname: string, status: number): void {
   process.stdout.write(`${new Date().toISOString()} ${method ?? 'UNKNOWN'} ${pathname} ${status}\n`);
