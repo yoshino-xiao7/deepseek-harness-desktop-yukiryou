@@ -55,6 +55,14 @@ function Invoke-BoundedDownload([string]$Url, [string]$Destination) {
   )
 }
 
+function Set-GateEnvironment([string]$Name, [string]$Value) {
+  # The real update test runs in this same workflow step so the loopback mirror
+  # cannot be reaped by the runner between Prepare and verification. Publish
+  # each value both to this PowerShell process and to later cleanup steps.
+  [System.Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
+  "$Name=$Value" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+}
+
 function Remove-DirectoryEventually([string]$Root) {
   $deadline = (Get-Date).AddSeconds(30)
   $lastFailure = $null
@@ -235,18 +243,12 @@ $env:NO_PROXY = $noProxy
 $env:no_proxy = $noProxy
 "NO_PROXY=$noProxy" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "no_proxy=$noProxy" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-$serverEnvironment = @{
-  # GitHub Actions terminates child processes carrying the current step's
-  # tracking marker as soon as the step exits. This mirror must survive into
-  # the following real-upgrade step and is stopped explicitly by Cleanup.
-  RUNNER_TRACKING_ID = ''
-}
 $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   (Join-Path $PSScriptRoot 'serve-automatic-update-gate.ts'),
   '--protocol=http', "--assets=$assetsRoot",
   "--metadata=$metadataRoot", '--target=win32-x64', "--version=$env:RELEASE_VERSION",
   "--port=$mirrorPort", "--base-path=$mirrorBasePath"
-) -Environment $serverEnvironment -RedirectStandardOutput $serverLog `
+) -RedirectStandardOutput $serverLog `
   -RedirectStandardError (Join-Path $gateRoot 'server-error.log') -PassThru
 
 @{
@@ -274,9 +276,9 @@ try {
 }
 Write-Output "The isolated loopback update mirror is healthy"
 
-"DSH_PREVIOUS_EXECUTABLE_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-"DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-"DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-"DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL=$mirrorOrigin/updates/win32-x64/latest.yml" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-"DSH_AUTOMATIC_UPDATE_DIAGNOSTICS=$(Join-Path $gateRoot 'diagnostics')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+Set-GateEnvironment 'DSH_PREVIOUS_EXECUTABLE_PATH' $executable
+Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH' $executable
+Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION' $env:RELEASE_VERSION
+Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL' "$mirrorOrigin/updates/win32-x64/latest.yml"
+Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_DIAGNOSTICS' (Join-Path $gateRoot 'diagnostics')
 Write-Output "Prepared real Windows automatic update from $previousVersion to $env:RELEASE_VERSION"

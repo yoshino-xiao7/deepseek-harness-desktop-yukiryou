@@ -62,9 +62,26 @@ describe('macOS release workflow contract', () => {
       'Exact candidate version when manually exercising the release updater gate',
     );
     expect(windows.with?.release_version).toBe('${{ inputs.version }}');
-    expect(windowsWorkflow.jobs?.build_candidate?.steps?.find(
-      (step) => step.name === 'Prepare previous public release and isolated update mirror',
-    )?.['timeout-minutes']).toBe(20);
+    const automaticUpdateStep = windowsWorkflow.jobs?.build_candidate?.steps?.find(
+      (step) => step.name === 'Prepare and verify the previous public release automatic update',
+    );
+    expect(automaticUpdateStep?.['timeout-minutes']).toBe(40);
+    expect(automaticUpdateStep?.run).toContain(
+      './scripts/windows-automatic-update-gate.ps1 -Action Prepare',
+    );
+    expect(automaticUpdateStep?.run).toContain(
+      'pnpm exec vitest run tests/release/automatic-update.test.ts --no-file-parallelism',
+    );
+    expect(automaticUpdateStep?.run?.indexOf('-Action Prepare')).toBeLessThan(
+      automaticUpdateStep?.run?.indexOf('tests/release/automatic-update.test.ts') ?? -1,
+    );
+    expect(windowsWorkflow.jobs?.build_candidate?.steps).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Upgrade the previous public Windows release and verify updater relaunch',
+        }),
+      ]),
+    );
     expect(release?.needs).toEqual(expect.arrayContaining([
       'verify_final', 'windows', 'verify_macos_automatic_update',
     ]));
@@ -95,6 +112,8 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).not.toContain('Cert:\\CurrentUser\\Root');
     expect(windowsGate).not.toContain('certutil.exe');
     expect(windowsGate).toContain("'--protocol=http'");
+    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_PREVIOUS_EXECUTABLE_PATH'");
+    expect(windowsGate).not.toContain('RUNNER_TRACKING_ID');
     expect(windowsGate).not.toContain('$hostsPath');
     expect(windowsGate).toContain('patch-packaged-update-origin.ts');
     expect(windowsGate).not.toContain("$mirrorHost = 'localhost'");
@@ -104,7 +123,6 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('"NO_PROXY=$noProxy"');
     expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_MIRROR_HOST');
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL');
-    expect(windowsGate).toContain("RUNNER_TRACKING_ID = ''");
     expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN');
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(windowsGate).toContain('if ($server.HasExited)');
