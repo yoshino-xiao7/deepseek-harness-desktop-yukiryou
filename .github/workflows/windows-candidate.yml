@@ -178,7 +178,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-automatic-update-diagnostics
-          path: out/windows-automatic-update-gate/
+          path: |
+            out/windows-automatic-update-gate/diagnostics/
+            out/windows-automatic-update-gate/metadata/
+            out/windows-automatic-update-gate/server.log
+            out/windows-automatic-update-gate/server-error.log
+            out/windows-automatic-update-gate/state.json
           if-no-files-found: warn
           retention-days: 14
       - name: Recover an interrupted lifecycle test installation

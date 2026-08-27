@@ -23,11 +23,11 @@ describe('packaged update origin patch', () => {
       await patchPackagedUpdateOrigin({
         archive,
         from: 'https://download-cn.suzuki.ink',
-        to: 'https://127.0.0.1.nip.io:41337',
+        to: 'https://localhost:41337/mirror',
       });
       extractAll(archive, extracted);
       expect(await readFile(join(extracted, 'main.js'), 'utf8')).toBe(
-        "const origin='https://127.0.0.1.nip.io:41337';\n",
+        "const origin='https://localhost:41337/mirror';\n",
       );
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -16,9 +16,10 @@ $gateIdentity = if ($env:GITHUB_RUN_ID -and $env:GITHUB_RUN_ATTEMPT) {
 $installRoot = Join-Path ([System.IO.Path]::GetTempPath()) "dsh-yukiryou-automatic-update-$gateIdentity"
 $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
-$mirrorHost = '127.0.0.1.nip.io'
+$mirrorHost = 'localhost'
 $mirrorPort = 41337
-$mirrorOrigin = "https://$mirrorHost`:$mirrorPort"
+$mirrorBasePath = '/mirror'
+$mirrorOrigin = "https://$mirrorHost`:$mirrorPort$mirrorBasePath"
 
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
   $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
@@ -309,7 +310,8 @@ $env:no_proxy = $noProxy
 $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   (Join-Path $PSScriptRoot 'serve-automatic-update-gate.ts'),
   "--cert=$certificatePath", "--key=$keyPath", "--assets=$assetsRoot",
-  "--metadata=$metadataRoot", '--target=win32-x64', "--version=$env:RELEASE_VERSION", "--port=$mirrorPort"
+  "--metadata=$metadataRoot", '--target=win32-x64', "--version=$env:RELEASE_VERSION",
+  "--port=$mirrorPort", "--base-path=$mirrorBasePath"
 ) -RedirectStandardOutput $serverLog -RedirectStandardError (Join-Path $gateRoot 'server-error.log') -PassThru
 
 @{
@@ -343,4 +345,5 @@ Write-Output "The isolated HTTPS update mirror is healthy"
 "DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_MIRROR_HOST=$mirrorHost" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+"DSH_AUTOMATIC_UPDATE_DIAGNOSTICS=$(Join-Path $gateRoot 'diagnostics')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 Write-Output "Prepared real Windows automatic update from $previousVersion to $env:RELEASE_VERSION"

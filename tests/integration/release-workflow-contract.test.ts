@@ -98,12 +98,14 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).not.toContain('Import-Certificate');
     expect(windowsGate).not.toContain('$hostsPath');
     expect(windowsGate).toContain('patch-packaged-update-origin.ts');
-    expect(windowsGate).toContain("$mirrorHost = '127.0.0.1.nip.io'");
+    expect(windowsGate).toContain("$mirrorHost = 'localhost'");
+    expect(windowsGate).toContain("$mirrorBasePath = '/mirror'");
     expect(windowsGate).toContain('$mirrorPort = 41337');
     expect(windowsGate).toContain('$env:NO_PROXY = $noProxy');
     expect(windowsGate).toContain('"NO_PROXY=$noProxy"');
     expect(windowsGate).toContain("'--resolve'");
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_MIRROR_HOST');
+    expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(windowsGate).toContain('if ($server.HasExited)');
     expect(automaticUpdateTest).toContain("'--no-proxy-server'");
     expect(automaticUpdateTest).toContain('--host-resolver-rules=MAP');
