@@ -32,6 +32,7 @@ class FakeNativeUpdater implements NativeUpdateClient {
   channel: string | null = null;
   allowDowngrade = true;
   disableDifferentialDownload = false;
+  installDirectory?: string;
   readonly feeds: AllPublishOptions[] = [];
   readonly quitAndInstall = vi.fn();
   readonly results: Array<() => Promise<{ readonly updateInfo: UpdateInfo } | null>> = [];
@@ -148,5 +149,6 @@ describe('cross-platform automatic updater', () => {
     expect(updater.getState().status).toBe('downloaded');
     updater.quitAndInstall();
     expect(native.quitAndInstall).toHaveBeenCalledWith(true, true);
+    expect(native.installDirectory).toBeDefined();
   });
 });

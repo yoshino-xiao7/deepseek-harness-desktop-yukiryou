@@ -1,6 +1,7 @@
 import { autoUpdater, type Event } from 'electron';
 import type { AllPublishOptions, UpdateInfo } from 'builder-util-runtime';
 import { MacUpdater, NsisUpdater } from 'electron-updater';
+import { dirname } from 'node:path';
 
 import { updateFeedUrl } from './update-config.js';
 import { updateRecoveryForError } from './update-error.js';
@@ -58,6 +59,7 @@ export interface NativeUpdateClient {
   channel: string | null;
   allowDowngrade: boolean;
   disableDifferentialDownload: boolean;
+  installDirectory?: string;
   on(event: 'update-available' | 'update-not-available' | 'update-downloaded', listener: (info: UpdateInfo) => void): unknown;
   on(event: 'error', listener: (error: Error) => void): unknown;
   removeListener(event: 'update-available' | 'update-not-available' | 'update-downloaded', listener: (info: UpdateInfo) => void): unknown;
@@ -101,6 +103,13 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     this.#native.channel = 'latest';
     this.#native.allowDowngrade = false;
     this.#native.disableDifferentialDownload = true;
+    if (options.platform === 'win32') {
+      // Do not rely solely on NSIS' uninstall registry entry to rediscover a
+      // user-selected install directory. Passing /D explicitly also makes the
+      // updater deterministic for portable CI installations and repaired or
+      // migrated installations whose registry state may be incomplete.
+      this.#native.installDirectory = dirname(process.execPath);
+    }
     this.#native.on('update-available', this.#handleAvailable);
     this.#native.on('update-not-available', this.#handleNotAvailable);
     this.#native.on('update-downloaded', this.#handleDownloaded);

@@ -54,6 +54,39 @@ export async function patchPackagedUpdateOrigin(options: PatchOptions): Promise<
   }
 }
 
+export async function patchPackagedPackageVersion(
+  archivePath: string,
+  version: string,
+): Promise<void> {
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) {
+    throw new Error(`Packaged application version must be an exact semantic version: ${version}`);
+  }
+  const archive = resolve(archivePath);
+  const workspace = await mkdtemp(join(tmpdir(), 'dsh-packaged-version-'));
+  const extracted = join(workspace, 'app');
+  const replacement = join(dirname(archive), `${archive.split(/[\\/]/u).at(-1)}.next`);
+  const backup = join(dirname(archive), `${archive.split(/[\\/]/u).at(-1)}.before-version-patch`);
+  try {
+    extractAll(archive, extracted);
+    const manifestPath = join(extracted, 'package.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+    manifest.version = version;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    await createPackage(extracted, replacement);
+    await rename(archive, backup);
+    try {
+      await rename(replacement, archive);
+    } catch (error) {
+      await rename(backup, archive);
+      throw error;
+    }
+    await rm(backup, { force: true });
+  } finally {
+    await rm(replacement, { force: true });
+    await rm(workspace, { recursive: true, force: true });
+  }
+}
+
 async function textFiles(root: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -72,9 +105,15 @@ function required(name: string): string {
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await patchPackagedUpdateOrigin({
-    archive: required('--archive'),
-    from: required('--from'),
-    to: required('--to'),
-  });
+  const archive = required('--archive');
+  const version = process.argv.find((argument) => argument.startsWith('--version='))?.slice('--version='.length);
+  if (version !== undefined) {
+    await patchPackagedPackageVersion(archive, version);
+  } else {
+    await patchPackagedUpdateOrigin({
+      archive,
+      from: required('--from'),
+      to: required('--to'),
+    });
+  }
 }

@@ -166,6 +166,7 @@ New-Item -ItemType Directory -Path $gateRoot -Force | Out-Null
 $assetsRoot = Join-Path $gateRoot 'assets'
 $metadataRoot = Join-Path $gateRoot 'metadata'
 $syntheticBuildRoot = Join-Path $gateRoot 'synthetic-successor'
+$syntheticPrepackaged = Join-Path $gateRoot 'synthetic-prepackaged'
 New-Item -ItemType Directory -Path $assetsRoot, $metadataRoot, $syntheticBuildRoot -Force | Out-Null
 @{} | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
@@ -188,9 +189,15 @@ $prepackagedCandidate = Join-Path $repositoryRoot 'out\DeepSeek YukiRyou-win32-x
 if (-not (Test-Path -LiteralPath $prepackagedCandidate)) {
   throw "Prepackaged candidate is missing: $prepackagedCandidate"
 }
+Write-Output "Preparing a successor application whose packaged version is $syntheticSuccessorVersion"
+Copy-Item -LiteralPath $prepackagedCandidate -Destination $syntheticPrepackaged -Recurse -Force
+$syntheticArchive = Join-Path $syntheticPrepackaged 'resources\app.asar'
+& node (Join-Path $PSScriptRoot 'patch-packaged-update-origin.ts') `
+  "--archive=$syntheticArchive" "--version=$syntheticSuccessorVersion"
+if ($LASTEXITCODE -ne 0) { throw 'Failed to stamp the synthetic successor application version' }
 Write-Output "Building a real synthetic successor installer with embedded version $syntheticSuccessorVersion"
 & (Get-Command pnpm.cmd).Source exec electron-builder --win nsis --x64 `
-  "--prepackaged=$prepackagedCandidate" --publish never `
+  "--prepackaged=$syntheticPrepackaged" --publish never `
   "-c.extraMetadata.version=$syntheticSuccessorVersion" `
   "-c.directories.output=$syntheticBuildRoot" `
   "-c.artifactName=$syntheticSuccessorAsset"
@@ -256,7 +263,7 @@ Write-Output "The isolated loopback update mirror is healthy"
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH' $executable
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH' $executable
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION' $syntheticSuccessorVersion
-Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION' $env:RELEASE_VERSION
+Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION' $syntheticSuccessorVersion
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL' "$mirrorOrigin/updates/win32-x64/latest.yml"
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_DIAGNOSTICS' (Join-Path $gateRoot 'diagnostics')
 Write-Output "Prepared release candidate $env:RELEASE_VERSION automatic-update rehearsal against synthetic successor $syntheticSuccessorVersion"

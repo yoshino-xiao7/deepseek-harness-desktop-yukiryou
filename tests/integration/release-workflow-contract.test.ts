@@ -111,6 +111,9 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('Install-CandidateUnderTest $candidateSource $env:RELEASE_VERSION');
     expect(windowsGate).toContain('$syntheticSuccessorVersion');
     expect(windowsGate).toContain('Building a real synthetic successor installer with embedded version');
+    expect(windowsGate).toContain('Preparing a successor application whose packaged version is');
+    expect(windowsGate).toContain('"--version=$syntheticSuccessorVersion"');
+    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION' $syntheticSuccessorVersion");
     expect(windowsGate).toContain('"-c.extraMetadata.version=$syntheticSuccessorVersion"');
     expect(windowsGate).toContain("VersionInfo.ProductVersion");
     expect(windowsGate).not.toContain('Copying the candidate installer as synthetic successor');

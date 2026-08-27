@@ -77,10 +77,15 @@ describe('release candidate automatic update', () => {
 
     // This is intentionally an OS-process assertion, not a second Playwright
     // launch. It proves the updater itself requested a real post-install relaunch.
-    await expect.poll(() => isRelaunched(relaunchExecutable), {
-      timeout: relaunchTimeoutMs,
-      interval: 1_000,
-    }).toBe(true);
+    try {
+      await expect.poll(() => isRelaunched(relaunchExecutable), {
+        timeout: relaunchTimeoutMs,
+        interval: 1_000,
+      }).toBe(true);
+    } catch (error) {
+      await preserveProcessSnapshot('relaunch-timeout');
+      throw error;
+    }
 
     await stopRelaunched(relaunchExecutable);
     const smoke = await execute(relaunchExecutable, ['--release-smoke-test'], {
@@ -290,8 +295,16 @@ async function stopRelaunched(executable: string): Promise<void> {
 
 async function preserveInstalledApplicationDiagnostics(executable: string): Promise<void> {
   const diagnostics = process.env.DSH_AUTOMATIC_UPDATE_DIAGNOSTICS;
-  if (diagnostics === undefined || diagnostics === '' || process.platform !== 'darwin') return;
+  if (diagnostics === undefined || diagnostics === '') return;
   await mkdir(diagnostics, { recursive: true });
+  if (process.platform === 'win32') {
+    const smoke = await execute(executable, ['--release-smoke-test'], {
+      timeout: 30_000,
+    }).then((result) => result.stdout.trim(), (error: unknown) => String(error));
+    await writeFile(join(diagnostics, 'installed-version.txt'), `${smoke}\n`, 'utf8');
+    return;
+  }
+  if (process.platform !== 'darwin') return;
   const infoPlist = join(executable, '..', '..', 'Info.plist');
   const installedVersion = await execute('/usr/libexec/PlistBuddy', [
     '-c',
