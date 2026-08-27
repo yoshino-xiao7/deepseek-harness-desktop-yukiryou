@@ -66,6 +66,7 @@ describe('macOS release workflow contract', () => {
     ]));
     expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'check')");
     expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'install')");
+    expect(automaticUpdateTest).toContain('waitForPreviousMacUpdaterReadiness');
     expect(automaticUpdateTest).toContain('updates[value]()');
     expect(automaticUpdateTest).toContain('relaunch');
     expect(automaticUpdateTest).not.toContain("DSH_DESKTOP_E2E: '1'");
@@ -97,6 +98,8 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('$mirrorPort = 41337');
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(releaseSource).toContain('Capture Squirrel.Mac diagnostics');
+    expect(automaticUpdateTest).toContain('installed-version.txt');
+    expect(automaticUpdateTest).toContain('relaunched-desktop.log');
     expect(windowsGate).not.toContain('& gh release download');
     expect(windowsGate).not.toContain(
       "Join-Path ([System.IO.Path]::GetTempPath()) 'dsh-yukiryou-automatic-update'",

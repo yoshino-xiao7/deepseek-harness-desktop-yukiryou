@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -21,6 +21,7 @@ describe('previous public release automatic update', () => {
 
   afterEach(async () => {
     await closeElectronTestApplication(application);
+    await preserveInstalledApplicationDiagnostics(relaunchExecutable);
     if (userData !== undefined) {
       await preserveDiagnostics(userData);
       await rm(userData, {
@@ -50,6 +51,7 @@ describe('previous public release automatic update', () => {
       timeout: 15 * 60_000,
       interval: 1_000,
     }).toBe('downloaded');
+    await waitForPreviousMacUpdaterReadiness(expectedVersion);
 
     const closed = new Promise<void>((resolve) => application?.once('close', () => resolve()));
     await invokeUpdate(shell, 'install');
@@ -79,6 +81,54 @@ describe('previous public release automatic update', () => {
     expect(log).toContain('"status":"downloaded"');
   }, 20 * 60_000);
 });
+
+async function waitForPreviousMacUpdaterReadiness(version: string): Promise<void> {
+  if (process.platform !== 'darwin') return;
+
+  // v1.0.3 exposed electron-updater's public download event before the
+  // Squirrel.Mac bridge had finished staging the same ZIP. That released
+  // version cannot be changed retroactively. Wait for its native staging
+  // process here; v1.0.4 and later already keep the restart action hidden
+  // until Electron's native update-downloaded event arrives.
+  await expect.poll(() => hasStagedMacUpdate(version), {
+    timeout: 10 * 60_000,
+    interval: 1_000,
+  }).toBe(true);
+  await expect.poll(() => isMacShipItRunning(), {
+    timeout: 2 * 60_000,
+    interval: 500,
+  }).toBe(false);
+}
+
+async function hasStagedMacUpdate(version: string): Promise<boolean> {
+  const shipItCache = join(
+    homedir(),
+    'Library',
+    'Caches',
+    'com.yukiryou.deepseek.yukiryou.ShipIt',
+  );
+  const result = await execute('/usr/bin/find', [
+    shipItCache,
+    '-path',
+    '*/DeepSeek YukiRyou.app/Contents/Info.plist',
+    '-print',
+  ]).catch(() => undefined);
+  if (result === undefined) return false;
+  for (const infoPlist of result.stdout.split('\n').filter(Boolean)) {
+    const stagedVersion = await execute('/usr/libexec/PlistBuddy', [
+      '-c',
+      'Print :CFBundleShortVersionString',
+      infoPlist,
+    ]).then((value) => value.stdout.trim(), () => '');
+    if (stagedVersion === version) return true;
+  }
+  return false;
+}
+
+async function isMacShipItRunning(): Promise<boolean> {
+  const result = await execute('/bin/ps', ['-ww', '-axo', 'command=']);
+  return result.stdout.includes('com.yukiryou.deepseek.yukiryou.ShipIt');
+}
 
 async function invokeUpdate(page: Page, command: 'check' | 'install'): Promise<void> {
   await page.evaluate((value) => {
@@ -123,6 +173,30 @@ async function stopRelaunched(executable: string): Promise<void> {
       process.kill(Number(match[1]), 'SIGTERM');
     }
   }
+}
+
+async function preserveInstalledApplicationDiagnostics(executable: string): Promise<void> {
+  const diagnostics = process.env.DSH_AUTOMATIC_UPDATE_DIAGNOSTICS;
+  if (diagnostics === undefined || diagnostics === '' || process.platform !== 'darwin') return;
+  await mkdir(diagnostics, { recursive: true });
+  const infoPlist = join(executable, '..', '..', 'Info.plist');
+  const installedVersion = await execute('/usr/libexec/PlistBuddy', [
+    '-c',
+    'Print :CFBundleShortVersionString',
+    infoPlist,
+  ]).then((result) => result.stdout.trim(), (error: unknown) => String(error));
+  await writeFile(join(diagnostics, 'installed-version.txt'), `${installedVersion}\n`, 'utf8');
+  await copyFile(
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      'DeepSeek YukiRyou',
+      'logs',
+      'desktop.log',
+    ),
+    join(diagnostics, 'relaunched-desktop.log'),
+  ).catch(() => undefined);
 }
 
 async function preserveDiagnostics(userDataDirectory: string): Promise<void> {
