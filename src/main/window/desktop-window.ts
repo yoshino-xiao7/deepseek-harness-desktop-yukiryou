@@ -97,7 +97,7 @@ import type {
   ExternalPluginControlResult,
 } from '../../shared/managed-plugin-inventory.js';
 import { TOOLBAR_LOCALE_CHANNEL, type DesktopLocale } from '../../shared/locale-sync.js';
-import type { DesktopWindowState } from './window-state.js';
+import { type DesktopWindowState, windowStateSnapshot } from './window-state.js';
 import {
   DEFAULT_DESKTOP_FEATURE_PREFERENCES,
   type DesktopFeaturePreferences,
@@ -413,6 +413,14 @@ class ElectronDesktopWindow implements DesktopWindow {
 
   captureWindowState(): void {
     this.#cancelWindowStatePublish();
+    if (
+      !this.#window.isDestroyed() &&
+      !this.#window.isMinimized() &&
+      !this.#window.isFullScreen()
+    ) {
+      this.#publishWindowState();
+      return;
+    }
     if (this.#lastWindowState !== undefined) {
       this.#options.onWindowStateChange?.(this.#lastWindowState);
     }
@@ -442,10 +450,11 @@ class ElectronDesktopWindow implements DesktopWindow {
       this.#window.isMinimized() ||
       this.#window.isFullScreen()
     ) return;
-    this.#lastWindowState = {
-      bounds: this.#window.getNormalBounds(),
-      maximized: this.#window.isMaximized(),
-    };
+    this.#lastWindowState = windowStateSnapshot(
+      this.#window.getBounds(),
+      this.#window.getNormalBounds(),
+      this.#window.isMaximized(),
+    );
     this.#options.onWindowStateChange?.(this.#lastWindowState);
   }
 

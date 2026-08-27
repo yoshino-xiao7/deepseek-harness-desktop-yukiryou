@@ -21,6 +21,12 @@ describe('desktop window state persistence', () => {
   it('restores the last normal window bounds after a full application restart', async () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-window-state-e2e-'));
     application = await launch(userData);
+    await application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.unmaximize();
+    });
+    await expect.poll(() => application!.evaluate(
+      ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMaximized(),
+    )).toBe(false);
     const expected = await application.evaluate(({ BrowserWindow, screen }) => {
       const area = screen.getPrimaryDisplay().workArea;
       const bounds = {
@@ -30,14 +36,10 @@ describe('desktop window state persistence', () => {
         height: Math.max(600, Math.min(720, area.height - 120)),
       };
       const window = BrowserWindow.getAllWindows()[0];
-      window?.unmaximize();
       window?.setBounds(bounds);
       return bounds;
     });
     await expect.poll(() => readBounds(application!)).toEqual(expected);
-    await expect.poll(() => application!.evaluate(
-      ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMaximized(),
-    )).toBe(false);
     await expect.poll(async () => JSON.parse(
       await readFile(join(userData!, 'window-state.json'), 'utf8'),
     )).toMatchObject({ bounds: expected, maximized: false });
