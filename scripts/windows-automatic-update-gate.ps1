@@ -103,6 +103,27 @@ function Remove-StaleGateInstallations {
     }
 }
 
+function Install-PreviousRelease([string]$Installer, [string]$Version) {
+  $maximumAttempts = 2
+  for ($attempt = 1; $attempt -le $maximumAttempts; $attempt += 1) {
+    try {
+      Write-Output "Installing previous public release $Version into $installRoot (attempt $attempt/$maximumAttempts)"
+      Invoke-Checked $Installer @('/S', '/currentuser', "/D=$installRoot")
+      Wait-Until {
+        (Test-Path -LiteralPath $executable) -and
+        (Test-Path -LiteralPath $uninstaller) -and
+        (Test-Path -LiteralPath (Join-Path $installRoot 'resources\app.asar'))
+      } 'Previous release did not install into the isolated directory'
+      return
+    } catch {
+      if ($attempt -ge $maximumAttempts) { throw }
+      Write-Warning "Previous-release installer attempt $attempt failed; cleaning the isolated directory before one retry: $($_.Exception.Message)"
+      Remove-GateInstallation $installRoot
+      Start-Sleep -Seconds 2
+    }
+  }
+}
+
 if ($Action -eq 'Cleanup') {
   if (Test-Path -LiteralPath $statePath) {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -183,9 +204,7 @@ if ($actualDigest -ne $expectedDigest.Substring(7).ToLowerInvariant()) {
 }
 Write-Output "Verified previous release asset $previousAsset ($actualSize bytes)"
 
-Write-Output "Installing previous public release $previousVersion into $installRoot"
-Invoke-Checked $previousInstaller @('/S', '/currentuser', "/D=$installRoot")
-Wait-Until { (Test-Path -LiteralPath $executable) -and (Test-Path -LiteralPath $uninstaller) } 'Previous release did not install into the isolated directory'
+Install-PreviousRelease $previousInstaller $previousVersion
 Write-Output "Installed previous public release $previousVersion"
 $installedArchive = Join-Path $installRoot 'resources\app.asar'
 if (-not (Test-Path -LiteralPath $installedArchive)) {

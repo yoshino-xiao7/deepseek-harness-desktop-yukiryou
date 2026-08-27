@@ -85,6 +85,10 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('download-cn.suzuki.ink/releases/$previousTag');
     expect(windowsGate).toContain("'--max-time', '480'");
     expect(windowsGate).toContain('Previous release asset SHA-256 mismatch');
+    expect(windowsGate).toContain('function Install-PreviousRelease');
+    expect(windowsGate).toContain('$maximumAttempts = 2');
+    expect(windowsGate).toContain('cleaning the isolated directory before one retry');
+    expect(windowsGate).toContain('Install-PreviousRelease $previousInstaller $previousVersion');
     expect(windowsGate).toContain('X509Store');
     expect(windowsGate).toContain('StoreLocation]::CurrentUser');
     expect(windowsGate).toContain('StoreName]::TrustedPeople');
