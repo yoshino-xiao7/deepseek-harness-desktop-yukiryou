@@ -132,7 +132,7 @@ if ($Action -eq 'Cleanup') {
       Stop-Process -Id ([int]$state.serverPid) -Force -ErrorAction SilentlyContinue
     }
     if ($state.certificateThumbprint) {
-      $certificatePath = "Cert:\CurrentUser\TrustedPeople\$($state.certificateThumbprint)"
+      $certificatePath = "Cert:\CurrentUser\Root\$($state.certificateThumbprint)"
       if (Test-Path -LiteralPath $certificatePath) {
         Remove-Item -LiteralPath $certificatePath -Force
       }
@@ -283,22 +283,26 @@ $trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certifi
   $certificatePath
 )
 $certificateThumbprint = $trustedCertificate.Thumbprint
-$trustedPeopleStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-  [System.Security.Cryptography.X509Certificates.StoreName]::TrustedPeople,
+$trustedRootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+  [System.Security.Cryptography.X509Certificates.StoreName]::Root,
   [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
 )
 try {
-  $trustedPeopleStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-  $trustedPeopleStore.Add($trustedCertificate)
+  $trustedRootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+  $trustedRootStore.Add($trustedCertificate)
 } finally {
-  $trustedPeopleStore.Close()
+  $trustedRootStore.Close()
   $trustedCertificate.Dispose()
 }
-$trustedCertificatePath = "Cert:\CurrentUser\TrustedPeople\$certificateThumbprint"
+$trustedCertificatePath = "Cert:\CurrentUser\Root\$certificateThumbprint"
 if (-not (Test-Path -LiteralPath $trustedCertificatePath)) {
-  throw 'The isolated update mirror certificate was not added to the current-user trusted-people store'
+  throw 'The isolated update mirror certificate was not added to the current-user root store'
 }
-Write-Output "Trusted the isolated update mirror certificate"
+# The previous public updater uses Electron's native Windows HTTP executor, so
+# Chromium's SPKI allowlist alone cannot authorize this loopback endpoint. Trust
+# only this ephemeral certificate for the runner user and remove it by exact
+# thumbprint in the workflow cleanup step.
+Write-Output "Trusted the isolated update mirror certificate root"
 @{ certificateThumbprint = $certificateThumbprint } |
   ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 

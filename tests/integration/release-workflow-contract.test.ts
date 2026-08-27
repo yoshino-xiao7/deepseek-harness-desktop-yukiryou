@@ -91,8 +91,9 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('Install-PreviousRelease $previousInstaller $previousVersion');
     expect(windowsGate).toContain('X509Store');
     expect(windowsGate).toContain('StoreLocation]::CurrentUser');
-    expect(windowsGate).toContain('StoreName]::TrustedPeople');
-    expect(windowsGate).not.toContain('StoreName]::Root');
+    expect(windowsGate).toContain('StoreName]::Root');
+    expect(windowsGate).toContain('Cert:\\CurrentUser\\Root');
+    expect(windowsGate).toContain('thumbprint in the workflow cleanup step');
     expect(windowsGate).toContain('OpenFlags]::ReadWrite');
     expect(windowsGate).not.toContain('certutil.exe');
     expect(windowsGate).not.toContain('Import-Certificate');
