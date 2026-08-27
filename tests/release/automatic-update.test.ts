@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
@@ -36,6 +37,8 @@ describe('previous public release automatic update', () => {
   it('downloads, installs, relaunches, and replaces the old public application', async () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-real-update-gate-'));
     const mirrorHost = process.env.DSH_AUTOMATIC_UPDATE_MIRROR_HOST?.trim();
+    const certificateSpkiPin =
+      process.env.DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN?.trim();
     application = await electron.launch({
       executablePath: previousExecutable,
       // The release gate serves the exact candidate from a loopback HTTPS
@@ -47,6 +50,9 @@ describe('previous public release automatic update', () => {
         ...(mirrorHost === undefined || mirrorHost === ''
           ? []
           : [`--host-resolver-rules=MAP ${mirrorHost} 127.0.0.1`]),
+        ...(certificateSpkiPin === undefined || certificateSpkiPin === ''
+          ? []
+          : [`--ignore-certificate-errors-spki-list=${certificateSpkiPin}`]),
       ],
       env: {
         ...process.env,
@@ -57,10 +63,7 @@ describe('previous public release automatic update', () => {
     const shell = await waitForUpdateShell(application);
 
     await invokeUpdate(shell, 'check');
-    await expect.poll(() => readUpdateStatus(shell), {
-      timeout: 15 * 60_000,
-      interval: 1_000,
-    }).toBe('downloaded');
+    await waitForDownloaded(shell);
     await waitForPreviousMacUpdaterReadiness(expectedVersion);
 
     const closed = new Promise<void>((resolve) => application?.once('close', () => resolve()));
@@ -158,6 +161,19 @@ async function readUpdateStatus(page: Page): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+async function waitForDownloaded(page: Page): Promise<void> {
+  const deadline = Date.now() + 15 * 60_000;
+  while (Date.now() < deadline) {
+    const status = await readUpdateStatus(page);
+    if (status === 'downloaded') return;
+    if (status === 'latest' || status === 'manual' || status === 'error' || status === 'disabled') {
+      throw new Error(`Updater reached terminal status before download: ${status}`);
+    }
+    await delay(1_000);
+  }
+  throw new Error(`Updater did not download within 15 minutes; last status: ${await readUpdateStatus(page)}`);
 }
 
 async function isRelaunched(executable: string): Promise<boolean> {

@@ -230,6 +230,7 @@ Write-Output "Generated candidate update metadata"
 
 $certificatePath = Join-Path $gateRoot 'server.crt'
 $keyPath = Join-Path $gateRoot 'server.key'
+$certificateSpkiPin = $null
 Write-Output "Generating the isolated update mirror certificate"
 $rsa = [System.Security.Cryptography.RSA]::Create(2048)
 try {
@@ -256,6 +257,9 @@ try {
   $generatedCertificate = $request.CreateSelfSigned(
     [System.DateTimeOffset]::UtcNow.AddMinutes(-5),
     [System.DateTimeOffset]::UtcNow.AddDays(1)
+  )
+  $certificateSpkiPin = [System.Convert]::ToBase64String(
+    [System.Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo())
   )
   try {
     [System.IO.File]::WriteAllText(
@@ -345,5 +349,6 @@ Write-Output "The isolated HTTPS update mirror is healthy"
 "DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_MIRROR_HOST=$mirrorHost" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+"DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN=$certificateSpkiPin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_DIAGNOSTICS=$(Join-Path $gateRoot 'diagnostics')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 Write-Output "Prepared real Windows automatic update from $previousVersion to $env:RELEASE_VERSION"

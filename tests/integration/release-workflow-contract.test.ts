@@ -105,10 +105,13 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('"NO_PROXY=$noProxy"');
     expect(windowsGate).toContain("'--resolve'");
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_MIRROR_HOST');
+    expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN');
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(windowsGate).toContain('if ($server.HasExited)');
     expect(automaticUpdateTest).toContain("'--no-proxy-server'");
     expect(automaticUpdateTest).toContain('--host-resolver-rules=MAP');
+    expect(automaticUpdateTest).toContain('--ignore-certificate-errors-spki-list=');
+    expect(automaticUpdateTest).toContain('Updater reached terminal status before download');
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(releaseSource).toContain('Capture Squirrel.Mac diagnostics');
     expect(automaticUpdateTest).toContain('installed-version.txt');
