@@ -33,7 +33,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-candidate-${{ github.event.pull_request.number || github.ref }}
+  # PR updates supersede older checks for the same PR. Manual release-gate
+  # runs must use a fresh group so an incident-stale ref group cannot hold
+  # every subsequent attempt in the queue.
+  group: windows-candidate-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 env:

@@ -46,6 +46,10 @@ describe('macOS release workflow contract', () => {
       group: 'release-desktop-${{ inputs.version }}',
       'cancel-in-progress': false,
     });
+    expect(windowsWorkflow.concurrency).toEqual({
+      group: 'windows-candidate-${{ github.event.pull_request.number || github.run_id }}',
+      'cancel-in-progress': true,
+    });
     expect(releaseSource).not.toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
     expect(releaseSource).toContain('gh api "repos/${GITHUB_REPOSITORY}/releases/latest"');
     expect(releaseSource).toContain('tests/release/automatic-update.test.ts');
