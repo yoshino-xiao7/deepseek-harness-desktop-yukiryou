@@ -280,6 +280,13 @@ Write-Output "Trusted the isolated update mirror certificate"
 
 $serverLog = Join-Path $gateRoot 'server.log'
 Write-Output "Starting the isolated HTTPS update mirror"
+$noProxy = @($env:NO_PROXY, $mirrorHost) |
+  Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+  Join-String -Separator ','
+$env:NO_PROXY = $noProxy
+$env:no_proxy = $noProxy
+"NO_PROXY=$noProxy" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+"no_proxy=$noProxy" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   (Join-Path $PSScriptRoot 'serve-automatic-update-gate.ts'),
   "--cert=$certificatePath", "--key=$keyPath", "--assets=$assetsRoot",
@@ -292,11 +299,20 @@ $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   installRoot = $installRoot
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
-Wait-Until {
-  try {
-    (Invoke-WebRequest -Uri "$mirrorOrigin/health" -UseBasicParsing -TimeoutSec 5).Content -eq 'ok'
-  } catch { $false }
-} 'The isolated HTTPS update mirror did not become healthy'
+try {
+  Wait-Until {
+    if ($server.HasExited) {
+      throw "The isolated HTTPS update mirror exited with code $($server.ExitCode)"
+    }
+    try {
+      (Invoke-WebRequest -Uri "$mirrorOrigin/health" -UseBasicParsing -NoProxy -TimeoutSec 5).Content -eq 'ok'
+    } catch { $false }
+  } 'The isolated HTTPS update mirror did not become healthy'
+} catch {
+  Get-Content -LiteralPath $serverLog -ErrorAction SilentlyContinue
+  Get-Content -LiteralPath (Join-Path $gateRoot 'server-error.log') -ErrorAction SilentlyContinue
+  throw
+}
 Write-Output "The isolated HTTPS update mirror is healthy"
 
 "DSH_PREVIOUS_EXECUTABLE_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append

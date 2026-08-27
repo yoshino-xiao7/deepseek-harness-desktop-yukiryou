@@ -42,13 +42,16 @@ describe('bundled Harness runtime', () => {
     );
 
     expect(client).toContain(
-      'deepseek-yukiryou:model-capabilities-patch:v1',
+      'deepseek-yukiryou:model-capabilities-patch:v2',
     );
     expect(client).toContain('modelInputCapability: "输入能力"');
     expect(client).toContain(
       'patch(index, { input: capability === "vision" ? ["text", "image"]',
     );
     expect(client).not.toContain('defaultInput: ["text", "image"]');
+    expect(client).toContain(
+      'state.namespaces.has(row.entry.settingsNs)',
+    );
   });
 
   it('ships the rc.8-scoped session selection startup patch', async () => {

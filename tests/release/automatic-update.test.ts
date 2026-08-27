@@ -37,7 +37,10 @@ describe('previous public release automatic update', () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-real-update-gate-'));
     application = await electron.launch({
       executablePath: previousExecutable,
-      args: [`--user-data-dir=${userData}`],
+      // The release gate serves the exact candidate from a loopback HTTPS
+      // mirror. Ignore runner-level proxies so the test exercises the updater
+      // rather than an unrelated corporate proxy or PAC configuration.
+      args: [`--user-data-dir=${userData}`, '--no-proxy-server'],
       env: {
         ...process.env,
         DSH_DESKTOP_DISTRIBUTION_REGION: 'china',

@@ -96,6 +96,11 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('patch-packaged-update-origin.ts');
     expect(windowsGate).toContain("$mirrorHost = '127.0.0.1.nip.io'");
     expect(windowsGate).toContain('$mirrorPort = 41337');
+    expect(windowsGate).toContain('$env:NO_PROXY = $noProxy');
+    expect(windowsGate).toContain('"NO_PROXY=$noProxy"');
+    expect(windowsGate).toContain('-NoProxy');
+    expect(windowsGate).toContain('if ($server.HasExited)');
+    expect(automaticUpdateTest).toContain("'--no-proxy-server'");
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(releaseSource).toContain('Capture Squirrel.Mac diagnostics');
     expect(automaticUpdateTest).toContain('installed-version.txt');

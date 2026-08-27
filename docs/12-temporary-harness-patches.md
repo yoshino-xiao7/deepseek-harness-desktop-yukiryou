@@ -3,10 +3,10 @@
 ## 自定义模型输入能力编辑器
 
 - 状态：启用
-- 补丁标识：`deepseek-yukiryou:model-capabilities-patch:v1`
+- 补丁标识：`deepseek-yukiryou:model-capabilities-patch:v2`
 - 适用 Harness：`0.1.1-rc.2`
 - 原因：rc.2 已加入 Vision Exp 和图片处理链，但 `llm-pi-ai` 自定义模型设置页仍未提供既有 `models[].input` 控件。
-- 范围：只修改随包 Harness 的 `dsh-client-ui-settings-models/lib/client.js`，在自定义模型行的展开区域加入“自动继承 / 仅文本 / 文本与图片”。不修改图片发送校验，不设置 Provider 级 `defaultInput`，不改变官方 DeepSeek adapter。
+- 范围：只修改随包 Harness 的 `dsh-client-ui-settings-models/lib/client.js`：在自定义模型行的展开区域加入“自动继承 / 仅文本 / 文本与图片”；同时从“添加提供方”候选中排除实际未挂载设置命名空间的目录项，避免点击后因为无法解析编辑器而静默回到原按钮。不修改图片发送校验，不设置 Provider 级 `defaultInput`，不改变官方 DeepSeek adapter。
 - 持久化：选择“仅文本”写入 `input: [text]`；选择“文本与图片”写入 `input: [text, image]`；选择“自动继承”移除该模型的 `input` 字段。
 
 ### rc.2 复核结论

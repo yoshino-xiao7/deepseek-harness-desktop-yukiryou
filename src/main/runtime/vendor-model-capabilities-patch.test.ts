@@ -14,6 +14,7 @@ const upstreamFixture = [
   '\t\t\t\t\t\t\t\t\t}',
   '\t\t\t\t\t\t\t\t})]',
   '\t\t\t\t\t\t\t})]',
+  '\t\t\tconst addable = state.rows.filter((row) => !row.configured && row.entry.settingsNs !== "");',
   '});',
 ].join('\n');
 
@@ -30,6 +31,9 @@ describe('temporary Harness model-capabilities patch', () => {
       'patch(index, { input: capability === "vision" ? ["text", "image"]',
     );
     expect(patched).not.toContain('defaultInput: ["text", "image"]');
+    expect(patched).toContain(
+      'state.namespaces.has(row.entry.settingsNs)',
+    );
   });
 
   it('is idempotent so rebuilding an already-patched runtime is safe', () => {
