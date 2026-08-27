@@ -78,6 +78,8 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('Remove-StaleGateInstallations');
     expect(windowsGate).toContain("-Filter 'dsh-yukiryou-automatic-update-*'");
     expect(windowsGate).toContain('Recovering stale automatic-update installation');
+    expect(windowsGate).toContain('function Remove-DirectoryEventually');
+    expect(windowsGate).toContain('if (-not (Test-Path -LiteralPath $Root)) { return }');
     expect(windowsGate).toContain('[System.StringComparison]::OrdinalIgnoreCase');
     expect(windowsGate).toContain('download-cn.suzuki.ink/releases/$previousTag');
     expect(windowsGate).toContain("'--max-time', '480'");

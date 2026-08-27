@@ -50,6 +50,22 @@ function Invoke-BoundedDownload([string]$Url, [string]$Destination) {
   )
 }
 
+function Remove-DirectoryEventually([string]$Root) {
+  $deadline = (Get-Date).AddSeconds(30)
+  $lastFailure = $null
+  do {
+    if (-not (Test-Path -LiteralPath $Root)) { return }
+    try {
+      Remove-Item -LiteralPath $Root -Recurse -Force -ErrorAction Stop
+    } catch {
+      $lastFailure = $_
+      if (-not (Test-Path -LiteralPath $Root)) { return }
+    }
+    Start-Sleep -Milliseconds 250
+  } while ((Get-Date) -lt $deadline)
+  throw "Could not remove stale automatic-update installation '$Root': $lastFailure"
+}
+
 function Remove-GateInstallation([string]$Root) {
   $resolvedRoot = [System.IO.Path]::GetFullPath($Root)
   $targetExecutable = Join-Path $resolvedRoot 'DeepSeek YukiRyou.exe'
@@ -70,7 +86,10 @@ function Remove-GateInstallation([string]$Root) {
     Wait-Until { -not (Test-Path -LiteralPath $targetExecutable) } 'Updater gate installation remained after uninstall'
   }
   if (Test-Path -LiteralPath $resolvedRoot) {
-    Remove-Item -LiteralPath $resolvedRoot -Recurse -Force
+    # NSIS can hand deletion to a short-lived child process before the parent
+    # uninstaller exits. Treat files disappearing during recursive removal as
+    # progress, then retry until the exact isolated root is gone.
+    Remove-DirectoryEventually $resolvedRoot
   }
 }
 
