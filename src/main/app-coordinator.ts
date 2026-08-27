@@ -1240,7 +1240,9 @@ export class AppCoordinator {
     this.#log?.write('update.installing');
     const updater = this.#updater;
     try {
-      await this.#runtime?.stop('update');
+      this.#log?.write('update.runtime-stop-started');
+      await waitForApplicationExitCleanup(() => this.#runtime?.stop('update'));
+      this.#log?.write('update.runtime-stop-settled');
     } finally {
       this.#runtimeStderr.flush();
       this.#log?.write('update.exit-cleanup-started');
