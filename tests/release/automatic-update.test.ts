@@ -12,14 +12,16 @@ import { closeElectronTestApplication } from '../e2e/electron-cleanup.js';
 import { waitForUpdateShell } from './update-shell.js';
 
 const execute = promisify(execFile);
-const previousExecutable = requiredEnvironment('DSH_PREVIOUS_EXECUTABLE_PATH');
+const sourceExecutable = requiredEnvironment('DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH');
 const relaunchExecutable = requiredEnvironment('DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH');
-const expectedVersion = requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION');
+const expectedUpdateVersion = requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION');
+const expectedInstalledVersion =
+  process.env.DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION?.trim() || expectedUpdateVersion;
 const downloadTimeoutMs = 2 * 60_000;
 const oldProcessExitTimeoutMs = 60_000;
 const relaunchTimeoutMs = 3 * 60_000;
 
-describe('previous public release automatic update', () => {
+describe('release candidate automatic update', () => {
   let application: ElectronApplication | undefined;
   let userData: string | undefined;
 
@@ -37,12 +39,12 @@ describe('previous public release automatic update', () => {
     }
   }, 30_000);
 
-  it('downloads, installs, relaunches, and replaces the old public application', async () => {
+  it('downloads, installs, exits, and relaunches the release candidate', async () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-real-update-gate-'));
     const certificateSpkiPin =
       process.env.DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN?.trim();
     application = await electron.launch({
-      executablePath: previousExecutable,
+      executablePath: sourceExecutable,
       // The release gate serves the exact candidate from a loopback HTTPS
       // mirror. Ignore runner-level proxies so the test exercises the updater
       // rather than an unrelated corporate proxy or PAC configuration.
@@ -59,12 +61,12 @@ describe('previous public release automatic update', () => {
       },
     });
     await application.firstWindow();
-    await configureUpdaterGateSession(application, expectedVersion);
+    await configureUpdaterGateSession(application, expectedUpdateVersion);
     const shell = await waitForUpdateShell(application);
 
     await invokeUpdate(shell, 'check');
     await waitForDownloaded(shell);
-    await waitForPreviousMacUpdaterReadiness(expectedVersion);
+    await waitForPreviousMacUpdaterReadiness(expectedInstalledVersion);
 
     const closed = new Promise<void>((resolve) => application?.once('close', () => resolve()));
     await invokeUpdate(shell, 'install');
@@ -86,7 +88,7 @@ describe('previous public release automatic update', () => {
     });
     expect(smoke.stdout).toContain('DEEPSEEK_YUKIRYOU_RELEASE_SMOKE_OK');
     expect(JSON.parse(smoke.stdout.slice(smoke.stdout.indexOf('{')))).toMatchObject({
-      version: expectedVersion,
+      version: expectedInstalledVersion,
       packaged: true,
     });
 
@@ -108,7 +110,7 @@ async function waitForApplicationClose(
   await preserveProcessSnapshot('old-process-exit-timeout');
   await preserveApplicationSnapshot(application, 'old-process-exit-timeout');
   throw new Error(
-    `Previous public application did not exit within ${String(oldProcessExitTimeoutMs)}ms ` +
+    `Release candidate did not exit within ${String(oldProcessExitTimeoutMs)}ms ` +
     'after requesting update installation',
   );
 }

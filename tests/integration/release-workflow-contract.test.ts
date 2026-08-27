@@ -28,7 +28,7 @@ interface ReleaseWorkflow {
 }
 
 describe('macOS release workflow contract', () => {
-  it('blocks release on a real previous-public-version automatic update and relaunch gate', async () => {
+  it('blocks release on the release candidate automatic update and relaunch gate', async () => {
     const [releaseSource, windowsSource, automaticUpdateTest, windowsGate] = await Promise.all([
       readFile(join(process.cwd(), '.github', 'workflows', 'release-macos.yml'), 'utf8'),
       readFile(join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'), 'utf8'),
@@ -63,9 +63,9 @@ describe('macOS release workflow contract', () => {
     );
     expect(windows.with?.release_version).toBe('${{ inputs.version }}');
     const automaticUpdateStep = windowsWorkflow.jobs?.build_candidate?.steps?.find(
-      (step) => step.name === 'Prepare and verify the previous public release automatic update',
+      (step) => step.name === 'Prepare and verify the release candidate automatic update',
     );
-    expect(automaticUpdateStep?.['timeout-minutes']).toBe(40);
+    expect(automaticUpdateStep?.['timeout-minutes']).toBe(15);
     expect(automaticUpdateStep?.run).toContain(
       './scripts/windows-automatic-update-gate.ps1 -Action Prepare',
     );
@@ -102,17 +102,19 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('function Remove-DirectoryEventually');
     expect(windowsGate).toContain('if (-not (Test-Path -LiteralPath $Root)) { return }');
     expect(windowsGate).toContain('[System.StringComparison]::OrdinalIgnoreCase');
-    expect(windowsGate).toContain('download-cn.suzuki.ink/releases/$previousTag');
-    expect(windowsGate).toContain("'--max-time', '480'");
-    expect(windowsGate).toContain('Previous release asset SHA-256 mismatch');
-    expect(windowsGate).toContain('function Install-PreviousRelease');
+    expect(windowsGate).not.toContain('gh api');
+    expect(windowsGate).not.toContain('download-cn.suzuki.ink/releases/$previousTag');
+    expect(windowsGate).not.toContain('Previous release asset SHA-256 mismatch');
+    expect(windowsGate).toContain('function Install-CandidateUnderTest');
     expect(windowsGate).toContain('$maximumAttempts = 2');
     expect(windowsGate).toContain('cleaning the isolated directory before one retry');
-    expect(windowsGate).toContain('Install-PreviousRelease $previousInstaller $previousVersion');
+    expect(windowsGate).toContain('Install-CandidateUnderTest $candidateSource $env:RELEASE_VERSION');
+    expect(windowsGate).toContain('$syntheticSuccessorVersion');
     expect(windowsGate).not.toContain('Cert:\\CurrentUser\\Root');
     expect(windowsGate).not.toContain('certutil.exe');
     expect(windowsGate).toContain("'--protocol=http'");
-    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_PREVIOUS_EXECUTABLE_PATH'");
+    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH'");
+    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION'");
     expect(windowsGate).not.toContain('RUNNER_TRACKING_ID');
     expect(windowsGate).not.toContain('$hostsPath');
     expect(windowsGate).toContain('patch-packaged-update-origin.ts');
@@ -133,6 +135,8 @@ describe('macOS release workflow contract', () => {
     expect(automaticUpdateTest).toContain('Updater mirror preflight did not expose the expected version');
     expect(automaticUpdateTest).toContain('--ignore-certificate-errors-spki-list=');
     expect(automaticUpdateTest).toContain('Updater reached terminal status before download');
+    expect(automaticUpdateTest).toContain('DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH');
+    expect(automaticUpdateTest).toContain('DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION');
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(releaseSource).toContain('Capture Squirrel.Mac diagnostics');
     expect(automaticUpdateTest).toContain('installed-version.txt');

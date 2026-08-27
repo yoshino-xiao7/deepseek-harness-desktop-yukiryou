@@ -157,12 +157,11 @@ jobs:
           const m=JSON.parse(fs.readFileSync('out/windows-candidate/windows-candidate-manifest.json','utf8'));
           if(m.schemaVersion!==1||m.version!==p.version||m.target!=='win32-x64'||m.gitCommit!==process.env.EXPECTED_COMMIT||m.artifacts.length!==2||!m.artifacts.some(a=>a.file.endsWith('-portable.zip')))
           throw new Error('Windows candidate provenance mismatch')"
-      - name: Prepare and verify the previous public release automatic update
+      - name: Prepare and verify the release candidate automatic update
         if: ${{ inputs.release_version != '' }}
-        timeout-minutes: 40
+        timeout-minutes: 15
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.release_version }}
           DSH_DESKTOP_DISTRIBUTION_REGION: china
         run: |
