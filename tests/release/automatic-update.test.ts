@@ -15,6 +15,9 @@ const execute = promisify(execFile);
 const previousExecutable = requiredEnvironment('DSH_PREVIOUS_EXECUTABLE_PATH');
 const relaunchExecutable = requiredEnvironment('DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH');
 const expectedVersion = requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION');
+const downloadTimeoutMs = 2 * 60_000;
+const oldProcessExitTimeoutMs = 60_000;
+const relaunchTimeoutMs = 3 * 60_000;
 
 describe('previous public release automatic update', () => {
   let application: ElectronApplication | undefined;
@@ -65,7 +68,7 @@ describe('previous public release automatic update', () => {
 
     const closed = new Promise<void>((resolve) => application?.once('close', () => resolve()));
     await invokeUpdate(shell, 'install');
-    await expect(closed).resolves.toBeUndefined();
+    await waitForApplicationClose(application, closed);
     application = undefined;
 
     await preserveProcessSnapshot('after-old-process-exit');
@@ -73,7 +76,7 @@ describe('previous public release automatic update', () => {
     // This is intentionally an OS-process assertion, not a second Playwright
     // launch. It proves the updater itself requested a real post-install relaunch.
     await expect.poll(() => isRelaunched(relaunchExecutable), {
-      timeout: 3 * 60_000,
+      timeout: relaunchTimeoutMs,
       interval: 1_000,
     }).toBe(true);
 
@@ -89,8 +92,26 @@ describe('previous public release automatic update', () => {
 
     const log = await readFile(join(userData, 'logs', 'desktop.log'), 'utf8');
     expect(log).toContain('"status":"downloaded"');
-  }, 20 * 60_000);
+  }, 8 * 60_000);
 });
+
+async function waitForApplicationClose(
+  application: ElectronApplication,
+  closed: Promise<void>,
+): Promise<void> {
+  const timedOut = Symbol('timed-out');
+  const result = await Promise.race([
+    closed.then(() => undefined),
+    delay(oldProcessExitTimeoutMs, timedOut),
+  ]);
+  if (result !== timedOut) return;
+  await preserveProcessSnapshot('old-process-exit-timeout');
+  await preserveApplicationSnapshot(application, 'old-process-exit-timeout');
+  throw new Error(
+    `Previous public application did not exit within ${String(oldProcessExitTimeoutMs)}ms ` +
+    'after requesting update installation',
+  );
+}
 
 async function configureUpdaterGateSession(
   application: ElectronApplication,
@@ -187,7 +208,7 @@ async function readUpdateStatus(page: Page): Promise<string | undefined> {
 }
 
 async function waitForDownloaded(page: Page): Promise<void> {
-  const deadline = Date.now() + 15 * 60_000;
+  const deadline = Date.now() + downloadTimeoutMs;
   while (Date.now() < deadline) {
     const status = await readUpdateStatus(page);
     if (status === 'downloaded') return;
@@ -196,7 +217,28 @@ async function waitForDownloaded(page: Page): Promise<void> {
     }
     await delay(1_000);
   }
-  throw new Error(`Updater did not download within 15 minutes; last status: ${await readUpdateStatus(page)}`);
+  throw new Error(
+    `Updater did not download within ${String(downloadTimeoutMs)}ms; ` +
+    `last status: ${await readUpdateStatus(page)}`,
+  );
+}
+
+async function preserveApplicationSnapshot(
+  application: ElectronApplication,
+  stage: string,
+): Promise<void> {
+  const diagnostics = process.env.DSH_AUTOMATIC_UPDATE_DIAGNOSTICS;
+  if (diagnostics === undefined || diagnostics === '') return;
+  await mkdir(diagnostics, { recursive: true });
+  const windows = application.windows().map((page) => ({
+    url: page.url(),
+    closed: page.isClosed(),
+  }));
+  await writeFile(
+    join(diagnostics, `application-${stage}.json`),
+    `${JSON.stringify({ pid: application.process().pid, windows }, null, 2)}\n`,
+    'utf8',
+  );
 }
 
 async function isRelaunched(executable: string): Promise<boolean> {
@@ -267,7 +309,13 @@ async function preserveProcessSnapshot(stage: string): Promise<void> {
     ? await execute('powershell.exe', [
         '-NoProfile',
         '-Command',
-        'Get-CimInstance Win32_Process | Select-Object ProcessId,ExecutablePath,CommandLine | Format-List',
+        [
+          "$names = @('DeepSeek YukiRyou', 'DeepSeek-YukiRyou-Setup', 'cmd', 'conhost')",
+          'Get-Process -ErrorAction SilentlyContinue |',
+          'Where-Object { $names -contains $_.ProcessName -or $_.ProcessName -like "*nsis*" } |',
+          'Select-Object Id,ProcessName,Path,StartTime,Responding |',
+          'ConvertTo-Json -Depth 3',
+        ].join(' '),
       ])
     : await execute('/bin/ps', ['-ww', '-axo', 'pid=,ppid=,command=']);
   await writeFile(join(diagnostics, `processes-${stage}.log`), snapshot.stdout, 'utf8');
