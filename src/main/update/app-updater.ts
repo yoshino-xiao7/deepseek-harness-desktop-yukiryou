@@ -220,7 +220,14 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
   }
 
-  quitAndInstall(): void { this.#native.quitAndInstall(false, true); }
+  quitAndInstall(): void {
+    // The Windows artifact is an assisted NSIS installer with
+    // runAfterFinish=false. Its generated installer only honors --force-run
+    // during a silent update; a non-silent quitAndInstall therefore installs
+    // successfully but leaves the application closed. macOS keeps its native
+    // non-silent Squirrel handoff.
+    this.#native.quitAndInstall(this.#options.platform === 'win32', true);
+  }
 
   dispose(): void {
     clearTimeout(this.#initialTimer);

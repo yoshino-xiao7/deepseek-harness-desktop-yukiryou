@@ -147,6 +147,6 @@ describe('cross-platform automatic updater', () => {
     native.emit('update-downloaded', updateInfo);
     expect(updater.getState().status).toBe('downloaded');
     updater.quitAndInstall();
-    expect(native.quitAndInstall).toHaveBeenCalledWith(false, true);
+    expect(native.quitAndInstall).toHaveBeenCalledWith(true, true);
   });
 });
