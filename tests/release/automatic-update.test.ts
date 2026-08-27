@@ -36,7 +36,6 @@ describe('previous public release automatic update', () => {
 
   it('downloads, installs, relaunches, and replaces the old public application', async () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-real-update-gate-'));
-    const mirrorHost = process.env.DSH_AUTOMATIC_UPDATE_MIRROR_HOST?.trim();
     const certificateSpkiPin =
       process.env.DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN?.trim();
     application = await electron.launch({
@@ -47,9 +46,6 @@ describe('previous public release automatic update', () => {
       args: [
         `--user-data-dir=${userData}`,
         '--no-proxy-server',
-        ...(mirrorHost === undefined || mirrorHost === ''
-          ? []
-          : [`--host-resolver-rules=MAP ${mirrorHost} 127.0.0.1`]),
         ...(certificateSpkiPin === undefined || certificateSpkiPin === ''
           ? []
           : [`--ignore-certificate-errors-spki-list=${certificateSpkiPin}`]),

@@ -16,7 +16,7 @@ $gateIdentity = if ($env:GITHUB_RUN_ID -and $env:GITHUB_RUN_ATTEMPT) {
 $installRoot = Join-Path ([System.IO.Path]::GetTempPath()) "dsh-yukiryou-automatic-update-$gateIdentity"
 $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
-$mirrorHost = 'localhost'
+$mirrorHost = '127.0.0.1'
 $mirrorPort = 41337
 $mirrorBasePath = '/mirrorx'
 $mirrorOrigin = "http://$mirrorHost`:$mirrorPort$mirrorBasePath"
@@ -255,7 +255,6 @@ try {
     try {
       $health = & (Get-Command curl.exe).Source @(
         '--fail', '--silent', '--show-error', '--noproxy', '*',
-        '--resolve', "$mirrorHost`:$mirrorPort`:127.0.0.1",
         "$mirrorOrigin/health"
       )
       $LASTEXITCODE -eq 0 -and $health -eq 'ok'
@@ -271,6 +270,5 @@ Write-Output "The isolated loopback update mirror is healthy"
 "DSH_PREVIOUS_EXECUTABLE_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-"DSH_AUTOMATIC_UPDATE_MIRROR_HOST=$mirrorHost" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_DIAGNOSTICS=$(Join-Path $gateRoot 'diagnostics')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 Write-Output "Prepared real Windows automatic update from $previousVersion to $env:RELEASE_VERSION"
