@@ -101,18 +101,38 @@ async function waitForApplicationClose(
   application: ElectronApplication,
   closed: Promise<void>,
 ): Promise<void> {
-  const timedOut = Symbol('timed-out');
-  const result = await Promise.race([
-    closed.then(() => undefined),
-    delay(oldProcessExitTimeoutMs, timedOut),
-  ]);
-  if (result !== timedOut) return;
+  const sourcePid = application.process().pid;
+  if (sourcePid === undefined) {
+    throw new Error('Release candidate source process did not expose a PID');
+  }
+  const deadline = Date.now() + oldProcessExitTimeoutMs;
+  let driverClosed = false;
+  void closed.then(() => {
+    driverClosed = true;
+  });
+  while (Date.now() < deadline) {
+    // quitAndInstall hands process ownership to the native installer. On
+    // Windows that can terminate the Electron process without Playwright's
+    // transport emitting its higher-level `close` event, so the release gate
+    // must also observe the source OS process directly.
+    if (driverClosed || !isProcessRunning(sourcePid)) return;
+    await delay(250);
+  }
   await preserveProcessSnapshot('old-process-exit-timeout');
   await preserveApplicationSnapshot(application, 'old-process-exit-timeout');
   throw new Error(
     `Release candidate did not exit within ${String(oldProcessExitTimeoutMs)}ms ` +
     'after requesting update installation',
   );
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error instanceof Error && 'code' in error && error.code !== 'ESRCH';
+  }
 }
 
 async function configureUpdaterGateSession(
