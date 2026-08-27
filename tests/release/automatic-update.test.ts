@@ -35,12 +35,19 @@ describe('previous public release automatic update', () => {
 
   it('downloads, installs, relaunches, and replaces the old public application', async () => {
     userData = await mkdtemp(join(tmpdir(), 'dsh-real-update-gate-'));
+    const mirrorHost = process.env.DSH_AUTOMATIC_UPDATE_MIRROR_HOST?.trim();
     application = await electron.launch({
       executablePath: previousExecutable,
       // The release gate serves the exact candidate from a loopback HTTPS
       // mirror. Ignore runner-level proxies so the test exercises the updater
       // rather than an unrelated corporate proxy or PAC configuration.
-      args: [`--user-data-dir=${userData}`, '--no-proxy-server'],
+      args: [
+        `--user-data-dir=${userData}`,
+        '--no-proxy-server',
+        ...(mirrorHost === undefined || mirrorHost === ''
+          ? []
+          : [`--host-resolver-rules=MAP ${mirrorHost} 127.0.0.1`]),
+      ],
       env: {
         ...process.env,
         DSH_DESKTOP_DISTRIBUTION_REGION: 'china',

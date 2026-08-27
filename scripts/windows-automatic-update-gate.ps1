@@ -305,7 +305,12 @@ try {
       throw "The isolated HTTPS update mirror exited with code $($server.ExitCode)"
     }
     try {
-      (Invoke-WebRequest -Uri "$mirrorOrigin/health" -UseBasicParsing -NoProxy -TimeoutSec 5).Content -eq 'ok'
+      $health = & (Get-Command curl.exe).Source @(
+        '--fail', '--silent', '--show-error', '--noproxy', '*',
+        '--resolve', "$mirrorHost`:$mirrorPort`:127.0.0.1",
+        '--cacert', $certificatePath, "$mirrorOrigin/health"
+      )
+      $LASTEXITCODE -eq 0 -and $health -eq 'ok'
     } catch { $false }
   } 'The isolated HTTPS update mirror did not become healthy'
 } catch {
@@ -318,4 +323,5 @@ Write-Output "The isolated HTTPS update mirror is healthy"
 "DSH_PREVIOUS_EXECUTABLE_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+"DSH_AUTOMATIC_UPDATE_MIRROR_HOST=$mirrorHost" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 Write-Output "Prepared real Windows automatic update from $previousVersion to $env:RELEASE_VERSION"
