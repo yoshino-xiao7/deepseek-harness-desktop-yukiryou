@@ -64,6 +64,7 @@ import {
 } from './runtime/runtime-port.js';
 import {
   finalizeApplicationExit,
+  handoffApplicationUpdate,
   relaunchAfterStartupFailure,
   startupPreparationFailureLogDetails,
   waitForApplicationExitCleanup,
@@ -1245,15 +1246,18 @@ export class AppCoordinator {
       this.#log?.write('update.runtime-stop-settled');
     } finally {
       this.#runtimeStderr.flush();
-      this.#log?.write('update.exit-cleanup-started');
-      await waitForApplicationExitCleanup(() => this.#disposeWindowAndFlushState());
-      this.#log?.write('update.exit-cleanup-settled');
-      await finalizeApplicationExit({
+      this.#log?.write('update.native-handoff-started');
+      await handoffApplicationUpdate({
         log: this.#log,
+        handoff: () => updater?.quitAndInstall(),
+        cleanup: async () => {
+          this.#log?.write('update.exit-cleanup-started');
+          await this.#disposeWindowAndFlushState();
+          this.#log?.write('update.exit-cleanup-settled');
+        },
         dispose: () => {
           updater?.dispose();
         },
-        exit: () => updater?.quitAndInstall(),
       });
     }
   }

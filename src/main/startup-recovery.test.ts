@@ -3,12 +3,37 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppLog } from './diagnostics/app-log.js';
 import {
   finalizeApplicationExit,
+  handoffApplicationUpdate,
   relaunchAfterStartupFailure,
   startupPreparationFailureLogDetails,
   waitForApplicationExitCleanup,
 } from './startup-recovery.js';
 
 describe('startup recovery', () => {
+  it('starts the native update handoff before destroying the last Windows window', async () => {
+    const calls: string[] = [];
+    let applicationExitStarted = false;
+
+    await handoffApplicationUpdate({
+      log: undefined,
+      handoff: () => {
+        expect(applicationExitStarted).toBe(false);
+        calls.push('handoff');
+      },
+      cleanup: () => {
+        applicationExitStarted = true;
+        calls.push('destroy-last-window');
+      },
+      dispose: () => calls.push('dispose-updater'),
+    });
+
+    expect(calls).toEqual([
+      'handoff',
+      'destroy-last-window',
+      'dispose-updater',
+    ]);
+  });
+
   it('relaunches and quits even when the log can no longer be flushed or closed', async () => {
     const calls: string[] = [];
     const log: AppLog = {

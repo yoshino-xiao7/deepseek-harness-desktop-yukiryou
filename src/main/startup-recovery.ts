@@ -13,6 +13,13 @@ export interface ApplicationExitOptions {
   readonly exit: () => void;
 }
 
+export interface ApplicationUpdateHandoffOptions {
+  readonly log: AppLog | undefined;
+  readonly handoff: () => void;
+  readonly cleanup: () => Promise<void> | void;
+  readonly dispose: () => void;
+}
+
 const APPLICATION_EXIT_CLEANUP_TIMEOUT_MS = 1_000;
 
 /**
@@ -52,6 +59,24 @@ export async function finalizeApplicationExit(
   } finally {
     await waitForApplicationExitCleanup(() => options.log?.close());
     options.exit();
+  }
+}
+
+/**
+ * Starts the native installer before destroying the final application window.
+ * On Windows, destroying that window can begin Electron shutdown immediately,
+ * so deferring quitAndInstall until after UI cleanup can terminate the process
+ * before electron-updater has spawned the NSIS installer.
+ */
+export async function handoffApplicationUpdate(
+  options: ApplicationUpdateHandoffOptions,
+): Promise<void> {
+  options.handoff();
+  try {
+    await waitForApplicationExitCleanup(options.cleanup);
+  } finally {
+    options.dispose();
+    await waitForApplicationExitCleanup(() => options.log?.close());
   }
 }
 
