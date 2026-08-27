@@ -235,12 +235,19 @@ $env:NO_PROXY = $noProxy
 $env:no_proxy = $noProxy
 "NO_PROXY=$noProxy" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "no_proxy=$noProxy" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+$serverEnvironment = @{
+  # GitHub Actions terminates child processes carrying the current step's
+  # tracking marker as soon as the step exits. This mirror must survive into
+  # the following real-upgrade step and is stopped explicitly by Cleanup.
+  RUNNER_TRACKING_ID = ''
+}
 $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   (Join-Path $PSScriptRoot 'serve-automatic-update-gate.ts'),
   '--protocol=http', "--assets=$assetsRoot",
   "--metadata=$metadataRoot", '--target=win32-x64', "--version=$env:RELEASE_VERSION",
   "--port=$mirrorPort", "--base-path=$mirrorBasePath"
-) -RedirectStandardOutput $serverLog -RedirectStandardError (Join-Path $gateRoot 'server-error.log') -PassThru
+) -Environment $serverEnvironment -RedirectStandardOutput $serverLog `
+  -RedirectStandardError (Join-Path $gateRoot 'server-error.log') -PassThru
 
 @{
   serverPid = $server.Id

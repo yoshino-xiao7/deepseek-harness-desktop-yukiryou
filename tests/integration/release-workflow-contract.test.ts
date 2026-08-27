@@ -100,6 +100,7 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('"NO_PROXY=$noProxy"');
     expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_MIRROR_HOST');
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL');
+    expect(windowsGate).toContain("RUNNER_TRACKING_ID = ''");
     expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN');
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(windowsGate).toContain('if ($server.HasExited)');
