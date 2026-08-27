@@ -16,8 +16,9 @@ $gateIdentity = if ($env:GITHUB_RUN_ID -and $env:GITHUB_RUN_ATTEMPT) {
 $installRoot = Join-Path ([System.IO.Path]::GetTempPath()) "dsh-yukiryou-automatic-update-$gateIdentity"
 $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
-$hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
-$mirrorHost = 'download-cn.suzuki.ink'
+$mirrorHost = '127.0.0.1.nip.io'
+$mirrorPort = 41337
+$mirrorOrigin = "https://$mirrorHost`:$mirrorPort"
 
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
   $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
@@ -70,9 +71,6 @@ if ($Action -eq 'Cleanup') {
       if (Test-Path -LiteralPath $certificatePath) {
         Remove-Item -LiteralPath $certificatePath -Force
       }
-    }
-    if ($state.hostsBackup -and (Test-Path -LiteralPath $state.hostsBackup)) {
-      Copy-Item -LiteralPath $state.hostsBackup -Destination $hostsPath -Force
     }
   }
   Remove-GateInstallation
@@ -144,6 +142,14 @@ Write-Output "Installing previous public release $previousVersion into $installR
 Invoke-Checked $previousInstaller @('/S', '/currentuser', "/D=$installRoot")
 Wait-Until { (Test-Path -LiteralPath $executable) -and (Test-Path -LiteralPath $uninstaller) } 'Previous release did not install into the isolated directory'
 Write-Output "Installed previous public release $previousVersion"
+$installedArchive = Join-Path $installRoot 'resources\app.asar'
+if (-not (Test-Path -LiteralPath $installedArchive)) {
+  throw "Previous release app archive is missing: $installedArchive"
+}
+Write-Output "Redirecting the installed previous release to the isolated update mirror"
+& node (Join-Path $PSScriptRoot 'patch-packaged-update-origin.ts') `
+  "--archive=$installedArchive" '--from=https://download-cn.suzuki.ink' "--to=$mirrorOrigin"
+if ($LASTEXITCODE -ne 0) { throw 'Failed to redirect the installed previous release update origin' }
 
 $candidateSource = Join-Path $repositoryRoot 'out\windows-candidate\DeepSeek-YukiRyou-Setup.exe'
 $candidateAsset = "DeepSeek.YukiRyou-$env:RELEASE_VERSION-win32-x64-Setup.exe"
@@ -153,7 +159,7 @@ Copy-Item -LiteralPath $candidateSource -Destination (Join-Path $assetsRoot $can
 Write-Output "Generating candidate update metadata"
 & node (Join-Path $PSScriptRoot 'prepare-update-metadata.ts') `
   "--assets=$assetsRoot" "--output=$metadataRoot" "--version=$env:RELEASE_VERSION" `
-  '--target=win32-x64' "--origin=https://$mirrorHost"
+  '--target=win32-x64' "--origin=$mirrorOrigin"
 if ($LASTEXITCODE -ne 0) { throw 'Failed to prepare Windows update metadata' }
 Write-Output "Generated candidate update metadata"
 
@@ -227,32 +233,23 @@ Write-Output "Trusted the isolated update mirror certificate"
 @{ certificateThumbprint = $certificateThumbprint } |
   ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
-$hostsBackup = Join-Path $gateRoot 'hosts.before'
-Copy-Item -LiteralPath $hostsPath -Destination $hostsBackup
-@{
-  certificateThumbprint = $certificateThumbprint
-  hostsBackup = $hostsBackup
-} | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
-Add-Content -LiteralPath $hostsPath -Value "`r`n127.0.0.1 $mirrorHost # DeepSeek YukiRyou automatic-update gate"
-
 $serverLog = Join-Path $gateRoot 'server.log'
 Write-Output "Starting the isolated HTTPS update mirror"
 $server = Start-Process -FilePath (Get-Command node).Source -ArgumentList @(
   (Join-Path $PSScriptRoot 'serve-automatic-update-gate.ts'),
   "--cert=$certificatePath", "--key=$keyPath", "--assets=$assetsRoot",
-  "--metadata=$metadataRoot", '--target=win32-x64', "--version=$env:RELEASE_VERSION", '--port=443'
+  "--metadata=$metadataRoot", '--target=win32-x64', "--version=$env:RELEASE_VERSION", "--port=$mirrorPort"
 ) -RedirectStandardOutput $serverLog -RedirectStandardError (Join-Path $gateRoot 'server-error.log') -PassThru
 
 @{
   serverPid = $server.Id
   certificateThumbprint = $certificateThumbprint
-  hostsBackup = $hostsBackup
   installRoot = $installRoot
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
 Wait-Until {
   try {
-    (Invoke-WebRequest -Uri "https://$mirrorHost/health" -UseBasicParsing -TimeoutSec 5).Content -eq 'ok'
+    (Invoke-WebRequest -Uri "$mirrorOrigin/health" -UseBasicParsing -TimeoutSec 5).Content -eq 'ok'
   } catch { $false }
 } 'The isolated HTTPS update mirror did not become healthy'
 Write-Output "The isolated HTTPS update mirror is healthy"

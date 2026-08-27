@@ -85,6 +85,10 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('OpenFlags]::ReadWrite');
     expect(windowsGate).not.toContain('certutil.exe');
     expect(windowsGate).not.toContain('Import-Certificate');
+    expect(windowsGate).not.toContain('$hostsPath');
+    expect(windowsGate).toContain('patch-packaged-update-origin.ts');
+    expect(windowsGate).toContain("$mirrorHost = '127.0.0.1.nip.io'");
+    expect(windowsGate).toContain('$mirrorPort = 41337');
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(releaseSource).toContain('Capture Squirrel.Mac diagnostics');
     expect(windowsGate).not.toContain('& gh release download');
