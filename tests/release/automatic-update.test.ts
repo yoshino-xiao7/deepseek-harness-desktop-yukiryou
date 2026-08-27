@@ -56,6 +56,7 @@ describe('previous public release automatic update', () => {
       },
     });
     await application.firstWindow();
+    await configureUpdaterGateSession(application, expectedVersion);
     const shell = await waitForUpdateShell(application);
 
     await invokeUpdate(shell, 'check');
@@ -90,6 +91,32 @@ describe('previous public release automatic update', () => {
     expect(log).toContain('"status":"downloaded"');
   }, 20 * 60_000);
 });
+
+async function configureUpdaterGateSession(
+  application: ElectronApplication,
+  version: string,
+): Promise<void> {
+  const metadataUrl = process.env.DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL?.trim();
+  if (metadataUrl === undefined || metadataUrl === '') return;
+  const result = await application.evaluate(async ({ session }, url) => {
+    const updaterSession = session.fromPartition('electron-updater', { cache: false });
+    await updaterSession.setProxy({ mode: 'direct' });
+    await updaterSession.clearHostResolverCache();
+    const response = await updaterSession.fetch(url, { cache: 'no-store' });
+    return {
+      status: response.status,
+      body: await response.text(),
+      region: process.env.DSH_DESKTOP_DISTRIBUTION_REGION,
+    };
+  }, metadataUrl);
+  expect(result.region).toBe('china');
+  if (result.status !== 200 || !result.body.includes(`version: ${version}`)) {
+    throw new Error(
+      `Updater mirror preflight did not expose the expected version ${version}: ` +
+      `status=${String(result.status)} body=${result.body.slice(0, 200)}`,
+    );
+  }
+}
 
 async function waitForPreviousMacUpdaterReadiness(version: string): Promise<void> {
   if (process.platform !== 'darwin') return;

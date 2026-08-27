@@ -270,5 +270,6 @@ Write-Output "The isolated loopback update mirror is healthy"
 "DSH_PREVIOUS_EXECUTABLE_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+"DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL=$mirrorOrigin/updates/win32-x64/latest.yml" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "DSH_AUTOMATIC_UPDATE_DIAGNOSTICS=$(Join-Path $gateRoot 'diagnostics')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 Write-Output "Prepared real Windows automatic update from $previousVersion to $env:RELEASE_VERSION"

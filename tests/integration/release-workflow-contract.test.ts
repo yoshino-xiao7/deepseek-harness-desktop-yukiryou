@@ -99,11 +99,15 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('$env:NO_PROXY = $noProxy');
     expect(windowsGate).toContain('"NO_PROXY=$noProxy"');
     expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_MIRROR_HOST');
+    expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL');
     expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN');
     expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(windowsGate).toContain('if ($server.HasExited)');
     expect(automaticUpdateTest).toContain("'--no-proxy-server'");
     expect(automaticUpdateTest).not.toContain('--host-resolver-rules=MAP');
+    expect(automaticUpdateTest).toContain("fromPartition('electron-updater'");
+    expect(automaticUpdateTest).toContain("setProxy({ mode: 'direct' })");
+    expect(automaticUpdateTest).toContain('Updater mirror preflight did not expose the expected version');
     expect(automaticUpdateTest).toContain('--ignore-certificate-errors-spki-list=');
     expect(automaticUpdateTest).toContain('Updater reached terminal status before download');
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
