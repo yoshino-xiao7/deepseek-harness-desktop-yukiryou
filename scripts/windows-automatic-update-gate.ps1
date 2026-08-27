@@ -50,14 +50,38 @@ function Invoke-BoundedDownload([string]$Url, [string]$Destination) {
   )
 }
 
-function Remove-GateInstallation {
+function Remove-GateInstallation([string]$Root) {
+  $resolvedRoot = [System.IO.Path]::GetFullPath($Root)
+  $targetExecutable = Join-Path $resolvedRoot 'DeepSeek YukiRyou.exe'
+  $targetUninstaller = Join-Path $resolvedRoot 'Uninstall DeepSeek YukiRyou.exe'
   Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-    Where-Object { $_.ExecutablePath -eq $executable } |
+    Where-Object {
+      $_.ProcessId -ne $PID -and (
+        $_.ExecutablePath -eq $targetExecutable -or
+        ($_.CommandLine -and $_.CommandLine.Contains(
+          $resolvedRoot,
+          [System.StringComparison]::OrdinalIgnoreCase
+        ))
+      )
+    } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-  if (Test-Path -LiteralPath $uninstaller) {
-    Invoke-Checked $uninstaller @('/S')
-    Wait-Until { -not (Test-Path -LiteralPath $executable) } 'Updater gate installation remained after uninstall'
+  if (Test-Path -LiteralPath $targetUninstaller) {
+    Invoke-Checked $targetUninstaller @('/S')
+    Wait-Until { -not (Test-Path -LiteralPath $targetExecutable) } 'Updater gate installation remained after uninstall'
   }
+  if (Test-Path -LiteralPath $resolvedRoot) {
+    Remove-Item -LiteralPath $resolvedRoot -Recurse -Force
+  }
+}
+
+function Remove-StaleGateInstallations {
+  $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  Get-ChildItem -LiteralPath $tempRoot -Directory -Filter 'dsh-yukiryou-automatic-update-*' |
+    Where-Object { $_.FullName -ne $installRoot } |
+    ForEach-Object {
+      Write-Output "Recovering stale automatic-update installation $($_.FullName)"
+      Remove-GateInstallation $_.FullName
+    }
 }
 
 if ($Action -eq 'Cleanup') {
@@ -73,7 +97,7 @@ if ($Action -eq 'Cleanup') {
       }
     }
   }
-  Remove-GateInstallation
+  Remove-GateInstallation $installRoot
   Write-Output 'Cleaned the isolated Windows automatic-update gate'
   exit 0
 }
@@ -81,8 +105,10 @@ if ($Action -eq 'Cleanup') {
 if (-not $env:GITHUB_REPOSITORY) { throw 'GITHUB_REPOSITORY is required' }
 if (-not $env:RELEASE_VERSION) { throw 'RELEASE_VERSION is required' }
 if (-not $env:GITHUB_ENV) { throw 'GITHUB_ENV is required' }
+Remove-StaleGateInstallations
 if (Test-Path -LiteralPath $installRoot) {
-  throw "Refusing to overwrite the automatic-update install directory: $installRoot"
+  Write-Output "Recovering interrupted automatic-update installation $installRoot"
+  Remove-GateInstallation $installRoot
 }
 
 New-Item -ItemType Directory -Path $gateRoot -Force | Out-Null

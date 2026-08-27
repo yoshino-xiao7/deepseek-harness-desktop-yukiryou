@@ -75,6 +75,10 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).not.toContain('& openssl');
     expect(windowsGate).toContain('$env:GITHUB_RUN_ID');
     expect(windowsGate).toContain('$env:GITHUB_RUN_ATTEMPT');
+    expect(windowsGate).toContain('Remove-StaleGateInstallations');
+    expect(windowsGate).toContain("-Filter 'dsh-yukiryou-automatic-update-*'");
+    expect(windowsGate).toContain('Recovering stale automatic-update installation');
+    expect(windowsGate).toContain('[System.StringComparison]::OrdinalIgnoreCase');
     expect(windowsGate).toContain('download-cn.suzuki.ink/releases/$previousTag');
     expect(windowsGate).toContain("'--max-time', '480'");
     expect(windowsGate).toContain('Previous release asset SHA-256 mismatch');
