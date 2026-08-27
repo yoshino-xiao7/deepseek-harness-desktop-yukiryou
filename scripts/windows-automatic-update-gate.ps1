@@ -165,7 +165,8 @@ if (Test-Path -LiteralPath $installRoot) {
 New-Item -ItemType Directory -Path $gateRoot -Force | Out-Null
 $assetsRoot = Join-Path $gateRoot 'assets'
 $metadataRoot = Join-Path $gateRoot 'metadata'
-New-Item -ItemType Directory -Path $assetsRoot, $metadataRoot -Force | Out-Null
+$syntheticBuildRoot = Join-Path $gateRoot 'synthetic-successor'
+New-Item -ItemType Directory -Path $assetsRoot, $metadataRoot, $syntheticBuildRoot -Force | Out-Null
 @{} | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
 
 $candidateSource = Join-Path $repositoryRoot 'out\windows-candidate\DeepSeek-YukiRyou-Setup.exe'
@@ -183,8 +184,26 @@ Write-Output "Redirecting the installed release candidate to the isolated update
 if ($LASTEXITCODE -ne 0) { throw 'Failed to redirect the installed release candidate update origin' }
 
 $syntheticSuccessorAsset = "DeepSeek.YukiRyou-$syntheticSuccessorVersion-win32-x64-Setup.exe"
-Write-Output "Copying the candidate installer as synthetic successor $syntheticSuccessorVersion"
-Copy-Item -LiteralPath $candidateSource -Destination (Join-Path $assetsRoot $syntheticSuccessorAsset)
+$prepackagedCandidate = Join-Path $repositoryRoot 'out\DeepSeek YukiRyou-win32-x64'
+if (-not (Test-Path -LiteralPath $prepackagedCandidate)) {
+  throw "Prepackaged candidate is missing: $prepackagedCandidate"
+}
+Write-Output "Building a real synthetic successor installer with embedded version $syntheticSuccessorVersion"
+& (Get-Command pnpm.cmd).Source exec electron-builder --win nsis --x64 `
+  "--prepackaged=$prepackagedCandidate" --publish never `
+  "-c.extraMetadata.version=$syntheticSuccessorVersion" `
+  "-c.directories.output=$syntheticBuildRoot" `
+  "-c.artifactName=$syntheticSuccessorAsset"
+if ($LASTEXITCODE -ne 0) { throw 'Failed to build the synthetic successor installer' }
+$syntheticSuccessorInstaller = Join-Path $syntheticBuildRoot $syntheticSuccessorAsset
+if (-not (Test-Path -LiteralPath $syntheticSuccessorInstaller)) {
+  throw "Synthetic successor installer is missing: $syntheticSuccessorInstaller"
+}
+$embeddedSuccessorVersion = (Get-Item -LiteralPath $syntheticSuccessorInstaller).VersionInfo.ProductVersion
+if (-not $embeddedSuccessorVersion.StartsWith($syntheticSuccessorVersion)) {
+  throw "Synthetic successor embeds version '$embeddedSuccessorVersion', expected '$syntheticSuccessorVersion'"
+}
+Copy-Item -LiteralPath $syntheticSuccessorInstaller -Destination (Join-Path $assetsRoot $syntheticSuccessorAsset)
 Write-Output "Generating synthetic successor update metadata"
 & node (Join-Path $PSScriptRoot 'prepare-update-metadata.ts') `
   "--assets=$assetsRoot" "--output=$metadataRoot" "--version=$syntheticSuccessorVersion" `

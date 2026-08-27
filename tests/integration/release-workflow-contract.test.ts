@@ -110,6 +110,10 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('cleaning the isolated directory before one retry');
     expect(windowsGate).toContain('Install-CandidateUnderTest $candidateSource $env:RELEASE_VERSION');
     expect(windowsGate).toContain('$syntheticSuccessorVersion');
+    expect(windowsGate).toContain('Building a real synthetic successor installer with embedded version');
+    expect(windowsGate).toContain('"-c.extraMetadata.version=$syntheticSuccessorVersion"');
+    expect(windowsGate).toContain("VersionInfo.ProductVersion");
+    expect(windowsGate).not.toContain('Copying the candidate installer as synthetic successor');
     expect(windowsGate).not.toContain('Cert:\\CurrentUser\\Root');
     expect(windowsGate).not.toContain('certutil.exe');
     expect(windowsGate).toContain("'--protocol=http'");
