@@ -279,6 +279,9 @@ describe('macOS release workflow contract', () => {
     expect(lifecycleScript).toContain("'Uninstall DeepSeek YukiRyou.exe'");
     expect(lifecycleScript).toContain('$process.WaitForExit(15000)');
     expect(lifecycleScript).toContain('.AddMinutes(10)');
+    expect(lifecycleScript).toContain("Contains('exit code -1073741819')");
+    expect(lifecycleScript).toContain('cleaning the isolated directory before one retry');
+    expect(lifecycleScript).toContain('if (-not $isTransientAccessViolation -or $attempt -ge $maximumAttempts) { throw }');
     expect(lifecycleScript).toContain('[System.IO.Path]::GetFullPath');
     expect(lifecycleScript).toContain("[System.IO.Path]::GetTempPath()) 'dsh-yukiryou-nsis-install'");
     expect(lifecycleScript).toContain('NSIS install, repair, and uninstall checks passed');

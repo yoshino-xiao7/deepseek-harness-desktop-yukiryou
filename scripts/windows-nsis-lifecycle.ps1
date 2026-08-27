@@ -56,8 +56,22 @@ if ($Action -eq 'Install') {
   if (-not (Test-Path -LiteralPath $setupPath)) { throw "Installer is missing: $setupPath" }
   if (Test-Path -LiteralPath $installRoot) { throw "Refusing to overwrite lifecycle directory: $installRoot" }
   New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
-  Invoke-Checked $setupPath @('/S', '/currentuser', "/D=$installRoot")
-  Wait-Until { (Test-Path -LiteralPath $executable) -and (Test-Path -LiteralPath $uninstaller) } 'NSIS did not install the executable and uninstaller'
+  $maximumAttempts = 2
+  for ($attempt = 1; $attempt -le $maximumAttempts; $attempt += 1) {
+    try {
+      Invoke-Checked $setupPath @('/S', '/currentuser', "/D=$installRoot")
+      Wait-Until { (Test-Path -LiteralPath $executable) -and (Test-Path -LiteralPath $uninstaller) } 'NSIS did not install the executable and uninstaller'
+      break
+    } catch {
+      $isTransientAccessViolation = $_.Exception.Message.Contains('exit code -1073741819')
+      if (-not $isTransientAccessViolation -or $attempt -ge $maximumAttempts) { throw }
+      Write-Warning "NSIS candidate installer hit transient access violation; cleaning the isolated directory before one retry"
+      if (Test-Path -LiteralPath $installRoot) {
+        Remove-Item -LiteralPath $installRoot -Recurse -Force
+      }
+      Start-Sleep -Seconds 2
+    }
+  }
   @{ executable = $executable; installRoot = $installRoot; uninstaller = $uninstaller } |
     ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding utf8
   Write-Output 'Installed the NSIS candidate into the explicit lifecycle directory'
