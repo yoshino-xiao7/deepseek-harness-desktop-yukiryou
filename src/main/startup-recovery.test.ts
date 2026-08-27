@@ -5,6 +5,7 @@ import {
   finalizeApplicationExit,
   relaunchAfterStartupFailure,
   startupPreparationFailureLogDetails,
+  waitForApplicationExitCleanup,
 } from './startup-recovery.js';
 
 describe('startup recovery', () => {
@@ -37,6 +38,27 @@ describe('startup recovery', () => {
     await finalizeApplicationExit({ log, dispose: vi.fn(), exit });
 
     expect(exit).toHaveBeenCalledOnce();
+  });
+
+  it('does not let a cleanup promise that never settles block terminal exit', async () => {
+    vi.useFakeTimers();
+    try {
+      let completed = false;
+      const cleanup = waitForApplicationExitCleanup(
+        () => new Promise<void>(() => {}),
+        25,
+      ).then(() => {
+        completed = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(24);
+      expect(completed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await cleanup;
+      expect(completed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('logs only an error code and type for preparation failures', () => {

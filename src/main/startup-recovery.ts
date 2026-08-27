@@ -13,6 +13,8 @@ export interface ApplicationExitOptions {
   readonly exit: () => void;
 }
 
+const APPLICATION_EXIT_CLEANUP_TIMEOUT_MS = 1_000;
+
 /**
  * Relaunch after pre-Runtime startup failed. Logging is deliberately
  * best-effort because the triggering failure may be a full or read-only disk.
@@ -48,12 +50,33 @@ export async function finalizeApplicationExit(
   try {
     options.dispose();
   } finally {
-    try {
-      await options.log?.close();
-    } catch {
-      // A failed diagnostics queue cannot strand a hidden main process.
-    }
+    await waitForApplicationExitCleanup(() => options.log?.close());
     options.exit();
+  }
+}
+
+/**
+ * Exit and update installation are terminal operations. Best-effort state or
+ * diagnostics persistence must therefore have a strict deadline: a filesystem
+ * request that never settles cannot be allowed to strand the hidden Electron
+ * main process before quitAndInstall is reached.
+ */
+export async function waitForApplicationExitCleanup(
+  cleanup: () => Promise<void> | void,
+  timeoutMs = APPLICATION_EXIT_CLEANUP_TIMEOUT_MS,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timeout = setTimeout(resolve, timeoutMs);
+    timeout.unref();
+  });
+  try {
+    await Promise.race([
+      Promise.resolve().then(cleanup).catch(() => undefined),
+      deadline,
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 

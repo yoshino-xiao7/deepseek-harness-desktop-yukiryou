@@ -66,6 +66,7 @@ import {
   finalizeApplicationExit,
   relaunchAfterStartupFailure,
   startupPreparationFailureLogDetails,
+  waitForApplicationExitCleanup,
 } from './startup-recovery.js';
 import {
   createWorkspaceInspector,
@@ -1242,7 +1243,9 @@ export class AppCoordinator {
       await this.#runtime?.stop('update');
     } finally {
       this.#runtimeStderr.flush();
-      await this.#disposeWindowAndFlushState();
+      this.#log?.write('update.exit-cleanup-started');
+      await waitForApplicationExitCleanup(() => this.#disposeWindowAndFlushState());
+      this.#log?.write('update.exit-cleanup-settled');
       await finalizeApplicationExit({
         log: this.#log,
         dispose: () => {
