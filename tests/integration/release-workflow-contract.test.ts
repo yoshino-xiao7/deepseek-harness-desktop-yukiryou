@@ -89,13 +89,12 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('$maximumAttempts = 2');
     expect(windowsGate).toContain('cleaning the isolated directory before one retry');
     expect(windowsGate).toContain('Install-PreviousRelease $previousInstaller $previousVersion');
-    expect(windowsGate).toContain('X509Store');
-    expect(windowsGate).toContain('StoreLocation]::CurrentUser');
-    expect(windowsGate).toContain('StoreName]::Root');
     expect(windowsGate).toContain('Cert:\\CurrentUser\\Root');
     expect(windowsGate).toContain('thumbprint in the workflow cleanup step');
-    expect(windowsGate).toContain('OpenFlags]::ReadWrite');
-    expect(windowsGate).not.toContain('certutil.exe');
+    expect(windowsGate).toContain('(Get-Command certutil.exe).Source');
+    expect(windowsGate).toContain("'-user', '-f', '-addstore', 'Root'");
+    expect(windowsGate).toContain(') 60');
+    expect(windowsGate).not.toContain('$trustedRootStore.Add');
     expect(windowsGate).not.toContain('Import-Certificate');
     expect(windowsGate).not.toContain('$hostsPath');
     expect(windowsGate).toContain('patch-packaged-update-origin.ts');

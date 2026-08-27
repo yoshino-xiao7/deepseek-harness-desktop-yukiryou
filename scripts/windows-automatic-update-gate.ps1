@@ -21,13 +21,17 @@ $mirrorPort = 41337
 $mirrorBasePath = '/mirror'
 $mirrorOrigin = "https://$mirrorHost`:$mirrorPort$mirrorBasePath"
 
-function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
+function Invoke-Checked(
+  [string]$FilePath,
+  [string[]]$Arguments,
+  [int]$TimeoutSeconds = 600
+) {
   $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
-  $deadline = (Get-Date).AddMinutes(10)
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while (-not $process.WaitForExit(15000)) {
     if ((Get-Date) -ge $deadline) {
       Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-      throw "$FilePath did not exit within 10 minutes"
+      throw "$FilePath did not exit within $TimeoutSeconds seconds"
     }
   }
   if ($process.ExitCode -ne 0) { throw "$FilePath failed with exit code $($process.ExitCode)" }
@@ -282,18 +286,18 @@ Write-Output "Trusting the isolated update mirror certificate without an interac
 $trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
   $certificatePath
 )
-$certificateThumbprint = $trustedCertificate.Thumbprint
-$trustedRootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-  [System.Security.Cryptography.X509Certificates.StoreName]::Root,
-  [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
-)
 try {
-  $trustedRootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-  $trustedRootStore.Add($trustedCertificate)
+  $certificateThumbprint = $trustedCertificate.Thumbprint
 } finally {
-  $trustedRootStore.Close()
   $trustedCertificate.Dispose()
 }
+# X509Store.Add can display an invisible root-certificate confirmation dialog
+# in an interactive Windows runner session. certutil's force flag performs the
+# same current-user import explicitly and non-interactively; keep a short bound
+# so a certificate-store regression cannot consume the whole release gate.
+Invoke-Checked (Get-Command certutil.exe).Source @(
+  '-user', '-f', '-addstore', 'Root', $certificatePath
+) 60
 $trustedCertificatePath = "Cert:\CurrentUser\Root\$certificateThumbprint"
 if (-not (Test-Path -LiteralPath $trustedCertificatePath)) {
   throw 'The isolated update mirror certificate was not added to the current-user root store'
