@@ -206,7 +206,11 @@ describe('reliable Windows NSIS update handoff', () => {
       const helperPath = join(handoffDirectory, 'handoff.ps1');
       const launcherPath = join(handoffDirectory, 'handoff.cjs');
       const helperNodePath = join(handoffDirectory, 'node.exe');
+      const parentPath = join(handoffDirectory, 'parent.cjs');
+      const parentReadyPath = join(handoffDirectory, 'parent-ready');
+      const parentStopPath = join(handoffDirectory, 'parent-stop');
       let child: ChildProcess | undefined;
+      let parent: ChildProcess | undefined;
       try {
         const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
         const powershell = join(
@@ -216,11 +220,25 @@ describe('reliable Windows NSIS update handoff', () => {
           'v1.0',
           'powershell.exe',
         );
+        writeFileSync(parentPath, String.raw`'use strict';
+const { existsSync, writeFileSync } = require('node:fs');
+writeFileSync(${JSON.stringify(parentReadyPath)}, 'ready', 'utf8');
+const timer = setInterval(() => {
+  if (existsSync(${JSON.stringify(parentStopPath)})) clearInterval(timer);
+}, 25);
+`, 'utf8');
+        parent = spawn(process.execPath, [parentPath], {
+          cwd: handoffDirectory,
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+        await waitForTestFile(parentReadyPath, 5_000);
+        if (parent.pid === undefined) throw new Error('Test parent did not receive a PID');
         const handoffOptions = {
-          parentProcessId: process.pid,
+          parentProcessId: parent.pid,
           installerPath: join(handoffDirectory, 'unused-installer.exe'),
-          installDirectory: handoffDirectory,
-          executablePath: join(handoffDirectory, 'unused-app.exe'),
+          installDirectory: join(handoffDirectory, 'installed-app'),
+          executablePath: join(handoffDirectory, 'installed-app', 'unused-app.exe'),
           logPath,
           readyPath,
         } as const;
@@ -266,9 +284,9 @@ describe('reliable Windows NSIS update handoff', () => {
         }
         expect(existsSync(readyPath)).toBe(true);
       } finally {
-        if (child?.pid !== undefined) {
-          await stopWindowsTestProcessTree(child.pid);
-        }
+        writeFileSync(parentStopPath, 'stop', 'utf8');
+        if (parent !== undefined) await waitForTestChildExit(parent, 5_000);
+        if (child !== undefined) await waitForTestChildExit(child, 15_000);
         rmSync(handoffDirectory, {
           recursive: true,
           force: true,
@@ -277,7 +295,7 @@ describe('reliable Windows NSIS update handoff', () => {
         });
       }
     },
-    20_000,
+    60_000,
   );
 
   it.runIf(process.platform === 'win32')(
@@ -286,14 +304,15 @@ describe('reliable Windows NSIS update handoff', () => {
       const handoffDirectory = mkdtempSync(join(tmpdir(), 'dsh-helper-survival-'));
       const readyPath = join(handoffDirectory, 'ready');
       const completedPath = join(handoffDirectory, 'post-parent');
+      const stopPath = join(handoffDirectory, 'stop');
+      const exitedPath = join(handoffDirectory, 'exited');
       const parentPidPath = join(handoffDirectory, 'parent.pid');
-      const helperPidPath = join(handoffDirectory, 'helper.pid');
       const logPath = join(handoffDirectory, 'handoff.log');
       const helperPath = join(handoffDirectory, 'handoff.ps1');
       const launcherPath = join(handoffDirectory, 'handoff.cjs');
       const driverPath = join(handoffDirectory, 'driver.cjs');
       const helperNodePath = join(handoffDirectory, 'node.exe');
-      let helperPid: number | undefined;
+      let driverStartedHelper = false;
       try {
         const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
         const powershell = join(
@@ -311,6 +330,10 @@ describe('reliable Windows NSIS update handoff', () => {
           '  Start-Sleep -Milliseconds 50',
           '}',
           `Set-Content -LiteralPath ${testPowerShellLiteral(completedPath)} -Value 'survived'`,
+          `while (-not (Test-Path -LiteralPath ${testPowerShellLiteral(stopPath)})) {`,
+          '  Start-Sleep -Milliseconds 50',
+          '}',
+          `Set-Content -LiteralPath ${testPowerShellLiteral(exitedPath)} -Value 'exiting'`,
         ].join('\n')}`, 'utf8');
         writeFileSync(launcherPath, createWindowsUpdateLauncherScript({
           powershellPath: powershell,
@@ -331,7 +354,6 @@ const helper = spawn(${JSON.stringify(helperNodePath)}, [${JSON.stringify(launch
   windowsHide: true,
 });
 if (helper.pid === undefined) process.exit(1);
-writeFileSync(${JSON.stringify(helperPidPath)}, String(helper.pid), 'utf8');
 helper.unref();
 `, 'utf8');
 
@@ -343,16 +365,18 @@ helper.unref();
         });
         expect(driver.error).toBeUndefined();
         expect(driver.status).toBe(0);
-        helperPid = Number(readFileSync(helperPidPath, 'utf8'));
+        driverStartedHelper = true;
         await expect.poll(() => existsSync(completedPath), {
           timeout: 10_000,
           interval: 50,
         }).toBe(true);
         expect(existsSync(readyPath)).toBe(true);
       } finally {
-        if (Number.isInteger(helperPid) && helperPid !== undefined) {
-          await stopWindowsTestProcessTree(helperPid);
-        }
+        writeFileSync(stopPath, 'stop', 'utf8');
+        if (driverStartedHelper) await waitForTestFile(exitedPath, 10_000);
+        // The launcher exits immediately after PowerShell; allow Windows to
+        // release the copied executable and working-directory handles.
+        await delay(250);
         rmSync(handoffDirectory, {
           recursive: true,
           force: true,
@@ -361,7 +385,7 @@ helper.unref();
         });
       }
     },
-    20_000,
+    60_000,
   );
 
   it('waits for the old app, preserves install mode, installs, then relaunches', () => {
@@ -399,30 +423,23 @@ function testPowerShellLiteral(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-async function stopWindowsTestProcessTree(pid: number): Promise<void> {
-  const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
-  const taskkill = join(systemRoot, 'System32', 'taskkill.exe');
-  const result = spawnSync(taskkill, ['/PID', String(pid), '/T', '/F'], {
-    stdio: 'ignore',
-    windowsHide: true,
-  });
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline && isTestProcessRunning(pid)) await delay(50);
-  if (isTestProcessRunning(pid)) {
-    throw new Error(
-      `Windows helper process tree ${String(pid)} remained after taskkill ` +
-      `(status=${String(result.status)})`,
-    );
+async function waitForTestFile(path: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(path)) return;
+    await delay(50);
   }
-  // Windows can briefly retain image/cwd handles after the process disappears.
-  await delay(250);
+  throw new Error(`Test file did not appear within ${String(timeoutMs)}ms: ${path}`);
 }
 
-function isTestProcessRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error instanceof Error && 'code' in error && error.code !== 'ESRCH';
+async function waitForTestChildExit(child: ChildProcess, timeoutMs: number): Promise<void> {
+  if (child.pid === undefined) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    await delay(50);
   }
+  throw new Error(
+    `Test child ${String(child.pid)} did not exit within ${String(timeoutMs)}ms`,
+  );
 }
