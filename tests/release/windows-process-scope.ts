@@ -6,16 +6,30 @@ export function createWindowsInstallDirectoryProcessScript(
   action: WindowsProcessScopeAction,
 ): string {
   const processAction = action === 'list'
-    ? '$_.ProcessId'
-    : 'Stop-Process -Id $_.ProcessId -Force';
+    ? '$process.ProcessId'
+    : 'Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue';
   return [
     `$root=${powerShellLiteral(installDirectory)}.TrimEnd('\\');`,
     '$prefix="$root\\";',
-    'Get-CimInstance Win32_Process -ErrorAction Stop |',
-    'Where-Object {',
-    '$_.ExecutablePath -and',
-    '$_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)',
-    `} | ForEach-Object { ${processAction} }`,
+    '$processes = @(Get-CimInstance Win32_Process -ErrorAction Stop);',
+    '$scoped = @{};',
+    'foreach ($process in $processes) {',
+    'if ($process.ExecutablePath -and',
+    '$process.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {',
+    '$scoped[[string]$process.ProcessId] = $true',
+    '} };',
+    'do {',
+    '$added = $false;',
+    'foreach ($process in $processes) {',
+    '$parentKey = [string]$process.ParentProcessId;',
+    '$processKey = [string]$process.ProcessId;',
+    'if ($scoped.ContainsKey($parentKey) -and -not $scoped.ContainsKey($processKey)) {',
+    '$scoped[$processKey] = $true; $added = $true',
+    '}',
+    '} } while ($added);',
+    'foreach ($process in $processes) {',
+    `if ($scoped.ContainsKey([string]$process.ProcessId)) { ${processAction} }`,
+    '}',
   ].join(' ');
 }
 

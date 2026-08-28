@@ -19,10 +19,11 @@ describe('Windows release process scope', () => {
     );
 
     expect(listScript).toContain(".TrimEnd('\\'); $prefix=");
-    expect(listScript).toContain('; Get-CimInstance Win32_Process');
-    expect(listScript).toContain('ForEach-Object { $_.ProcessId }');
+    expect(listScript).toContain('$processes = @(Get-CimInstance Win32_Process');
+    expect(listScript).toContain('$scoped.ContainsKey($parentKey)');
+    expect(listScript).toContain('$process.ProcessId');
     expect(stopScript).toContain(
-      'ForEach-Object { Stop-Process -Id $_.ProcessId -Force }',
+      'Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue',
     );
   });
 

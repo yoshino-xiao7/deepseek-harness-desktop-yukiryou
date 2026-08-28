@@ -1,11 +1,10 @@
 import { autoUpdater, type Event } from 'electron';
 import type { AllPublishOptions, UpdateInfo } from 'builder-util-runtime';
-import { MacUpdater } from 'electron-updater';
+import { MacUpdater, NsisUpdater } from 'electron-updater';
 import { dirname } from 'node:path';
 
 import { updateFeedUrl } from './update-config.js';
 import { updateRecoveryForError } from './update-error.js';
-import { ReliableWindowsNsisUpdater } from './windows-nsis-updater.js';
 import type { DesktopUpdateSource } from '../distribution/distribution-routing.js';
 import type { DesktopUpdateState } from '../../shared/update-bridge.js';
 
@@ -19,7 +18,7 @@ export interface AppUpdater {
   getDownloadUrl(): string | undefined;
   subscribe(listener: (state: DesktopUpdateState) => void): () => void;
   startAutomaticChecks(): void;
-  prepareInstall(): Promise<boolean>;
+  prepareInstall(): Promise<void>;
   dispose(): void;
 }
 
@@ -39,11 +38,18 @@ export interface AppUpdaterOptions {
     source: AllPublishOptions,
   ) => NativeUpdateClient;
   readonly macInstallReadiness?: MacInstallReadiness;
+  readonly windowsInstallReadiness?: WindowsInstallReadiness;
+  readonly windowsInstallHandoffTimeoutMs?: number;
 }
 
 export interface MacInstallReadiness {
   on(event: 'update-downloaded', listener: () => void): unknown;
   removeListener(event: 'update-downloaded', listener: () => void): unknown;
+}
+
+export interface WindowsInstallReadiness {
+  on(event: 'before-quit-for-update', listener: () => void): unknown;
+  removeListener(event: 'before-quit-for-update', listener: () => void): unknown;
 }
 
 export function createAppUpdater(options: AppUpdaterOptions): AppUpdater {
@@ -70,14 +76,11 @@ export interface NativeUpdateClient {
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
 }
 
-interface ReliableWindowsUpdateClient extends NativeUpdateClient {
-  prepareInstall(isSilent?: boolean, isForceRunAfter?: boolean): Promise<void>;
-}
-
 export class CrossPlatformAppUpdater implements AppUpdater {
   readonly #options: AppUpdaterOptions;
   readonly #native: NativeUpdateClient;
   readonly #macInstallReadiness: MacInstallReadiness | undefined;
+  readonly #windowsInstallReadiness: WindowsInstallReadiness | undefined;
   readonly #listeners = new Set<(state: DesktopUpdateState) => void>();
   readonly #sources: readonly DesktopUpdateSource[];
   #sourceIndex = 0;
@@ -100,7 +103,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     const source = this.#source(0);
     this.#native = options.createNativeUpdater?.(options.platform, source) ??
       (options.platform === 'win32'
-        ? new ReliableWindowsNsisUpdater(source)
+        ? new NsisUpdater(source)
         : new MacUpdater(source));
     this.#native.autoDownload = true;
     this.#native.autoInstallOnAppQuit = options.platform !== 'win32';
@@ -121,6 +124,9 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     this.#native.on('error', this.#handleError);
     this.#macInstallReadiness = options.platform === 'darwin'
       ? options.macInstallReadiness ?? autoUpdater
+      : undefined;
+    this.#windowsInstallReadiness = options.platform === 'win32'
+      ? options.windowsInstallReadiness ?? autoUpdater
       : undefined;
     this.#macInstallReadiness?.on('update-downloaded', this.#handleMacInstallReady);
     this.#state = { status: 'idle', currentVersion: options.currentVersion };
@@ -234,16 +240,23 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
   }
 
-  async prepareInstall(): Promise<boolean> {
-    // The Windows helper waits for Electron to exit, runs assisted NSIS
-    // silently, verifies its exit code, and explicitly relaunches the installed
-    // executable. macOS keeps its native non-silent Squirrel handoff.
-    if (this.#options.platform === 'win32' && isReliableWindowsUpdateClient(this.#native)) {
-      await this.#native.prepareInstall(true, true);
-      return true;
+  async prepareInstall(): Promise<void> {
+    // Windows uses electron-updater's maintained NSIS lifecycle. The caller
+    // must finish the Runtime process-tree hard gate before reaching this
+    // terminal operation; BaseUpdater owns the subsequent application quit.
+    if (this.#options.platform === 'win32') {
+      const readiness = this.#windowsInstallReadiness;
+      if (readiness === undefined) {
+        throw new Error('Windows native updater readiness is unavailable');
+      }
+      await waitForWindowsNativeInstallHandoff(
+        readiness,
+        () => this.#native.quitAndInstall(true, true),
+        this.#options.windowsInstallHandoffTimeoutMs ?? 5_000,
+      );
+      return;
     }
     this.#native.quitAndInstall(false, true);
-    return false;
   }
 
   dispose(): void {
@@ -378,7 +391,7 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
     this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
   }
 
-  async prepareInstall(): Promise<boolean> { return false; }
+  async prepareInstall(): Promise<void> {}
 
   dispose(): void {
     clearTimeout(this.#initialTimer);
@@ -576,9 +589,8 @@ class ElectronAppUpdater implements AppUpdater {
     );
   }
 
-  async prepareInstall(): Promise<boolean> {
+  async prepareInstall(): Promise<void> {
     autoUpdater.quitAndInstall();
-    return false;
   }
 
   dispose(): void {
@@ -600,12 +612,6 @@ class ElectronAppUpdater implements AppUpdater {
   }
 }
 
-function isReliableWindowsUpdateClient(
-  client: NativeUpdateClient,
-): client is ReliableWindowsUpdateClient {
-  return 'prepareInstall' in client && typeof client.prepareInstall === 'function';
-}
-
 function optionalReleaseNotes(info: UpdateInfo): { readonly releaseNotes?: string } {
   if (typeof info.releaseNotes === 'string') {
     return { releaseNotes: info.releaseNotes.slice(0, 2_000) };
@@ -617,6 +623,35 @@ function optionalReleaseNotes(info: UpdateInfo): { readonly releaseNotes?: strin
       .slice(0, 2_000) };
   }
   return {};
+}
+
+async function waitForWindowsNativeInstallHandoff(
+  readiness: WindowsInstallReadiness,
+  start: () => void,
+  timeoutMs: number,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      readiness.removeListener('before-quit-for-update', handleReady);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    const handleReady = (): void => finish();
+    const timeout = setTimeout(
+      () => finish(new Error('Windows native updater did not accept the install handoff')),
+      timeoutMs,
+    );
+    readiness.on('before-quit-for-update', handleReady);
+    try {
+      start();
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
 function safeErrorMessage(error: Error): string {

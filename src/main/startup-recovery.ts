@@ -14,12 +14,13 @@ export interface ApplicationExitOptions {
 }
 
 export interface ApplicationUpdateHandoffOptions {
-  readonly log: AppLog | undefined;
-  readonly handoff: () => Promise<boolean>;
-  readonly onHandoffFailure: (error: unknown) => void;
-  readonly cleanup: () => Promise<void> | void;
-  readonly dispose: () => void;
-  readonly quit: () => void;
+  /** A hard gate. Failure here must prevent the installer from starting. */
+  readonly prepare: () => Promise<void>;
+  /** Best-effort persistence that runs after the hard gate. */
+  readonly persist: () => Promise<void> | void;
+  /** The native updater handoff. This must be the final lifecycle action. */
+  readonly handoff: () => Promise<void>;
+  readonly onHandoffFailure: (error: unknown) => Promise<void> | void;
 }
 
 const APPLICATION_EXIT_CLEANUP_TIMEOUT_MS = 1_000;
@@ -65,31 +66,26 @@ export async function finalizeApplicationExit(
 }
 
 /**
- * Confirms that the native installer owns the update before destroying the
- * final application window. Windows then quits explicitly only after bounded
- * cleanup; macOS continues to let Squirrel own the native quit lifecycle.
+ * Stops update-sensitive resources before handing control to the native
+ * updater. In particular, the Windows Runtime process tree must be gone before
+ * NSIS starts; starting NSIS first races the old uninstaller against cleanup.
  */
 export async function handoffApplicationUpdate(
   options: ApplicationUpdateHandoffOptions,
 ): Promise<boolean> {
-  let callerMustQuit: boolean;
   try {
-    callerMustQuit = await options.handoff();
+    await options.prepare();
   } catch (error) {
-    options.onHandoffFailure(error);
+    await options.onHandoffFailure(error);
     return false;
   }
+
+  await waitForApplicationExitCleanup(options.persist);
   try {
-    await waitForApplicationExitCleanup(options.cleanup);
-  } finally {
-    try {
-      options.dispose();
-    } catch {
-      // Once the installer owns the lifecycle, disposal is best-effort and
-      // cannot be allowed to strand the old application process.
-    }
-    await waitForApplicationExitCleanup(() => options.log?.close());
-    if (callerMustQuit) options.quit();
+    await options.handoff();
+  } catch (error) {
+    await options.onHandoffFailure(error);
+    return false;
   }
   return true;
 }

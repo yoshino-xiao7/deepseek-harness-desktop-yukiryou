@@ -10,75 +10,63 @@ import {
 } from './startup-recovery.js';
 
 describe('startup recovery', () => {
-  it('starts the native update handoff before destroying the last Windows window', async () => {
+  it('finishes the hard Runtime gate before starting the native updater', async () => {
     const calls: string[] = [];
-    let applicationExitStarted = false;
 
     await handoffApplicationUpdate({
-      log: undefined,
+      prepare: async () => {
+        calls.push('stop-runtime-tree');
+        await Promise.resolve();
+      },
+      onHandoffFailure: () => {
+        calls.push('handoff-failed');
+      },
+      persist: async () => {
+        calls.push('persist-state');
+        await Promise.resolve();
+      },
       handoff: async () => {
-        expect(applicationExitStarted).toBe(false);
-        calls.push('handoff');
-        await Promise.resolve();
-        calls.push('installer-confirmed');
-        return true;
+        calls.push('native-updater');
       },
-      onHandoffFailure: () => calls.push('handoff-failed'),
-      cleanup: async () => {
-        applicationExitStarted = true;
-        calls.push('stop-runtime');
-        await Promise.resolve();
-        calls.push('destroy-last-window');
-      },
-      dispose: () => calls.push('dispose-updater'),
-      quit: () => calls.push('quit'),
     });
 
     expect(calls).toEqual([
-      'handoff',
-      'installer-confirmed',
-      'stop-runtime',
-      'destroy-last-window',
-      'dispose-updater',
-      'quit',
+      'stop-runtime-tree',
+      'persist-state',
+      'native-updater',
     ]);
   });
 
-  it('keeps the application recoverable when installer handoff fails', async () => {
-    const failure = new Error('PowerShell helper did not become ready');
+  it('never starts the installer when the Runtime hard gate fails', async () => {
+    const failure = new Error('taskkill could not terminate the Runtime tree');
     const onHandoffFailure = vi.fn();
-    const cleanup = vi.fn();
-    const dispose = vi.fn();
-    const quit = vi.fn();
+    const persist = vi.fn();
+    const handoff = vi.fn();
 
     await expect(handoffApplicationUpdate({
-      log: undefined,
-      handoff: vi.fn().mockRejectedValue(failure),
+      prepare: vi.fn().mockRejectedValue(failure),
       onHandoffFailure,
-      cleanup,
-      dispose,
-      quit,
+      persist,
+      handoff,
     })).resolves.toBe(false);
 
     expect(onHandoffFailure).toHaveBeenCalledWith(failure);
-    expect(cleanup).not.toHaveBeenCalled();
-    expect(dispose).not.toHaveBeenCalled();
-    expect(quit).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+    expect(handoff).not.toHaveBeenCalled();
   });
 
-  it('still quits after a confirmed handoff when updater disposal throws', async () => {
-    const quit = vi.fn();
+  it('reports a native handoff failure without a caller-driven quit', async () => {
+    const failure = new Error('native updater rejected the handoff');
+    const onHandoffFailure = vi.fn();
 
     await expect(handoffApplicationUpdate({
-      log: undefined,
-      handoff: vi.fn().mockResolvedValue(true),
-      onHandoffFailure: vi.fn(),
-      cleanup: vi.fn(),
-      dispose: vi.fn(() => { throw new Error('dispose failed'); }),
-      quit,
-    })).resolves.toBe(true);
+      prepare: vi.fn().mockResolvedValue(undefined),
+      persist: vi.fn(),
+      handoff: vi.fn().mockRejectedValue(failure),
+      onHandoffFailure,
+    })).resolves.toBe(false);
 
-    expect(quit).toHaveBeenCalledOnce();
+    expect(onHandoffFailure).toHaveBeenCalledWith(failure);
   });
 
   it('relaunches and quits even when the log can no longer be flushed or closed', async () => {

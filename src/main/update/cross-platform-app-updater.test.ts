@@ -5,6 +5,7 @@ import {
   CrossPlatformAppUpdater,
   type MacInstallReadiness,
   type NativeUpdateClient,
+  type WindowsInstallReadiness,
 } from './app-updater.js';
 
 class FakeMacInstallReadiness implements MacInstallReadiness {
@@ -16,6 +17,24 @@ class FakeMacInstallReadiness implements MacInstallReadiness {
   }
 
   removeListener(_event: 'update-downloaded', listener: () => void): unknown {
+    this.#listeners.delete(listener);
+    return this;
+  }
+
+  markReady(): void {
+    for (const listener of this.#listeners) listener();
+  }
+}
+
+class FakeWindowsInstallReadiness implements WindowsInstallReadiness {
+  readonly #listeners = new Set<() => void>();
+
+  on(_event: 'before-quit-for-update', listener: () => void): unknown {
+    this.#listeners.add(listener);
+    return this;
+  }
+
+  removeListener(_event: 'before-quit-for-update', listener: () => void): unknown {
     this.#listeners.delete(listener);
     return this;
   }
@@ -120,6 +139,8 @@ describe('cross-platform automatic updater', () => {
 
   it('falls back from the China provider and preserves download/restart installation', async () => {
     const native = new FakeNativeUpdater();
+    const readiness = new FakeWindowsInstallReadiness();
+    native.quitAndInstall.mockImplementation(() => readiness.markReady());
     native.results.push(
       async () => { throw new Error('China source unavailable'); },
       async () => ({ updateInfo }),
@@ -135,6 +156,7 @@ describe('cross-platform automatic updater', () => {
         { provider: 'github', owner: 'yoshino-xiao7', repo: 'deepseek-harness-desktop-yukiryou', private: false },
       ],
       createNativeUpdater: () => native,
+      windowsInstallReadiness: readiness,
     });
 
     await expect(updater.checkForUpdates()).resolves.toEqual({ status: 'available' });
@@ -148,16 +170,15 @@ describe('cross-platform automatic updater', () => {
     native.emit('update-downloaded', updateInfo);
     expect(updater.getState().status).toBe('downloaded');
     await updater.prepareInstall();
-    expect(native.quitAndInstall).toHaveBeenCalledWith(false, true);
+    expect(native.quitAndInstall).toHaveBeenCalledWith(true, true);
     expect(native.autoInstallOnAppQuit).toBe(false);
     expect(native.installDirectory).toBeDefined();
   });
 
-  it('confirms the Windows installer handoff before asking the caller to quit', async () => {
-    const native = new FakeNativeUpdater() as FakeNativeUpdater & {
-      prepareInstall: ReturnType<typeof vi.fn>;
-    };
-    native.prepareInstall = vi.fn().mockResolvedValue(undefined);
+  it('uses the maintained silent NSIS updater and lets it own the quit', async () => {
+    const native = new FakeNativeUpdater();
+    const readiness = new FakeWindowsInstallReadiness();
+    native.quitAndInstall.mockImplementation(() => readiness.markReady());
     const updater = new CrossPlatformAppUpdater({
       enabled: true,
       currentVersion: '1.0.4',
@@ -165,10 +186,35 @@ describe('cross-platform automatic updater', () => {
       architecture: 'x64',
       onError: vi.fn(),
       createNativeUpdater: () => native,
+      windowsInstallReadiness: readiness,
     });
 
-    await expect(updater.prepareInstall()).resolves.toBe(true);
-    expect(native.prepareInstall).toHaveBeenCalledWith(true, true);
-    expect(native.quitAndInstall).not.toHaveBeenCalled();
+    await expect(updater.prepareInstall()).resolves.toBeUndefined();
+    expect(native.quitAndInstall).toHaveBeenCalledWith(true, true);
+  });
+
+  it('rejects when the Windows updater never accepts the install handoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const native = new FakeNativeUpdater();
+      const updater = new CrossPlatformAppUpdater({
+        enabled: true,
+        currentVersion: '1.0.4',
+        platform: 'win32',
+        architecture: 'x64',
+        onError: vi.fn(),
+        createNativeUpdater: () => native,
+        windowsInstallReadiness: new FakeWindowsInstallReadiness(),
+        windowsInstallHandoffTimeoutMs: 25,
+      });
+
+      const handoff = expect(updater.prepareInstall()).rejects.toThrow(
+        'Windows native updater did not accept the install handoff',
+      );
+      await vi.advanceTimersByTimeAsync(25);
+      await handoff;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

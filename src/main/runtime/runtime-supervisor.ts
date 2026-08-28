@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:net';
-import { delimiter } from 'node:path';
+import { delimiter, win32 } from 'node:path';
 
 export type RuntimeFailureCode =
   | 'spawn-failed'
@@ -104,18 +104,20 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     return this.#startPromise;
   }
 
-  async stop(): Promise<void> {
+  async stop(reason: 'quit' | 'restart' | 'update'): Promise<void> {
     this.#stopping = true;
-    const child = this.#child;
-    if (child === undefined) {
-      this.#setState({ kind: 'stopped' });
-      this.#stopping = false;
-      return;
-    }
+    try {
+      const child = this.#child;
+      if (child === undefined) {
+        this.#setState({ kind: 'stopped' });
+        return;
+      }
 
-    await this.#terminateOwnedProcess(child);
-    this.#setState({ kind: 'stopped' });
-    this.#stopping = false;
+      await this.#terminateOwnedProcess(child, reason);
+      this.#setState({ kind: 'stopped' });
+    } finally {
+      this.#stopping = false;
+    }
   }
 
   async #startOwnedRuntime(): Promise<
@@ -217,7 +219,27 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     }
   }
 
-  async #terminateOwnedProcess(child: ChildProcess): Promise<void> {
+  async #terminateOwnedProcess(
+    child: ChildProcess,
+    reason?: 'quit' | 'restart' | 'update',
+  ): Promise<void> {
+    if (process.platform === 'win32') {
+      const result = terminateWindowsProcessTree(child);
+      if (!result.started && child.exitCode === null) {
+        throw new Error(
+          `Could not terminate Windows Runtime process tree during ${reason ?? 'startup cleanup'}: ` +
+          result.detail,
+        );
+      }
+      const exited = await waitForExit(child, this.#options.shutdownTimeoutMs);
+      if (!exited) {
+        throw new Error(
+          `Windows Runtime root process ${String(child.pid)} remained after taskkill`,
+        );
+      }
+      if (this.#child === child) this.#child = undefined;
+      return;
+    }
     this.#signalOwnedProcess(child, 'SIGTERM');
     const exited = await waitForExit(child, this.#options.shutdownTimeoutMs);
     if (!exited) {
@@ -233,6 +255,54 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
       listener(state);
     }
   }
+}
+
+export interface WindowsProcessTreeTerminationResult {
+  readonly started: boolean;
+  readonly detail: string;
+}
+
+export interface WindowsProcessTreeTerminationOptions {
+  readonly platform?: NodeJS.Platform;
+  readonly systemRoot?: string;
+  readonly runTaskkill?: (
+    executable: string,
+    args: readonly string[],
+  ) => { readonly error?: Error; readonly status: number | null };
+}
+
+/**
+ * Terminate a Windows-owned Runtime tree while its root PID still identifies
+ * every descendant. Killing the root first would orphan cmd/conhost/provider
+ * children and can leave installed Runtime files locked during an update.
+ */
+export function terminateWindowsProcessTree(
+  child: ChildProcess,
+  options: WindowsProcessTreeTerminationOptions = {},
+): WindowsProcessTreeTerminationResult {
+  if ((options.platform ?? process.platform) !== 'win32') {
+    return { started: false, detail: 'not-windows' };
+  }
+  if (child.pid === undefined || child.exitCode !== null) {
+    return { started: true, detail: 'already-exited' };
+  }
+  const taskkill = win32.join(
+    options.systemRoot ?? process.env.SystemRoot ?? 'C:\\Windows',
+    'System32',
+    'taskkill.exe',
+  );
+  const result = (options.runTaskkill ?? ((executable, args) => spawnSync(
+    executable,
+    [...args],
+    { stdio: 'ignore', windowsHide: true },
+  )))(taskkill, ['/PID', String(child.pid), '/T', '/F']);
+  if (result.error !== undefined) {
+    return { started: false, detail: result.error.message };
+  }
+  if (result.status !== 0) {
+    return { started: false, detail: `taskkill-exit-${String(result.status)}` };
+  }
+  return { started: true, detail: 'taskkill-exit-0' };
 }
 
 export function createRuntimeSupervisor(

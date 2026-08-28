@@ -13,7 +13,12 @@ $gateIdentity = if ($env:GITHUB_RUN_ID -and $env:GITHUB_RUN_ATTEMPT) {
 } else {
   'local'
 }
-$installRoot = Join-Path ([System.IO.Path]::GetTempPath()) "dsh-yukiryou-automatic-update-$gateIdentity"
+$installParent = if ($env:LOCALAPPDATA) {
+  [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
+} else {
+  [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+}
+$installRoot = Join-Path $installParent "dsh-au-$gateIdentity"
 $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
 $mirrorHost = '127.0.0.1'
@@ -78,10 +83,10 @@ function Remove-GateInstallation([string]$Root) {
     Where-Object {
       $_.ProcessId -ne $PID -and (
         $_.ExecutablePath -eq $targetExecutable -or
-        ($_.CommandLine -and $_.CommandLine.Contains(
+        ($_.CommandLine -and $_.CommandLine.IndexOf(
           $resolvedRoot,
           [System.StringComparison]::OrdinalIgnoreCase
-        ))
+        ) -ge 0)
       )
     } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -98,8 +103,16 @@ function Remove-GateInstallation([string]$Root) {
 }
 
 function Remove-StaleGateInstallations {
-  $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-  Get-ChildItem -LiteralPath $tempRoot -Directory -Filter 'dsh-yukiryou-automatic-update-*' |
+  $legacyInstallParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  $staleInstallations = @(
+    Get-ChildItem -LiteralPath $installParent -Directory -Filter 'dsh-au-*'
+    # Recover runs created before the short-path gate was introduced. These
+    # installations share the product's HKCU NSIS registration and can affect
+    # a new rehearsal even though they live under the old Temp prefix.
+    Get-ChildItem -LiteralPath $legacyInstallParent -Directory `
+      -Filter 'dsh-yukiryou-automatic-update-*'
+  ) | Sort-Object -Property FullName -Unique
+  $staleInstallations |
     Where-Object { $_.FullName -ne $installRoot } |
     ForEach-Object {
       Write-Output "Recovering stale automatic-update installation $($_.FullName)"
@@ -264,7 +277,6 @@ Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH' $executable
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH' $executable
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION' $syntheticSuccessorVersion
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION' $syntheticSuccessorVersion
-Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_EXPECTED_INSTALL_MODE' '/currentuser'
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL' "$mirrorOrigin/updates/win32-x64/latest.yml"
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_DIAGNOSTICS' (Join-Path $gateRoot 'diagnostics')
 Write-Output "Prepared release candidate $env:RELEASE_VERSION automatic-update rehearsal against synthetic successor $syntheticSuccessorVersion"

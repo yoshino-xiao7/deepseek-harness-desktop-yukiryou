@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -18,16 +18,12 @@ const relaunchExecutable = requiredEnvironment('DSH_AUTOMATIC_UPDATE_RELAUNCH_PA
 const expectedUpdateVersion = requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION');
 const expectedInstalledVersion =
   process.env.DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION?.trim() || expectedUpdateVersion;
-const expectedWindowsInstallMode = process.platform === 'win32'
-  ? requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_INSTALL_MODE')
-  : undefined;
 const downloadTimeoutMs = 2 * 60_000;
 const oldProcessExitTimeoutMs = 60_000;
-// The bundled Runtime contains roughly 55k files. A healthy NSIS repair can
-// take more than three minutes on the physical Windows runner. The production
-// helper bounds NSIS at ten minutes, so the gate waits slightly beyond that
-// boundary and judges the recorded installer exit code.
-const relaunchTimeoutMs = 11 * 60_000;
+// The bundled Runtime contains roughly 55k files. A healthy NSIS replacement
+// can take more than three minutes on the physical runner, but a visible NSIS
+// failure dialog is detected immediately instead of waiting out this bound.
+const relaunchTimeoutMs = 6 * 60_000;
 
 describe('release candidate automatic update', () => {
   let application: ElectronApplication | undefined;
@@ -76,7 +72,6 @@ describe('release candidate automatic update', () => {
     await waitForDownloaded(shell);
     await waitForPreviousMacUpdaterReadiness(expectedInstalledVersion);
 
-    const previousWindowsHandoffs = await listWindowsHandoffDirectories();
     const previousWindowsProcessIds = await windowsInstallDirectoryProcessIds(
       dirname(relaunchExecutable),
     );
@@ -93,11 +88,7 @@ describe('release candidate automatic update', () => {
     // This is intentionally an OS-process assertion, not a second Playwright
     // launch. It proves the updater itself requested a real post-install relaunch.
     try {
-      await verifyWindowsUpdateHandoff(previousWindowsHandoffs, previousWindowsProcessIds);
-      await expect.poll(() => isRelaunched(relaunchExecutable, previousWindowsProcessIds), {
-        timeout: process.platform === 'win32' ? 30_000 : relaunchTimeoutMs,
-        interval: 1_000,
-      }).toBe(true);
+      await waitForUpdaterRelaunch(relaunchExecutable, previousWindowsProcessIds);
     } catch (error) {
       await preserveProcessSnapshot('relaunch-timeout');
       throw error;
@@ -115,7 +106,7 @@ describe('release candidate automatic update', () => {
 
     const log = await readFile(join(userData, 'logs', 'desktop.log'), 'utf8');
     expect(log).toContain('"status":"downloaded"');
-  }, 16 * 60_000);
+  }, 9 * 60_000);
 });
 
 async function waitForApplicationClose(
@@ -129,6 +120,7 @@ async function waitForApplicationClose(
   }
   const deadline = Date.now() + oldProcessExitTimeoutMs;
   let driverClosed = false;
+  let nextInstallerDialogCheck = 0;
   void closed.then(() => {
     driverClosed = true;
   });
@@ -139,6 +131,14 @@ async function waitForApplicationClose(
     // bundled runtime/provider processes, instead of trusting transport close.
     if (process.platform === 'win32') {
       if ([...previousWindowsProcessIds].every((pid) => !isProcessRunning(pid))) return;
+      if (Date.now() >= nextInstallerDialogCheck) {
+        const installerDialog = await visibleWindowsInstallerDialog();
+        if (installerDialog !== undefined) {
+          await preserveProcessSnapshot('installer-dialog-before-old-process-exit');
+          throw new Error(`Windows installer displayed a blocking dialog: ${installerDialog}`);
+        }
+        nextInstallerDialogCheck = Date.now() + 1_000;
+      }
     } else if (driverClosed || !isProcessRunning(launcherPid)) {
       return;
     }
@@ -150,84 +150,6 @@ async function waitForApplicationClose(
     `Release candidate did not exit within ${String(oldProcessExitTimeoutMs)}ms ` +
     'after requesting update installation',
   );
-}
-
-async function listWindowsHandoffDirectories(): Promise<ReadonlySet<string>> {
-  if (process.platform !== 'win32') return new Set();
-  const entries = await readdir(tmpdir(), { withFileTypes: true });
-  return new Set(entries
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith('dsh-yukiryou-update-'))
-    .map((entry) => entry.name));
-}
-
-async function verifyWindowsUpdateHandoff(
-  previousDirectories: ReadonlySet<string>,
-  previousProcessIds: ReadonlySet<number>,
-): Promise<void> {
-  if (process.platform !== 'win32') return;
-  let handoff: WindowsHandoffLog | undefined;
-  await expect.poll(async () => {
-    handoff = await findWindowsHandoffLog(previousDirectories, previousProcessIds);
-    return handoff?.log.includes('event=completed') ?? false;
-  }, {
-    timeout: relaunchTimeoutMs,
-    interval: 250,
-  }).toBe(true);
-
-  if (handoff === undefined || expectedWindowsInstallMode === undefined) {
-    throw new Error('Completed Windows update handoff log is missing');
-  }
-  const handoffLog = handoff.log;
-  const parentExited = handoffLog.indexOf(
-    `event=parent-exited parent=${String(handoff.parentProcessId)}`,
-  );
-  const applicationExited = handoffLog.indexOf('event=application-exited');
-  const installerStarted = handoffLog.indexOf('event=installer-started');
-  const installerExited = handoffLog.indexOf('event=installer-exited code=0');
-  const relaunchStarted = handoffLog.indexOf('event=relaunch-started');
-  const completed = handoffLog.indexOf('event=completed');
-  expect(parentExited).toBeGreaterThan(-1);
-  expect(applicationExited).toBeGreaterThan(parentExited);
-  expect(installerStarted).toBeGreaterThan(applicationExited);
-  expect(installerExited).toBeGreaterThan(installerStarted);
-  expect(relaunchStarted).toBeGreaterThan(installerExited);
-  expect(completed).toBeGreaterThan(relaunchStarted);
-
-  const installerLine = handoffLog.slice(installerStarted, handoffLog.indexOf('\n', installerStarted));
-  expect(installerLine).toContain(expectedWindowsInstallMode);
-  expect(installerLine).toContain(`/D=${dirname(relaunchExecutable)}`);
-  expect(installerLine).not.toContain('--force-run');
-  const relaunchLine = handoffLog.slice(relaunchStarted, handoffLog.indexOf('\n', relaunchStarted));
-  expect(relaunchLine).toContain(`executable=${relaunchExecutable}`);
-}
-
-interface WindowsHandoffLog {
-  readonly log: string;
-  readonly parentProcessId: number;
-}
-
-async function findWindowsHandoffLog(
-  previousDirectories: ReadonlySet<string>,
-  previousProcessIds: ReadonlySet<number>,
-): Promise<WindowsHandoffLog | undefined> {
-  const entries = await readdir(tmpdir(), { withFileTypes: true });
-  for (const entry of entries) {
-    if (
-      !entry.isDirectory() ||
-      !entry.name.startsWith('dsh-yukiryou-update-') ||
-      previousDirectories.has(entry.name)
-    ) continue;
-    const handoffLog = await readFile(join(tmpdir(), entry.name, 'handoff.log'), 'utf8')
-      .catch(() => undefined);
-    if (handoffLog === undefined) continue;
-    const parentMatch = /event=armed parent=(\d+)/u.exec(handoffLog);
-    if (parentMatch?.[1] === undefined) continue;
-    const parentProcessId = Number(parentMatch[1]);
-    if (previousProcessIds.has(parentProcessId)) {
-      return { log: handoffLog, parentProcessId };
-    }
-  }
-  return undefined;
 }
 
 function isProcessRunning(pid: number): boolean {
@@ -401,6 +323,49 @@ async function isRelaunched(
   return result.stdout.split('\n').some((line) => line === executable || line.startsWith(`${executable} `));
 }
 
+async function waitForUpdaterRelaunch(
+  executable: string,
+  previousWindowsProcessIds: ReadonlySet<number>,
+): Promise<void> {
+  if (process.platform !== 'win32') {
+    await expect.poll(() => isRelaunched(executable, previousWindowsProcessIds), {
+      timeout: relaunchTimeoutMs,
+      interval: 1_000,
+    }).toBe(true);
+    return;
+  }
+
+  const deadline = Date.now() + relaunchTimeoutMs;
+  while (Date.now() < deadline) {
+    if (await isRelaunched(executable, previousWindowsProcessIds)) return;
+    const installerDialog = await visibleWindowsInstallerDialog();
+    if (installerDialog !== undefined) {
+      await preserveProcessSnapshot('installer-dialog');
+      throw new Error(`Windows installer displayed a blocking dialog: ${installerDialog}`);
+    }
+    await delay(1_000);
+  }
+  throw new Error(
+    `Updater did not relaunch the installed application within ${String(relaunchTimeoutMs)}ms`,
+  );
+}
+
+async function visibleWindowsInstallerDialog(): Promise<string | undefined> {
+  const result = await execute('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    [
+      "Get-Process -ErrorAction SilentlyContinue | Where-Object {",
+      "$_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like '*DeepSeek YukiRyou*' -and",
+      "$_.MainWindowTitle -match '(安装|Setup|Install|Uninstall)'",
+      "} | Select-Object -First 1 -ExpandProperty MainWindowTitle",
+    ].join(' '),
+  ]).catch(() => undefined);
+  const title = result?.stdout.trim();
+  return title === undefined || title === '' ? undefined : title;
+}
+
 async function stopRelaunched(executable: string): Promise<void> {
   if (process.platform === 'win32') {
     const installDirectory = dirname(executable);
@@ -457,20 +422,6 @@ async function preserveDiagnostics(userDataDirectory: string): Promise<void> {
     join(userDataDirectory, 'logs', 'desktop.log'),
     join(diagnostics, 'desktop.log'),
   ).catch(() => undefined);
-  if (process.platform === 'win32') {
-    const handoffDirectories = await readdir(tmpdir(), { withFileTypes: true })
-      .then((entries) => entries.filter(
-        (entry) => entry.isDirectory() && entry.name.startsWith('dsh-yukiryou-update-'),
-      ));
-    for (const directory of handoffDirectories) {
-      for (const file of ['handoff.log', 'handoff.ps1', 'handoff.cjs', 'ready']) {
-        await copyFile(
-          join(tmpdir(), directory.name, file),
-          join(diagnostics, `${directory.name}-${file}`),
-        ).catch(() => undefined);
-      }
-    }
-  }
   await preserveProcessSnapshot('test-cleanup');
 }
 
@@ -490,7 +441,12 @@ async function preserveProcessSnapshot(stage: string): Promise<void> {
           '($_.Name -like "*nsis*") -or',
           '($_.ExecutablePath -and $_.ExecutablePath.StartsWith($installRoot, [System.StringComparison]::OrdinalIgnoreCase)) -or',
           '($_.CommandLine -and $_.CommandLine.IndexOf($installRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)',
-          '} | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate |',
+          '} | ForEach-Object {',
+          '$window = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue;',
+          '[pscustomobject]@{ ProcessId=$_.ProcessId; ParentProcessId=$_.ParentProcessId;',
+          'Name=$_.Name; ExecutablePath=$_.ExecutablePath; CommandLine=$_.CommandLine;',
+          'CreationDate=$_.CreationDate; MainWindowTitle=$window.MainWindowTitle }',
+          '} |',
           'ConvertTo-Json -Depth 3',
         ].join(' '),
       ])

@@ -20,6 +20,14 @@ interface WorkflowJob {
 }
 
 interface ReleaseWorkflow {
+  on?: {
+    workflow_call?: {
+      inputs?: Record<string, { default?: string | boolean }>;
+    };
+    workflow_dispatch?: {
+      inputs?: Record<string, { default?: string | boolean }>;
+    };
+  };
   concurrency?: {
     group?: string;
     'cancel-in-progress'?: boolean;
@@ -65,6 +73,32 @@ describe('macOS release workflow contract', () => {
     const automaticUpdateStep = windowsWorkflow.jobs?.build_candidate?.steps?.find(
       (step) => step.name === 'Prepare and verify the release candidate automatic update',
     );
+    const updateOnly = windowsWorkflow.jobs?.update_restart;
+    const updateOnlyExercise = updateOnly?.steps?.find(
+      (step) => step.name === 'Exercise only automatic update and restart',
+    );
+    expect(windowsSource).toContain('update_restart_only:');
+    expect(
+      windowsWorkflow.on?.workflow_call?.inputs?.update_restart_only?.default,
+    ).toBe(false);
+    expect(
+      windowsWorkflow.on?.workflow_dispatch?.inputs?.update_restart_only?.default,
+    ).toBe(true);
+    expect(windowsWorkflow.jobs?.quality?.if).toContain('inputs.update_restart_only != true');
+    expect(windowsWorkflow.jobs?.build_candidate?.if).toContain(
+      'inputs.update_restart_only != true',
+    );
+    expect(updateOnly?.if).toContain('inputs.update_restart_only == true');
+    expect(updateOnly?.['timeout-minutes']).toBe(35);
+    expect(updateOnlyExercise?.run).toContain(
+      './scripts/windows-automatic-update-gate.ps1 -Action Prepare',
+    );
+    expect(updateOnlyExercise?.run).toContain(
+      'pnpm exec vitest run tests/release/automatic-update.test.ts --no-file-parallelism',
+    );
+    expect(updateOnly?.steps?.some((step) => step.run?.includes('pnpm lint'))).toBe(false);
+    expect(updateOnly?.steps?.some((step) => step.run?.includes('pnpm test:integration'))).toBe(false);
+    expect(updateOnly?.steps?.some((step) => step.run?.includes('pnpm make:win'))).toBe(false);
     expect(automaticUpdateStep?.['timeout-minutes']).toBe(25);
     expect(automaticUpdateStep?.run).toContain(
       './scripts/windows-automatic-update-gate.ps1 -Action Prepare',
@@ -97,7 +131,9 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('$env:GITHUB_RUN_ID');
     expect(windowsGate).toContain('$env:GITHUB_RUN_ATTEMPT');
     expect(windowsGate).toContain('Remove-StaleGateInstallations');
+    expect(windowsGate).toContain("-Filter 'dsh-au-*'");
     expect(windowsGate).toContain("-Filter 'dsh-yukiryou-automatic-update-*'");
+    expect(windowsGate).toContain('$installRoot = Join-Path $installParent "dsh-au-$gateIdentity"');
     expect(windowsGate).toContain('Recovering stale automatic-update installation');
     expect(windowsGate).toContain('function Remove-DirectoryEventually');
     expect(windowsGate).toContain('if (-not (Test-Path -LiteralPath $Root)) { return }');

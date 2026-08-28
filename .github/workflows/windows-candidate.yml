@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: ''
+      update_restart_only:
+        description: Skip full candidate gates and exercise only update/restart
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       release_version:
@@ -15,6 +20,11 @@ on:
         required: false
         type: string
         default: ''
+      update_restart_only:
+        description: Skip full candidate gates and exercise only update/restart
+        required: false
+        type: boolean
+        default: true
   pull_request:
     branches:
       - main
@@ -47,6 +57,7 @@ env:
 jobs:
   quality:
     name: Windows quality gate
+    if: ${{ inputs.update_restart_only != true || inputs.release_version == '' }}
     runs-on: [self-hosted, Windows, X64, yukiryou-local]
     timeout-minutes: 25
     steps:
@@ -75,6 +86,7 @@ jobs:
   build_candidate:
     name: Vendor Runtime, make EXE + portable ZIP, and smoke
     needs: quality
+    if: ${{ inputs.update_restart_only != true || inputs.release_version == '' }}
     runs-on: [self-hosted, Windows, X64, yukiryou-local]
     # Packaging and uploading the bundled 387 MiB / 55k-file Runtime is slow
     # on the physical runner. Keep enough headroom for lifecycle verification.
@@ -253,3 +265,66 @@ jobs:
           path: out/windows-candidate/
           if-no-files-found: error
           retention-days: 14
+
+  update_restart:
+    name: Update and restart only
+    if: ${{ inputs.update_restart_only == true && inputs.release_version != '' }}
+    runs-on: [self-hosted, Windows, X64, yukiryou-local]
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enable runner-local PowerShell 7
+        shell: powershell
+        run: |
+          if (-not (Test-Path "$env:RUNNER_PWSH_PATH\pwsh.exe")) {
+            throw "Runner PowerShell 7 is missing at $env:RUNNER_PWSH_PATH"
+          }
+          $env:RUNNER_PWSH_PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Require an interactive Windows runner session
+        run: ./scripts/require-interactive-windows-desktop.ps1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${env:PNPM_VERSION} --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Assemble the Windows Runtime and packaged application
+        run: |
+          pnpm runtime:vendor:win
+          pnpm package:win
+      - name: Build only the base NSIS installer required by the update rehearsal
+        shell: pwsh
+        run: >-
+          pnpm exec electron-builder --win nsis --x64
+          --prepackaged "out/DeepSeek YukiRyou-win32-x64"
+          --publish never
+          "-c.directories.output=out/windows-candidate"
+          "-c.artifactName=DeepSeek-YukiRyou-Setup.exe"
+      - name: Exercise only automatic update and restart
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          DSH_DESKTOP_DISTRIBUTION_REGION: china
+        run: |
+          ./scripts/windows-automatic-update-gate.ps1 -Action Prepare
+          pnpm exec vitest run tests/release/automatic-update.test.ts --no-file-parallelism
+      - name: Upload compact automatic-update diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-automatic-update-diagnostics
+          path: |
+            out/windows-automatic-update-gate/diagnostics/
+            out/windows-automatic-update-gate/metadata/
+            out/windows-automatic-update-gate/server.log
+            out/windows-automatic-update-gate/server-error.log
+            out/windows-automatic-update-gate/state.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean the isolated automatic-update gate
+        if: ${{ always() && hashFiles('out/windows-automatic-update-gate/state.json') != '' }}
+        shell: pwsh
+        run: ./scripts/windows-automatic-update-gate.ps1 -Action Cleanup
