@@ -207,8 +207,6 @@ describe('reliable Windows NSIS update handoff', () => {
       const launcherPath = join(handoffDirectory, 'handoff.cjs');
       const helperNodePath = join(handoffDirectory, 'node.exe');
       let child: ChildProcess | undefined;
-      let stdout = '';
-      let stderr = '';
       try {
         const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
         const powershell = join(
@@ -247,14 +245,8 @@ describe('reliable Windows NSIS update handoff', () => {
               child = spawn(command, [...commandArgs], {
                 cwd: workingDirectory,
                 detached: true,
-                stdio: ['ignore', 'pipe', 'pipe'],
+                stdio: 'ignore',
                 windowsHide: true,
-              });
-              child.stdout?.on('data', (chunk: Buffer | string) => {
-                stdout += chunk.toString();
-              });
-              child.stderr?.on('data', (chunk: Buffer | string) => {
-                stderr += chunk.toString();
               });
               return child;
             },
@@ -267,8 +259,6 @@ describe('reliable Windows NSIS update handoff', () => {
               error instanceof Error ? error.message : String(error),
               `powershell=${powershell}`,
               `helperNode=${helperNodePath}`,
-              `stdout=${stdout || '<empty>'}`,
-              `stderr=${stderr || '<empty>'}`,
               `handoffLog=${handoffLog}`,
             ].join('\n'),
             { cause: error },
@@ -277,16 +267,13 @@ describe('reliable Windows NSIS update handoff', () => {
         expect(existsSync(readyPath)).toBe(true);
       } finally {
         if (child?.pid !== undefined) {
-          spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
-            stdio: 'ignore',
-            windowsHide: true,
-          });
+          await stopWindowsTestProcessTree(child.pid);
         }
         rmSync(handoffDirectory, {
           recursive: true,
           force: true,
           maxRetries: 10,
-          retryDelay: 50,
+          retryDelay: 100,
         });
       }
     },
@@ -364,16 +351,13 @@ helper.unref();
         expect(existsSync(readyPath)).toBe(true);
       } finally {
         if (Number.isInteger(helperPid) && helperPid !== undefined) {
-          spawnSync('taskkill.exe', ['/PID', String(helperPid), '/T', '/F'], {
-            stdio: 'ignore',
-            windowsHide: true,
-          });
+          await stopWindowsTestProcessTree(helperPid);
         }
         rmSync(handoffDirectory, {
           recursive: true,
           force: true,
           maxRetries: 10,
-          retryDelay: 50,
+          retryDelay: 100,
         });
       }
     },
@@ -413,4 +397,32 @@ helper.unref();
 
 function testPowerShellLiteral(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
+}
+
+async function stopWindowsTestProcessTree(pid: number): Promise<void> {
+  const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+  const taskkill = join(systemRoot, 'System32', 'taskkill.exe');
+  const result = spawnSync(taskkill, ['/PID', String(pid), '/T', '/F'], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline && isTestProcessRunning(pid)) await delay(50);
+  if (isTestProcessRunning(pid)) {
+    throw new Error(
+      `Windows helper process tree ${String(pid)} remained after taskkill ` +
+      `(status=${String(result.status)})`,
+    );
+  }
+  // Windows can briefly retain image/cwd handles after the process disappears.
+  await delay(250);
+}
+
+function isTestProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error instanceof Error && 'code' in error && error.code !== 'ESRCH';
+  }
 }
