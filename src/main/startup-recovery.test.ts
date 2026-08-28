@@ -23,6 +23,7 @@ describe('startup recovery', () => {
         calls.push('installer-confirmed');
         return true;
       },
+      onHandoffFailure: () => calls.push('handoff-failed'),
       cleanup: async () => {
         applicationExitStarted = true;
         calls.push('stop-runtime');
@@ -41,6 +42,43 @@ describe('startup recovery', () => {
       'dispose-updater',
       'quit',
     ]);
+  });
+
+  it('keeps the application recoverable when installer handoff fails', async () => {
+    const failure = new Error('PowerShell helper did not become ready');
+    const onHandoffFailure = vi.fn();
+    const cleanup = vi.fn();
+    const dispose = vi.fn();
+    const quit = vi.fn();
+
+    await expect(handoffApplicationUpdate({
+      log: undefined,
+      handoff: vi.fn().mockRejectedValue(failure),
+      onHandoffFailure,
+      cleanup,
+      dispose,
+      quit,
+    })).resolves.toBe(false);
+
+    expect(onHandoffFailure).toHaveBeenCalledWith(failure);
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(dispose).not.toHaveBeenCalled();
+    expect(quit).not.toHaveBeenCalled();
+  });
+
+  it('still quits after a confirmed handoff when updater disposal throws', async () => {
+    const quit = vi.fn();
+
+    await expect(handoffApplicationUpdate({
+      log: undefined,
+      handoff: vi.fn().mockResolvedValue(true),
+      onHandoffFailure: vi.fn(),
+      cleanup: vi.fn(),
+      dispose: vi.fn(() => { throw new Error('dispose failed'); }),
+      quit,
+    })).resolves.toBe(true);
+
+    expect(quit).toHaveBeenCalledOnce();
   });
 
   it('relaunches and quits even when the log can no longer be flushed or closed', async () => {

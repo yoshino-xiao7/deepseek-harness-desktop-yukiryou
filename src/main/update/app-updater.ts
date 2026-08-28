@@ -235,11 +235,9 @@ export class CrossPlatformAppUpdater implements AppUpdater {
   }
 
   async prepareInstall(): Promise<boolean> {
-    // The Windows artifact is an assisted NSIS installer with
-    // runAfterFinish=false. Its generated installer only honors --force-run
-    // during a silent update; a non-silent quitAndInstall therefore installs
-    // successfully but leaves the application closed. macOS keeps its native
-    // non-silent Squirrel handoff.
+    // The Windows helper waits for Electron to exit, runs assisted NSIS
+    // silently, verifies its exit code, and explicitly relaunches the installed
+    // executable. macOS keeps its native non-silent Squirrel handoff.
     if (this.#options.platform === 'win32' && isReliableWindowsUpdateClient(this.#native)) {
       await this.#native.prepareInstall(true, true);
       return true;

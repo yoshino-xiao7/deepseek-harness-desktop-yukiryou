@@ -16,6 +16,7 @@ export interface ApplicationExitOptions {
 export interface ApplicationUpdateHandoffOptions {
   readonly log: AppLog | undefined;
   readonly handoff: () => Promise<boolean>;
+  readonly onHandoffFailure: (error: unknown) => void;
   readonly cleanup: () => Promise<void> | void;
   readonly dispose: () => void;
   readonly quit: () => void;
@@ -70,15 +71,27 @@ export async function finalizeApplicationExit(
  */
 export async function handoffApplicationUpdate(
   options: ApplicationUpdateHandoffOptions,
-): Promise<void> {
-  const callerMustQuit = await options.handoff();
+): Promise<boolean> {
+  let callerMustQuit: boolean;
+  try {
+    callerMustQuit = await options.handoff();
+  } catch (error) {
+    options.onHandoffFailure(error);
+    return false;
+  }
   try {
     await waitForApplicationExitCleanup(options.cleanup);
   } finally {
-    options.dispose();
+    try {
+      options.dispose();
+    } catch {
+      // Once the installer owns the lifecycle, disposal is best-effort and
+      // cannot be allowed to strand the old application process.
+    }
     await waitForApplicationExitCleanup(() => options.log?.close());
     if (callerMustQuit) options.quit();
   }
+  return true;
 }
 
 /**

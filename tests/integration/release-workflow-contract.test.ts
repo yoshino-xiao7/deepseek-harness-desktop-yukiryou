@@ -65,7 +65,7 @@ describe('macOS release workflow contract', () => {
     const automaticUpdateStep = windowsWorkflow.jobs?.build_candidate?.steps?.find(
       (step) => step.name === 'Prepare and verify the release candidate automatic update',
     );
-    expect(automaticUpdateStep?.['timeout-minutes']).toBe(15);
+    expect(automaticUpdateStep?.['timeout-minutes']).toBe(25);
     expect(automaticUpdateStep?.run).toContain(
       './scripts/windows-automatic-update-gate.ps1 -Action Prepare',
     );

@@ -159,7 +159,7 @@ jobs:
           throw new Error('Windows candidate provenance mismatch')"
       - name: Prepare and verify the release candidate automatic update
         if: ${{ inputs.release_version != '' }}
-        timeout-minutes: 15
+        timeout-minutes: 25
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}

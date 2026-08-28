@@ -17,9 +17,15 @@ const relaunchExecutable = requiredEnvironment('DSH_AUTOMATIC_UPDATE_RELAUNCH_PA
 const expectedUpdateVersion = requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION');
 const expectedInstalledVersion =
   process.env.DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION?.trim() || expectedUpdateVersion;
+const expectedWindowsInstallMode = process.platform === 'win32'
+  ? requiredEnvironment('DSH_AUTOMATIC_UPDATE_EXPECTED_INSTALL_MODE')
+  : undefined;
 const downloadTimeoutMs = 2 * 60_000;
 const oldProcessExitTimeoutMs = 60_000;
-const relaunchTimeoutMs = 3 * 60_000;
+// The bundled Runtime contains roughly 55k files. A healthy NSIS repair can
+// take more than three minutes on the physical Windows runner, so the gate
+// judges the recorded installer exit code and allows enough time to reach it.
+const relaunchTimeoutMs = 6 * 60_000;
 
 describe('release candidate automatic update', () => {
   let application: ElectronApplication | undefined;
@@ -68,9 +74,11 @@ describe('release candidate automatic update', () => {
     await waitForDownloaded(shell);
     await waitForPreviousMacUpdaterReadiness(expectedInstalledVersion);
 
+    const previousWindowsHandoffs = await listWindowsHandoffDirectories();
+    const previousWindowsProcessIds = await windowsExecutableProcessIds(relaunchExecutable);
     const closed = new Promise<void>((resolve) => application?.once('close', () => resolve()));
     await invokeUpdate(shell, 'install');
-    await waitForApplicationClose(application, closed);
+    const sourcePid = await waitForApplicationClose(application, closed);
     application = undefined;
 
     await preserveProcessSnapshot('after-old-process-exit');
@@ -78,8 +86,9 @@ describe('release candidate automatic update', () => {
     // This is intentionally an OS-process assertion, not a second Playwright
     // launch. It proves the updater itself requested a real post-install relaunch.
     try {
-      await expect.poll(() => isRelaunched(relaunchExecutable), {
-        timeout: relaunchTimeoutMs,
+      await verifyWindowsUpdateHandoff(sourcePid, previousWindowsHandoffs);
+      await expect.poll(() => isRelaunched(relaunchExecutable, previousWindowsProcessIds), {
+        timeout: process.platform === 'win32' ? 30_000 : relaunchTimeoutMs,
         interval: 1_000,
       }).toBe(true);
     } catch (error) {
@@ -99,13 +108,13 @@ describe('release candidate automatic update', () => {
 
     const log = await readFile(join(userData, 'logs', 'desktop.log'), 'utf8');
     expect(log).toContain('"status":"downloaded"');
-  }, 8 * 60_000);
+  }, 12 * 60_000);
 });
 
 async function waitForApplicationClose(
   application: ElectronApplication,
   closed: Promise<void>,
-): Promise<void> {
+): Promise<number> {
   const sourcePid = application.process().pid;
   if (sourcePid === undefined) {
     throw new Error('Release candidate source process did not expose a PID');
@@ -116,11 +125,11 @@ async function waitForApplicationClose(
     driverClosed = true;
   });
   while (Date.now() < deadline) {
-    // quitAndInstall hands process ownership to the native installer. On
-    // Windows that can terminate the Electron process without Playwright's
-    // transport emitting its higher-level `close` event, so the release gate
-    // must also observe the source OS process directly.
-    if (driverClosed || !isProcessRunning(sourcePid)) return;
+    // Windows must observe the exact source OS PID disappear. Playwright can
+    // close its transport while an Electron process is still draining, which
+    // is too early for the helper to start NSIS safely.
+    if (!isProcessRunning(sourcePid)) return sourcePid;
+    if (process.platform !== 'win32' && driverClosed) return sourcePid;
     await delay(250);
   }
   await preserveProcessSnapshot('old-process-exit-timeout');
@@ -129,6 +138,68 @@ async function waitForApplicationClose(
     `Release candidate did not exit within ${String(oldProcessExitTimeoutMs)}ms ` +
     'after requesting update installation',
   );
+}
+
+async function listWindowsHandoffDirectories(): Promise<ReadonlySet<string>> {
+  if (process.platform !== 'win32') return new Set();
+  const entries = await readdir(tmpdir(), { withFileTypes: true });
+  return new Set(entries
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith('dsh-yukiryou-update-'))
+    .map((entry) => entry.name));
+}
+
+async function verifyWindowsUpdateHandoff(
+  sourcePid: number,
+  previousDirectories: ReadonlySet<string>,
+): Promise<void> {
+  if (process.platform !== 'win32') return;
+  let handoffLog: string | undefined;
+  await expect.poll(async () => {
+    handoffLog = await findWindowsHandoffLog(sourcePid, previousDirectories);
+    return handoffLog?.includes('event=completed') ?? false;
+  }, {
+    timeout: relaunchTimeoutMs,
+    interval: 250,
+  }).toBe(true);
+
+  if (handoffLog === undefined || expectedWindowsInstallMode === undefined) {
+    throw new Error(`Completed Windows update handoff log is missing for parent ${String(sourcePid)}`);
+  }
+  const parentExited = handoffLog.indexOf(`event=parent-exited parent=${String(sourcePid)}`);
+  const installerStarted = handoffLog.indexOf('event=installer-started');
+  const installerExited = handoffLog.indexOf('event=installer-exited code=0');
+  const relaunchStarted = handoffLog.indexOf('event=relaunch-started');
+  const completed = handoffLog.indexOf('event=completed');
+  expect(parentExited).toBeGreaterThan(-1);
+  expect(installerStarted).toBeGreaterThan(parentExited);
+  expect(installerExited).toBeGreaterThan(installerStarted);
+  expect(relaunchStarted).toBeGreaterThan(installerExited);
+  expect(completed).toBeGreaterThan(relaunchStarted);
+
+  const installerLine = handoffLog.slice(installerStarted, handoffLog.indexOf('\n', installerStarted));
+  expect(installerLine).toContain(expectedWindowsInstallMode);
+  expect(installerLine).toContain(`/D=${dirname(relaunchExecutable)}`);
+  expect(installerLine).not.toContain('--force-run');
+  const relaunchLine = handoffLog.slice(relaunchStarted, handoffLog.indexOf('\n', relaunchStarted));
+  expect(relaunchLine).toContain(`executable=${relaunchExecutable}`);
+}
+
+async function findWindowsHandoffLog(
+  sourcePid: number,
+  previousDirectories: ReadonlySet<string>,
+): Promise<string | undefined> {
+  const entries = await readdir(tmpdir(), { withFileTypes: true });
+  for (const entry of entries) {
+    if (
+      !entry.isDirectory() ||
+      !entry.name.startsWith('dsh-yukiryou-update-') ||
+      previousDirectories.has(entry.name)
+    ) continue;
+    const handoffLog = await readFile(join(tmpdir(), entry.name, 'handoff.log'), 'utf8')
+      .catch(() => undefined);
+    if (handoffLog?.includes(`event=armed parent=${String(sourcePid)}`)) return handoffLog;
+  }
+  return undefined;
 }
 
 function isProcessRunning(pid: number): boolean {
@@ -268,11 +339,23 @@ async function preserveApplicationSnapshot(
   );
 }
 
-async function isRelaunched(executable: string): Promise<boolean> {
+async function windowsExecutableProcessIds(executable: string): Promise<ReadonlySet<number>> {
+  if (process.platform !== 'win32') return new Set();
+  const script = `$p=${powerShellLiteral(executable)}; Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $p } | ForEach-Object { $_.ProcessId }`;
+  const result = await execute('powershell.exe', ['-NoProfile', '-Command', script]);
+  return new Set(result.stdout
+    .split(/\r?\n/u)
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && value > 0));
+}
+
+async function isRelaunched(
+  executable: string,
+  previousWindowsProcessIds: ReadonlySet<number>,
+): Promise<boolean> {
   if (process.platform === 'win32') {
-    const script = `$p=${powerShellLiteral(executable)}; [bool](Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $p })`;
-    const result = await execute('powershell.exe', ['-NoProfile', '-Command', script]);
-    return result.stdout.trim().toLowerCase() === 'true';
+    const processIds = await windowsExecutableProcessIds(executable);
+    return [...processIds].some((processId) => !previousWindowsProcessIds.has(processId));
   }
   const result = await execute('/bin/ps', ['-axo', 'command=']);
   return result.stdout.split('\n').some((line) => line === executable || line.startsWith(`${executable} `));

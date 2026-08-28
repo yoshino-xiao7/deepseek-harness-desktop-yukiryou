@@ -1244,6 +1244,10 @@ export class AppCoordinator {
     await handoffApplicationUpdate({
       log: this.#log,
       handoff: () => updater?.prepareInstall() ?? Promise.resolve(false),
+      onHandoffFailure: (error) => {
+        this.#quitting = false;
+        this.#handleUpdaterError(error instanceof Error ? error : new Error(String(error)));
+      },
       cleanup: async () => {
         this.#log?.write('update.runtime-stop-started');
         await waitForApplicationExitCleanup(() => this.#runtime?.stop('update'));

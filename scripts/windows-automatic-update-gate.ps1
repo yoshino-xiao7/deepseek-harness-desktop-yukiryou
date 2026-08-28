@@ -264,6 +264,7 @@ Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH' $executable
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH' $executable
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION' $syntheticSuccessorVersion
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION' $syntheticSuccessorVersion
+Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_EXPECTED_INSTALL_MODE' '/currentuser'
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL' "$mirrorOrigin/updates/win32-x64/latest.yml"
 Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_DIAGNOSTICS' (Join-Path $gateRoot 'diagnostics')
 Write-Output "Prepared release candidate $env:RELEASE_VERSION automatic-update rehearsal against synthetic successor $syntheticSuccessorVersion"
