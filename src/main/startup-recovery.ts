@@ -13,6 +13,18 @@ export interface ApplicationExitOptions {
   readonly exit: () => void;
 }
 
+export interface ApplicationUpdateHandoffOptions {
+  /** A hard gate. Failure here must prevent the installer from starting. */
+  readonly prepare: () => Promise<void>;
+  /** Best-effort persistence that runs after the hard gate. */
+  readonly persist: () => Promise<void> | void;
+  /** The native updater handoff. This must be the final lifecycle action. */
+  readonly handoff: () => Promise<void>;
+  readonly onHandoffFailure: (error: unknown) => Promise<void> | void;
+}
+
+const APPLICATION_EXIT_CLEANUP_TIMEOUT_MS = 1_000;
+
 /**
  * Relaunch after pre-Runtime startup failed. Logging is deliberately
  * best-effort because the triggering failure may be a full or read-only disk.
@@ -48,12 +60,57 @@ export async function finalizeApplicationExit(
   try {
     options.dispose();
   } finally {
-    try {
-      await options.log?.close();
-    } catch {
-      // A failed diagnostics queue cannot strand a hidden main process.
-    }
+    await waitForApplicationExitCleanup(() => options.log?.close());
     options.exit();
+  }
+}
+
+/**
+ * Stops update-sensitive resources before handing control to the native
+ * updater. In particular, the Windows Runtime process tree must be gone before
+ * NSIS starts; starting NSIS first races the old uninstaller against cleanup.
+ */
+export async function handoffApplicationUpdate(
+  options: ApplicationUpdateHandoffOptions,
+): Promise<boolean> {
+  try {
+    await options.prepare();
+  } catch (error) {
+    await options.onHandoffFailure(error);
+    return false;
+  }
+
+  await waitForApplicationExitCleanup(options.persist);
+  try {
+    await options.handoff();
+  } catch (error) {
+    await options.onHandoffFailure(error);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Exit and update installation are terminal operations. Best-effort state or
+ * diagnostics persistence must therefore have a strict deadline: a filesystem
+ * request that never settles cannot be allowed to strand the hidden Electron
+ * main process before quitAndInstall is reached.
+ */
+export async function waitForApplicationExitCleanup(
+  cleanup: () => Promise<void> | void,
+  timeoutMs = APPLICATION_EXIT_CLEANUP_TIMEOUT_MS,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timeout = setTimeout(resolve, timeoutMs);
+  });
+  try {
+    await Promise.race([
+      Promise.resolve().then(cleanup).catch(() => undefined),
+      deadline,
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 

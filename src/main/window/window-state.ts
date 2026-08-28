@@ -21,6 +21,14 @@ export interface DesktopWindowState {
   readonly maximized: boolean;
 }
 
+export function windowStateSnapshot(
+  bounds: WindowRectangle,
+  normalBounds: WindowRectangle,
+  maximized: boolean,
+): DesktopWindowState {
+  return { bounds: maximized ? normalBounds : bounds, maximized };
+}
+
 interface PersistedWindowState extends DesktopWindowState {
   readonly schemaVersion: 1;
 }

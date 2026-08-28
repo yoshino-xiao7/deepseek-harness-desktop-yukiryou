@@ -7,7 +7,7 @@
  */
 export const MODEL_CAPABILITIES_PATCH_DSH_VERSION = '0.1.1-rc.2';
 export const MODEL_CAPABILITIES_PATCH_MARKER =
-  'deepseek-yukiryou:model-capabilities-patch:v1';
+  'deepseek-yukiryou:model-capabilities-patch:v2';
 
 const ENGLISH_COPY_ANCHOR = '\t\t\tmodelAdvanced: "Capacities",';
 const ENGLISH_COPY_PATCH = `${ENGLISH_COPY_ANCHOR}
@@ -58,6 +58,11 @@ const MODEL_FIELDS_PATCH = `\t\t\t\t\t\t\t\t\t\teditCapacity(index, "maxTokens",
 \t\t\t\t\t\t\t\t})]
 \t\t\t\t\t\t\t})]`;
 
+const ADDABLE_PROVIDERS_ANCHOR =
+  '\t\t\tconst addable = state.rows.filter((row) => !row.configured && row.entry.settingsNs !== "");';
+const ADDABLE_PROVIDERS_PATCH =
+  '\t\t\tconst addable = state.rows.filter((row) => !row.configured && row.entry.settingsNs !== "" && state.namespaces.has(row.entry.settingsNs));';
+
 export function patchModelCapabilitiesEditor(source: string): string {
   if (source.includes(MODEL_CAPABILITIES_PATCH_MARKER)) return source;
 
@@ -81,6 +86,11 @@ export function patchModelCapabilitiesEditor(source: string): string {
     patched,
     MODEL_FIELDS_ANCHOR,
     MODEL_FIELDS_PATCH,
+  );
+  patched = replaceExactlyOnce(
+    patched,
+    ADDABLE_PROVIDERS_ANCHOR,
+    ADDABLE_PROVIDERS_PATCH,
   );
   return patched;
 }
@@ -109,6 +119,11 @@ export function unpatchModelCapabilitiesEditor(source: string): string {
     unpatched,
     MODEL_FIELDS_PATCH,
     MODEL_FIELDS_ANCHOR,
+  );
+  unpatched = replaceExactlyOnce(
+    unpatched,
+    ADDABLE_PROVIDERS_PATCH,
+    ADDABLE_PROVIDERS_ANCHOR,
   );
   return unpatched;
 }

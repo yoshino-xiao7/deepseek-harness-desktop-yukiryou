@@ -1,10 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizedWindowState } from './window-state.js';
+import { normalizedWindowState, windowStateSnapshot } from './window-state.js';
 
 const primary = { x: 0, y: 25, width: 1512, height: 957 };
 
 describe('desktop window state', () => {
+  it('captures the visible bounds after Windows leaves maximized or snapped state', () => {
+    expect(windowStateSnapshot(
+      { x: 80, y: 60, width: 1060, height: 720 },
+      { x: 80, y: 0, width: 1440, height: 852 },
+      false,
+    )).toEqual({
+      bounds: { x: 80, y: 60, width: 1060, height: 720 },
+      maximized: false,
+    });
+  });
+
+  it('retains normal restore bounds while the window is maximized', () => {
+    expect(windowStateSnapshot(
+      { x: 0, y: 0, width: 1920, height: 1040 },
+      { x: 120, y: 80, width: 1080, height: 720 },
+      true,
+    )).toEqual({
+      bounds: { x: 120, y: 80, width: 1080, height: 720 },
+      maximized: true,
+    });
+  });
+
   it('restores a user-sized window inside the current display work area', () => {
     expect(normalizedWindowState({
       schemaVersion: 1,

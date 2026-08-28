@@ -64,6 +64,7 @@ import {
 } from './runtime/runtime-port.js';
 import {
   finalizeApplicationExit,
+  handoffApplicationUpdate,
   relaunchAfterStartupFailure,
   startupPreparationFailureLogDetails,
 } from './startup-recovery.js';
@@ -1238,19 +1239,35 @@ export class AppCoordinator {
     this.#quitting = true;
     this.#log?.write('update.installing');
     const updater = this.#updater;
-    try {
-      await this.#runtime?.stop('update');
-    } finally {
-      this.#runtimeStderr.flush();
-      await this.#disposeWindowAndFlushState();
-      await finalizeApplicationExit({
-        log: this.#log,
-        dispose: () => {
-          updater?.dispose();
-        },
-        exit: () => updater?.quitAndInstall(),
-      });
-    }
+    await handoffApplicationUpdate({
+      prepare: async () => {
+        this.#log?.write('update.runtime-stop-started');
+        await this.#runtime?.stop('update');
+        this.#log?.write('update.runtime-stop-settled');
+        this.#runtimeStderr.flush();
+      },
+      persist: async () => {
+        this.#log?.write('update.exit-cleanup-started');
+        await this.#flushPersistentState();
+        await this.#log?.flush();
+        this.#log?.write('update.exit-cleanup-settled');
+      },
+      handoff: async () => {
+        if (updater === undefined) {
+          throw new Error('Native updater is unavailable');
+        }
+        this.#log?.write('update.native-handoff-started');
+        await updater.prepareInstall();
+      },
+      onHandoffFailure: async (error) => {
+        this.#quitting = false;
+        this.#handleUpdaterError(error instanceof Error ? error : new Error(String(error)));
+        if (this.#runtime?.getState().kind === 'stopped') {
+          await this.#window?.showLoading();
+          await this.#startRuntime();
+        }
+      },
+    });
   }
 
   async #recoverRuntime(failure: RuntimeFailure): Promise<void> {
@@ -1356,6 +1373,10 @@ export class AppCoordinator {
   async #disposeWindowAndFlushState(): Promise<void> {
     this.#window?.dispose();
     this.#window = undefined;
+    await this.#flushPersistentState();
+  }
+
+  async #flushPersistentState(): Promise<void> {
     await this.#windowState?.flush().catch((error: unknown) => {
       this.#log?.write(
         'desktop.window-state-flush-error',

@@ -20,6 +20,14 @@ interface WorkflowJob {
 }
 
 interface ReleaseWorkflow {
+  on?: {
+    workflow_call?: {
+      inputs?: Record<string, { default?: string | boolean }>;
+    };
+    workflow_dispatch?: {
+      inputs?: Record<string, { default?: string | boolean }>;
+    };
+  };
   concurrency?: {
     group?: string;
     'cancel-in-progress'?: boolean;
@@ -28,7 +36,7 @@ interface ReleaseWorkflow {
 }
 
 describe('macOS release workflow contract', () => {
-  it('blocks release on a real previous-public-version automatic update and relaunch gate', async () => {
+  it('blocks release on the release candidate automatic update and relaunch gate', async () => {
     const [releaseSource, windowsSource, automaticUpdateTest, windowsGate] = await Promise.all([
       readFile(join(process.cwd(), '.github', 'workflows', 'release-macos.yml'), 'utf8'),
       readFile(join(process.cwd(), '.github', 'workflows', 'windows-candidate.yml'), 'utf8'),
@@ -46,6 +54,10 @@ describe('macOS release workflow contract', () => {
       group: 'release-desktop-${{ inputs.version }}',
       'cancel-in-progress': false,
     });
+    expect(windowsWorkflow.concurrency).toEqual({
+      group: 'windows-candidate-${{ github.event.pull_request.number || github.run_id }}',
+      'cancel-in-progress': true,
+    });
     expect(releaseSource).not.toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
     expect(releaseSource).toContain('gh api "repos/${GITHUB_REPOSITORY}/releases/latest"');
     expect(releaseSource).toContain('tests/release/automatic-update.test.ts');
@@ -54,31 +66,124 @@ describe('macOS release workflow contract', () => {
     expect(windowsSource).toContain('tests/release/automatic-update.test.ts');
     expect(windowsSource).toContain('DSH_DESKTOP_DISTRIBUTION_REGION: china');
     expect(windowsSource).toContain("inputs.release_version != ''");
+    expect(windowsSource).toContain(
+      'Exact candidate version when manually exercising the release updater gate',
+    );
     expect(windows.with?.release_version).toBe('${{ inputs.version }}');
-    expect(windowsWorkflow.jobs?.build_candidate?.steps?.find(
-      (step) => step.name === 'Prepare previous public release and isolated update mirror',
-    )?.['timeout-minutes']).toBe(20);
+    const automaticUpdateStep = windowsWorkflow.jobs?.build_candidate?.steps?.find(
+      (step) => step.name === 'Prepare and verify the release candidate automatic update',
+    );
+    const updateOnly = windowsWorkflow.jobs?.update_restart;
+    const updateOnlyExercise = updateOnly?.steps?.find(
+      (step) => step.name === 'Exercise only automatic update and restart',
+    );
+    expect(windowsSource).toContain('update_restart_only:');
+    expect(
+      windowsWorkflow.on?.workflow_call?.inputs?.update_restart_only?.default,
+    ).toBe(false);
+    expect(
+      windowsWorkflow.on?.workflow_dispatch?.inputs?.update_restart_only?.default,
+    ).toBe(true);
+    expect(windowsWorkflow.jobs?.quality?.if).toContain('inputs.update_restart_only != true');
+    expect(windowsWorkflow.jobs?.build_candidate?.if).toContain(
+      'inputs.update_restart_only != true',
+    );
+    expect(updateOnly?.if).toContain('inputs.update_restart_only == true');
+    expect(updateOnly?.['timeout-minutes']).toBe(35);
+    expect(updateOnlyExercise?.run).toContain(
+      './scripts/windows-automatic-update-gate.ps1 -Action Prepare',
+    );
+    expect(updateOnlyExercise?.run).toContain(
+      'pnpm exec vitest run tests/release/automatic-update.test.ts --no-file-parallelism',
+    );
+    expect(updateOnly?.steps?.some((step) => step.run?.includes('pnpm lint'))).toBe(false);
+    expect(updateOnly?.steps?.some((step) => step.run?.includes('pnpm test:integration'))).toBe(false);
+    expect(updateOnly?.steps?.some((step) => step.run?.includes('pnpm make:win'))).toBe(false);
+    expect(automaticUpdateStep?.['timeout-minutes']).toBe(25);
+    expect(automaticUpdateStep?.run).toContain(
+      './scripts/windows-automatic-update-gate.ps1 -Action Prepare',
+    );
+    expect(automaticUpdateStep?.run).toContain(
+      'pnpm exec vitest run tests/release/automatic-update.test.ts --no-file-parallelism',
+    );
+    expect(automaticUpdateStep?.run?.indexOf('-Action Prepare')).toBeLessThan(
+      automaticUpdateStep?.run?.indexOf('tests/release/automatic-update.test.ts') ?? -1,
+    );
+    expect(windowsWorkflow.jobs?.build_candidate?.steps).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Upgrade the previous public Windows release and verify updater relaunch',
+        }),
+      ]),
+    );
     expect(release?.needs).toEqual(expect.arrayContaining([
       'verify_final', 'windows', 'verify_macos_automatic_update',
     ]));
     expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'check')");
     expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'install')");
+    expect(automaticUpdateTest).toContain('waitForPreviousMacUpdaterReadiness');
     expect(automaticUpdateTest).toContain('updates[value]()');
     expect(automaticUpdateTest).toContain('relaunch');
     expect(automaticUpdateTest).not.toContain("DSH_DESKTOP_E2E: '1'");
-    expect(windowsGate).toContain('CertificateRequest');
-    expect(windowsGate).toContain('SubjectAlternativeNameBuilder');
-    expect(windowsGate).toContain('ExportPkcs8PrivateKeyPem');
-    expect(windowsGate).not.toContain('& openssl');
+    expect(windowsGate).toContain("$mirrorHost = '127.0.0.1'");
+    expect(windowsGate).toContain("$mirrorOrigin = \"http://$mirrorHost`:$mirrorPort$mirrorBasePath\"");
+    expect(windowsGate).toContain("$mirrorBasePath = '/mirrorx'");
     expect(windowsGate).toContain('$env:GITHUB_RUN_ID');
     expect(windowsGate).toContain('$env:GITHUB_RUN_ATTEMPT');
-    expect(windowsGate).toContain('download-cn.suzuki.ink/releases/$previousTag');
-    expect(windowsGate).toContain("'--max-time', '480'");
-    expect(windowsGate).toContain('Previous release asset SHA-256 mismatch');
-    expect(windowsGate).toContain("'-user', '-f', '-addstore', 'Root'");
-    expect(windowsGate).not.toContain('Import-Certificate');
+    expect(windowsGate).toContain('Remove-StaleGateInstallations');
+    expect(windowsGate).toContain("-Filter 'dsh-au-*'");
+    expect(windowsGate).toContain("-Filter 'dsh-yukiryou-automatic-update-*'");
+    expect(windowsGate).toContain('$installRoot = Join-Path $installParent "dsh-au-$gateIdentity"');
+    expect(windowsGate).toContain('Recovering stale automatic-update installation');
+    expect(windowsGate).toContain('function Remove-DirectoryEventually');
+    expect(windowsGate).toContain('if (-not (Test-Path -LiteralPath $Root)) { return }');
+    expect(windowsGate).toContain('[System.StringComparison]::OrdinalIgnoreCase');
+    expect(windowsGate).not.toContain('gh api');
+    expect(windowsGate).not.toContain('download-cn.suzuki.ink/releases/$previousTag');
+    expect(windowsGate).not.toContain('Previous release asset SHA-256 mismatch');
+    expect(windowsGate).toContain('function Install-CandidateUnderTest');
+    expect(windowsGate).toContain('$maximumAttempts = 2');
+    expect(windowsGate).toContain('cleaning the isolated directory before one retry');
+    expect(windowsGate).toContain('Install-CandidateUnderTest $candidateSource $env:RELEASE_VERSION');
+    expect(windowsGate).toContain('$syntheticSuccessorVersion');
+    expect(windowsGate).toContain('Building a real synthetic successor installer with embedded version');
+    expect(windowsGate).toContain('Preparing a successor application whose packaged version is');
+    expect(windowsGate).toContain('"--version=$syntheticSuccessorVersion"');
+    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION' $syntheticSuccessorVersion");
+    expect(windowsGate).toContain('"-c.extraMetadata.version=$syntheticSuccessorVersion"');
+    expect(windowsGate).toContain("VersionInfo.ProductVersion");
+    expect(windowsGate).not.toContain('Copying the candidate installer as synthetic successor');
+    expect(windowsGate).not.toContain('Cert:\\CurrentUser\\Root');
+    expect(windowsGate).not.toContain('certutil.exe');
+    expect(windowsGate).toContain("'--protocol=http'");
+    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH'");
+    expect(windowsGate).toContain("Set-GateEnvironment 'DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION'");
+    expect(windowsGate).not.toContain('RUNNER_TRACKING_ID');
+    expect(windowsGate).not.toContain('$hostsPath');
+    expect(windowsGate).toContain('patch-packaged-update-origin.ts');
+    expect(windowsGate).not.toContain("$mirrorHost = 'localhost'");
+    expect(windowsGate).toContain("$mirrorBasePath = '/mirrorx'");
+    expect(windowsGate).toContain('$mirrorPort = 41337');
+    expect(windowsGate).toContain('$env:NO_PROXY = $noProxy');
+    expect(windowsGate).toContain('"NO_PROXY=$noProxy"');
+    expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_MIRROR_HOST');
+    expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_MIRROR_METADATA_URL');
+    expect(windowsGate).not.toContain('DSH_AUTOMATIC_UPDATE_CERTIFICATE_SPKI_PIN');
+    expect(windowsGate).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
+    expect(windowsGate).toContain('if ($server.HasExited)');
+    expect(automaticUpdateTest).toContain("'--no-proxy-server'");
+    expect(automaticUpdateTest).not.toContain('--host-resolver-rules=MAP');
+    expect(automaticUpdateTest).toContain("fromPartition('electron-updater'");
+    expect(automaticUpdateTest).toContain("setProxy({ mode: 'direct' })");
+    expect(automaticUpdateTest).toContain('Updater mirror preflight did not expose the expected version');
+    expect(automaticUpdateTest).toContain('--ignore-certificate-errors-spki-list=');
+    expect(automaticUpdateTest).toContain('Updater reached terminal status before download');
+    expect(automaticUpdateTest).toContain('DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH');
+    expect(automaticUpdateTest).toContain('DSH_AUTOMATIC_UPDATE_INSTALLED_VERSION');
     expect(releaseSource).toContain('DSH_AUTOMATIC_UPDATE_DIAGNOSTICS');
     expect(releaseSource).toContain('Capture Squirrel.Mac diagnostics');
+    expect(automaticUpdateTest).toContain('installed-version.txt');
+    expect(automaticUpdateTest).toContain('relaunched-desktop.log');
     expect(windowsGate).not.toContain('& gh release download');
     expect(windowsGate).not.toContain(
       "Join-Path ([System.IO.Path]::GetTempPath()) 'dsh-yukiryou-automatic-update'",
@@ -242,6 +347,9 @@ describe('macOS release workflow contract', () => {
     expect(lifecycleScript).toContain("'Uninstall DeepSeek YukiRyou.exe'");
     expect(lifecycleScript).toContain('$process.WaitForExit(15000)');
     expect(lifecycleScript).toContain('.AddMinutes(10)');
+    expect(lifecycleScript).toContain("Contains('exit code -1073741819')");
+    expect(lifecycleScript).toContain('cleaning the isolated directory before one retry');
+    expect(lifecycleScript).toContain('if (-not $isTransientAccessViolation -or $attempt -ge $maximumAttempts) { throw }');
     expect(lifecycleScript).toContain('[System.IO.Path]::GetFullPath');
     expect(lifecycleScript).toContain("[System.IO.Path]::GetTempPath()) 'dsh-yukiryou-nsis-install'");
     expect(lifecycleScript).toContain('NSIS install, repair, and uninstall checks passed');

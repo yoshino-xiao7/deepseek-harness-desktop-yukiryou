@@ -394,7 +394,7 @@ jobs:
           exit 1
       - name: Run the production updater through download, install, and relaunch
         env:
-          DSH_PREVIOUS_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
+          DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
           DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
           DSH_AUTOMATIC_UPDATE_EXPECTED_VERSION: ${{ env.RELEASE_VERSION }}
           DSH_AUTOMATIC_UPDATE_DIAGNOSTICS: ${{ runner.temp }}/update-gate/diagnostics

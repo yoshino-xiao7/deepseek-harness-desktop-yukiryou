@@ -467,7 +467,7 @@ describe('packaged desktop application', () => {
                 /^(通用设置|General settings)$/.test(button.textContent?.trim() ?? ''),
               );
               general?.click();
-              const themeButtons = await waitFor(() => {
+              let themeButtons = await waitFor(() => {
                 const candidates = [...dialog.querySelectorAll('button')].filter((button) =>
                   /^(浅色|Light|深色|Dark|跟随系统|System)$/.test(
                     button.textContent?.trim() ?? '',
@@ -503,6 +503,54 @@ describe('packaged desktop application', () => {
                 });
                 return;
               }
+              const models = [...dialog.querySelectorAll('nav button')].find((button) =>
+                /^(模型|Models)$/.test(button.textContent?.trim() ?? ''),
+              );
+              models?.click();
+              const addProvider = await waitFor(() =>
+                [...dialog.querySelectorAll('button')].find((button) =>
+                  /^(添加提供方|Add provider)$/.test(button.textContent?.trim() ?? ''),
+                ),
+              );
+              if (!(addProvider instanceof HTMLButtonElement)) {
+                resolve({
+                  error: 'models add-provider action did not render',
+                  modelsFound: Boolean(models),
+                  dialogText: dialog.textContent,
+                });
+                return;
+              }
+              addProvider.click();
+              const providerSelect = await waitFor(() =>
+                [...dialog.querySelectorAll('select')].find((select) =>
+                  /^(提供方|Provider)$/.test(select.getAttribute('aria-label') ?? ''),
+                ),
+              );
+              if (!(providerSelect instanceof HTMLSelectElement)) {
+                resolve({
+                  error: 'add-provider editor did not open',
+                  addProviderDisabled: addProvider.disabled,
+                  dialogText: dialog.textContent,
+                });
+                return;
+              }
+              const cancelAddProvider = [...dialog.querySelectorAll('button')].find((button) =>
+                /^(取消|Cancel)$/.test(button.textContent?.trim() ?? ''),
+              );
+              cancelAddProvider?.click();
+              general?.click();
+              themeButtons = await waitFor(() => {
+                const candidates = [...dialog.querySelectorAll('button')].filter((button) =>
+                  /^(浅色|Light|深色|Dark|跟随系统|System)$/.test(
+                    button.textContent?.trim() ?? '',
+                  ),
+                );
+                return candidates.length >= 3 ? candidates : undefined;
+              });
+              if (!Array.isArray(themeButtons)) {
+                resolve({ error: 'general settings did not reopen after provider check' });
+                return;
+              }
               const dark = themeButtons.find((button) =>
                 /^(深色|Dark)$/.test(button.textContent?.trim() ?? ''),
               );
@@ -527,6 +575,7 @@ describe('packaged desktop application', () => {
                 navLabels: [...dialog.querySelectorAll('nav button')]
                   .map((button) => button.textContent?.trim()),
                 themeLabels: themeButtons.map((button) => button.textContent?.trim()),
+                addProviderOpened: providerSelect instanceof HTMLSelectElement,
                 darkApplied: document.body.hasAttribute('data-ds-dark-theme'),
                 aboutLogoLoaded: aboutLogo instanceof HTMLImageElement,
                 aboutLogoDiagnostics: (() => {
@@ -583,6 +632,7 @@ describe('packaged desktop application', () => {
         ]),
       );
       expect(settingsResult?.darkApplied).toBe(true);
+      expect(settingsResult?.addProviderOpened).toBe(true);
       if (!settingsResult?.aboutLogoLoaded) {
         throw new Error(
           `about logo failed: ${JSON.stringify(settingsResult?.aboutLogoDiagnostics)}`,
