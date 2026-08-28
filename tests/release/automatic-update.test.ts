@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { closeElectronTestApplication } from '../e2e/electron-cleanup.js';
 import { waitForUpdateShell } from './update-shell.js';
+import { createWindowsInstallDirectoryProcessScript } from './windows-process-scope.js';
 
 const execute = promisify(execFile);
 const sourceExecutable = requiredEnvironment('DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH');
@@ -380,15 +381,7 @@ async function windowsInstallDirectoryProcessIds(
   installDirectory: string,
 ): Promise<ReadonlySet<number>> {
   if (process.platform !== 'win32') return new Set();
-  const script = [
-    `$root=${powerShellLiteral(installDirectory)}.TrimEnd('\\')`,
-    `$prefix="$root\\"`,
-    'Get-CimInstance Win32_Process -ErrorAction Stop',
-    '| Where-Object {',
-    '$_.ExecutablePath -and',
-    '$_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)',
-    '} | ForEach-Object { $_.ProcessId }',
-  ].join(' ');
+  const script = createWindowsInstallDirectoryProcessScript(installDirectory, 'list');
   const result = await execute('powershell.exe', ['-NoProfile', '-Command', script]);
   return new Set(result.stdout
     .split(/\r?\n/u)
@@ -411,15 +404,7 @@ async function isRelaunched(
 async function stopRelaunched(executable: string): Promise<void> {
   if (process.platform === 'win32') {
     const installDirectory = dirname(executable);
-    const script = [
-      `$root=${powerShellLiteral(installDirectory)}.TrimEnd('\\')`,
-      `$prefix="$root\\"`,
-      'Get-CimInstance Win32_Process -ErrorAction Stop',
-      '| Where-Object {',
-      '$_.ExecutablePath -and',
-      '$_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)',
-      '} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }',
-    ].join(' ');
+    const script = createWindowsInstallDirectoryProcessScript(installDirectory, 'stop');
     await execute('powershell.exe', ['-NoProfile', '-Command', script]);
     return;
   }
@@ -504,7 +489,7 @@ async function preserveProcessSnapshot(stage: string): Promise<void> {
           '($_.Name -like "*DeepSeek*") -or ($_.Name -like "*Setup*") -or',
           '($_.Name -like "*nsis*") -or',
           '($_.ExecutablePath -and $_.ExecutablePath.StartsWith($installRoot, [System.StringComparison]::OrdinalIgnoreCase)) -or',
-          '($_.CommandLine -and $_.CommandLine.Contains($installRoot, [System.StringComparison]::OrdinalIgnoreCase))',
+          '($_.CommandLine -and $_.CommandLine.IndexOf($installRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)',
           '} | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate |',
           'ConvertTo-Json -Depth 3',
         ].join(' '),
