@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -130,7 +131,10 @@ describe('reliable Windows NSIS update handoff', () => {
     async () => {
       const handoffDirectory = mkdtempSync(join(tmpdir(), 'dsh-helper-contract-'));
       const readyPath = join(handoffDirectory, 'ready');
+      const logPath = join(handoffDirectory, 'handoff.log');
       let child: ChildProcess | undefined;
+      let stdout = '';
+      let stderr = '';
       try {
         const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
         const powershell = join(
@@ -145,19 +149,41 @@ describe('reliable Windows NSIS update handoff', () => {
           installerPath: join(handoffDirectory, 'unused-installer.exe'),
           installDirectory: handoffDirectory,
           executablePath: join(handoffDirectory, 'unused-app.exe'),
-          logPath: join(handoffDirectory, 'handoff.log'),
+          logPath,
           readyPath,
         });
-        await spawnDetachedUpdateHelper(powershell, args, readyPath, {
-          spawnProcess: (command, commandArgs) => {
-            child = spawn(command, [...commandArgs], {
-              detached: true,
-              stdio: 'ignore',
-              windowsHide: true,
-            });
-            return child;
-          },
-        });
+        try {
+          await spawnDetachedUpdateHelper(powershell, args, readyPath, {
+            spawnProcess: (command, commandArgs) => {
+              child = spawn(command, [...commandArgs], {
+                detached: true,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                windowsHide: true,
+              });
+              child.stdout?.on('data', (chunk: Buffer | string) => {
+                stdout += chunk.toString();
+              });
+              child.stderr?.on('data', (chunk: Buffer | string) => {
+                stderr += chunk.toString();
+              });
+              return child;
+            },
+          });
+        } catch (error) {
+          await delay(100);
+          const handoffLog = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '<missing>';
+          throw new Error(
+            [
+              error instanceof Error ? error.message : String(error),
+              `powershell=${powershell}`,
+              `encodedCommandLength=${String(args[5]?.length ?? 0)}`,
+              `stdout=${stdout || '<empty>'}`,
+              `stderr=${stderr || '<empty>'}`,
+              `handoffLog=${handoffLog}`,
+            ].join('\n'),
+            { cause: error },
+          );
+        }
         expect(existsSync(readyPath)).toBe(true);
       } finally {
         child?.kill();
