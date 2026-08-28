@@ -105,7 +105,18 @@ describe('release candidate automatic update', () => {
     });
 
     const log = await readFile(join(userData, 'logs', 'desktop.log'), 'utf8');
-    expect(log).toContain('"status":"downloaded"');
+    const downloadedStateLogged = log
+      .split(/\r?\n/u)
+      .filter(Boolean)
+      .some((line) => {
+        const entry = JSON.parse(line) as { event?: unknown; details?: unknown };
+        if (entry.event !== 'update.state' || typeof entry.details !== 'string') {
+          return false;
+        }
+        const state = JSON.parse(entry.details) as { status?: unknown };
+        return state.status === 'downloaded';
+      });
+    expect(downloadedStateLogged).toBe(true);
   }, 9 * 60_000);
 });
 
