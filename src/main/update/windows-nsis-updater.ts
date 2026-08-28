@@ -1,5 +1,15 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  type Dirent,
+  writeFileSync,
+} from 'node:fs';
+import { copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -9,8 +19,15 @@ import type { InstallOptions } from 'electron-updater/out/BaseUpdater.js';
 
 const HELPER_READY_TIMEOUT_MS = 10_000;
 const HELPER_READY_POLL_INTERVAL_MS = 25;
+const TERMINAL_HANDOFF_CLEANUP_AGE_MS = 5 * 60_000;
+const ABANDONED_HANDOFF_CLEANUP_AGE_MS = 24 * 60 * 60_000;
 
-type SpawnDetached = (command: string, args: readonly string[]) => ChildProcess;
+type SpawnDetached = (
+  command: string,
+  args: readonly string[],
+  workingDirectory?: string,
+) => ChildProcess;
+type TerminateProcessTree = (child: ChildProcess) => void;
 
 export interface WindowsUpdateHandoffArgumentsOptions {
   readonly parentProcessId: number;
@@ -22,22 +39,15 @@ export interface WindowsUpdateHandoffArgumentsOptions {
 }
 
 export function windowsUpdateHandoffArguments(
-  options: WindowsUpdateHandoffArgumentsOptions,
+  helperPath: string,
 ): string[] {
-  // Execute the helper body directly. On the physical Windows runner,
-  // powershell.exe -File could exit 0 before opening the freshly written temp
-  // script, leaving neither the ready sentinel nor a diagnostic log.
-  const encodedCommand = Buffer.from(
-    createWindowsUpdateHandoffCommand(options),
-    'utf16le',
-  ).toString('base64');
   return [
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy',
     'Bypass',
-    '-EncodedCommand',
-    encodedCommand,
+    '-File',
+    helperPath,
   ];
 }
 
@@ -120,17 +130,54 @@ try {
 
   $installerArguments = @('--updated', '/S', $installModeArgument, "/D=$InstallDirectory")
   Write-HandoffLog "event=installer-started arguments=$($installerArguments -join ' ')"
-  $installerProcess = Start-Process -FilePath $InstallerPath -ArgumentList $installerArguments -Wait -PassThru
-  Write-HandoffLog "event=installer-exited code=$($installerProcess.ExitCode)"
-  if ($installerProcess.ExitCode -ne 0) {
-    throw "Update installer failed with exit code $($installerProcess.ExitCode)"
+  $env:DSH_YUKIRYOU_UPDATE_INSTALLER = $InstallerPath
+  $env:DSH_YUKIRYOU_UPDATE_DIRECTORY = $InstallDirectory
+  $env:DSH_YUKIRYOU_UPDATE_MODE = $installModeArgument
+  $installerWaitCommand = @'
+$ErrorActionPreference = 'Stop'
+try {
+  $arguments = @(
+    '--updated', '/S', $env:DSH_YUKIRYOU_UPDATE_MODE,
+    "/D=$env:DSH_YUKIRYOU_UPDATE_DIRECTORY"
+  )
+  $installer = Start-Process -FilePath $env:DSH_YUKIRYOU_UPDATE_INSTALLER -ArgumentList $arguments -WorkingDirectory (Split-Path -Parent $env:DSH_YUKIRYOU_UPDATE_INSTALLER) -Wait -PassThru
+  exit $installer.ExitCode
+} catch {
+  exit 255
+}
+'@
+  $encodedInstallerWaitCommand = [Convert]::ToBase64String(
+    [Text.Encoding]::Unicode.GetBytes($installerWaitCommand)
+  )
+  $installerWaiterArguments = @(
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-EncodedCommand', $encodedInstallerWaitCommand
+    )
+  $installerWaiter = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $installerWaiterArguments -WorkingDirectory (Split-Path -Parent $InstallerPath) -WindowStyle Hidden -PassThru
+  if (-not $installerWaiter.WaitForExit(600000)) {
+    Write-HandoffLog "event=installer-timeout waiter=$($installerWaiter.Id)"
+    $taskkillPath = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+    $taskkillProcess = Start-Process -FilePath $taskkillPath -ArgumentList @(
+      '/PID', "$($installerWaiter.Id)", '/T', '/F'
+    ) -WindowStyle Hidden -Wait -PassThru
+    Write-HandoffLog "event=installer-kill-exited code=$($taskkillProcess.ExitCode)"
+    if ($taskkillProcess.ExitCode -ne 0) {
+      throw "Update installer timed out and its process tree could not be terminated (taskkill=$($taskkillProcess.ExitCode))"
+    }
+    throw "Update installer did not exit within 600 seconds"
+  }
+  $installerWaiter.Refresh()
+  $installerExitCode = $installerWaiter.ExitCode
+  Write-HandoffLog "event=installer-exited code=$installerExitCode"
+  if ($installerExitCode -ne 0) {
+    throw "Update installer failed with exit code $installerExitCode"
   }
   if (-not (Test-Path -LiteralPath $ExecutablePath)) {
     throw "Updated executable is missing: $ExecutablePath"
   }
 
   Write-HandoffLog "event=relaunch-started executable=$ExecutablePath"
-  Start-Process -FilePath $ExecutablePath -ArgumentList '--updated'
+  Start-Process -FilePath $ExecutablePath -ArgumentList '--updated' -WorkingDirectory $InstallDirectory
   Write-HandoffLog 'event=completed'
   exit 0
 } catch {
@@ -144,8 +191,66 @@ function powerShellSingleQuotedLiteral(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
+export interface WindowsUpdateLauncherScriptOptions {
+  readonly powershellPath: string;
+  readonly powershellArguments: readonly string[];
+  readonly workingDirectory: string;
+  readonly logPath: string;
+  readonly readyPath: string;
+}
+
+/**
+ * A copied bundled Node executable is the detached process. It hosts
+ * PowerShell without `detached: true`, which avoids the Windows Node/PowerShell
+ * launch failure where PowerShell exits 0 without executing its script.
+ */
+export function createWindowsUpdateLauncherScript(
+  options: WindowsUpdateLauncherScriptOptions,
+): string {
+  const serializedOptions = JSON.stringify(options);
+  return String.raw`'use strict';
+
+const { spawn } = require('node:child_process');
+const { appendFileSync, existsSync } = require('node:fs');
+
+const options = ${serializedOptions};
+
+function writeFailure(message) {
+  const timestamp = new Date().toISOString();
+  appendFileSync(options.logPath, timestamp + ' event=launcher-failed error=' + message + '\n', 'utf8');
+}
+
+let helper;
+try {
+  helper = spawn(options.powershellPath, options.powershellArguments, {
+    cwd: options.workingDirectory,
+    detached: false,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+} catch (error) {
+  writeFailure(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+
+helper.once('error', (error) => {
+  writeFailure(error.message);
+  process.exit(1);
+});
+helper.once('exit', (code, signal) => {
+  const ready = existsSync(options.readyPath);
+  if (!ready) {
+    writeFailure('PowerShell exited before ready (code=' + String(code) + ', signal=' + String(signal) + ')');
+  }
+  process.exit(ready && code === 0 ? 0 : (typeof code === 'number' && code !== 0 ? code : 1));
+});
+`;
+}
+
 export interface SpawnDetachedUpdateHelperOptions {
   readonly spawnProcess?: SpawnDetached;
+  readonly terminateProcessTree?: TerminateProcessTree;
+  readonly workingDirectory?: string;
   readonly readyFileExists?: (path: string) => boolean;
   readonly readyTimeoutMs?: number;
   readonly readyPollIntervalMs?: number;
@@ -159,15 +264,25 @@ export function spawnDetachedUpdateHelper(
   options: SpawnDetachedUpdateHelperOptions = {},
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const spawnProcess = options.spawnProcess ?? ((executable, executableArgs) => spawn(
+    const spawnProcess = options.spawnProcess ?? ((
+      executable,
+      executableArgs,
+      workingDirectory,
+    ) => spawn(
       executable,
       [...executableArgs],
-      { detached: true, stdio: 'ignore', windowsHide: true },
+      {
+        cwd: workingDirectory,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      },
     ));
+    const terminateProcessTree = options.terminateProcessTree ?? terminateWindowsProcessTree;
     const readyFileExists = options.readyFileExists ?? existsSync;
     let child: ChildProcess;
     try {
-      child = spawnProcess(command, args);
+      child = spawnProcess(command, args, options.workingDirectory);
     } catch (error) {
       reject(error);
       return;
@@ -201,7 +316,7 @@ export function spawnDetachedUpdateHelper(
       settled = true;
       clearReadinessChecks();
       try {
-        child.kill();
+        terminateProcessTree(child);
       } catch {
         // The helper may already have exited while reporting its failure.
       }
@@ -237,16 +352,73 @@ export function spawnDetachedUpdateHelper(
   });
 }
 
+function terminateWindowsProcessTree(child: ChildProcess): void {
+  if (process.platform !== 'win32' || child.pid === undefined) {
+    child.kill();
+    return;
+  }
+  const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+  const taskkill = join(systemRoot, 'System32', 'taskkill.exe');
+  const result = spawnSync(taskkill, ['/PID', String(child.pid), '/T', '/F'], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  if (result.error !== undefined || result.status !== 0) {
+    child.kill();
+  }
+}
+
+/** Best-effort removal of copied helper runtimes after they can no longer be active. */
+export function cleanupStaleWindowsUpdateHandoffs(
+  temporaryRoot = tmpdir(),
+  now = Date.now(),
+): void {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(temporaryRoot, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('dsh-yukiryou-update-')) continue;
+    const directory = join(temporaryRoot, entry.name);
+    const logPath = join(directory, 'handoff.log');
+    const readyPath = join(directory, 'ready');
+    try {
+      const activityTimes = [statSync(directory).mtimeMs];
+      if (existsSync(logPath)) activityTimes.push(statSync(logPath).mtimeMs);
+      if (existsSync(readyPath)) activityTimes.push(statSync(readyPath).mtimeMs);
+      const age = now - Math.max(...activityTimes);
+      const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+      const reachedTerminalState = [
+        'event=completed',
+        'event=failed',
+        'event=launcher-failed',
+      ].some((event) => log.includes(event));
+      if (
+        (reachedTerminalState && age >= TERMINAL_HANDOFF_CLEANUP_AGE_MS) ||
+        age >= ABANDONED_HANDOFF_CLEANUP_AGE_MS
+      ) {
+        rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      }
+    } catch {
+      // A still-running helper can keep node.exe locked. Leave it for a later startup.
+    }
+  }
+}
+
 /**
  * The assisted NSIS installer cannot replace application files reliably while
- * Electron still owns them. A detached system PowerShell helper owns the
- * terminal lifecycle instead: wait for this exact process to exit, preserve
- * the installed per-user/per-machine mode, wait for NSIS, then relaunch the
+ * Electron still owns them. A copied Node bridge outside the installation is
+ * detached safely, then hosts system PowerShell without detaching it. The
+ * helper waits for this exact process and every executable under the install
+ * root to exit, preserves the install mode, waits for NSIS, and relaunches the
  * exact installed executable.
  */
 export class ReliableWindowsNsisUpdater extends NsisUpdater {
   constructor(options?: AllPublishOptions | null) {
     super(options);
+    if (process.platform === 'win32') cleanupStaleWindowsUpdateHandoffs();
   }
 
   async prepareInstall(isSilent = true, isForceRunAfter = true): Promise<void> {
@@ -265,6 +437,8 @@ export class ReliableWindowsNsisUpdater extends NsisUpdater {
     const installDirectory = this.installDirectory ?? dirname(executablePath);
     const handoffDirectory = mkdtempSync(join(tmpdir(), 'dsh-yukiryou-update-'));
     const helperPath = join(handoffDirectory, 'handoff.ps1');
+    const launcherPath = join(handoffDirectory, 'handoff.cjs');
+    const helperNodePath = join(handoffDirectory, 'node.exe');
     const logPath = join(handoffDirectory, 'handoff.log');
     const readyPath = join(handoffDirectory, 'ready');
     const handoffOptions: WindowsUpdateHandoffArgumentsOptions = {
@@ -275,7 +449,8 @@ export class ReliableWindowsNsisUpdater extends NsisUpdater {
       logPath,
       readyPath,
     };
-    writeFileSync(helperPath, createWindowsUpdateHandoffCommand(handoffOptions), {
+    // Windows PowerShell 5.1 only detects UTF-8 reliably when a BOM is present.
+    writeFileSync(helperPath, `\uFEFF${createWindowsUpdateHandoffCommand(handoffOptions)}`, {
       encoding: 'utf8',
       flag: 'wx',
     });
@@ -288,14 +463,36 @@ export class ReliableWindowsNsisUpdater extends NsisUpdater {
       'v1.0',
       'powershell.exe',
     );
-    const args = windowsUpdateHandoffArguments(handoffOptions);
+    const powershellArguments = windowsUpdateHandoffArguments(helperPath);
+    const runtimeNodePath = join(process.resourcesPath, 'runtime', 'node', 'node.exe');
+    if (!existsSync(runtimeNodePath)) {
+      throw new Error(`Bundled Windows update helper runtime is missing: ${runtimeNodePath}`);
+    }
+    await copyFile(runtimeNodePath, helperNodePath);
+    writeFileSync(launcherPath, createWindowsUpdateLauncherScript({
+      powershellPath: powershell,
+      powershellArguments,
+      workingDirectory: handoffDirectory,
+      logPath,
+      readyPath,
+    }), {
+      encoding: 'utf8',
+      flag: 'wx',
+    });
 
     this.quitAndInstallCalled = true;
-    this._logger.info(`Preparing reliable Windows update helper: ${helperPath}`);
+    this._logger.info(`Preparing reliable Windows update helper: ${launcherPath}`);
     try {
-      await spawnDetachedUpdateHelper(powershell, args, readyPath);
+      await spawnDetachedUpdateHelper(helperNodePath, [launcherPath], readyPath, {
+        workingDirectory: handoffDirectory,
+      });
     } catch (error) {
       this.quitAndInstallCalled = false;
+      try {
+        rmSync(helperNodePath, { force: true });
+      } catch {
+        // The process-tree abort may still be releasing the copied executable.
+      }
       throw error;
     }
     this._logger.info('Windows update helper handoff confirmed');

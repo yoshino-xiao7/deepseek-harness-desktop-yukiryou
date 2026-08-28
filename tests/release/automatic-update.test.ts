@@ -23,9 +23,10 @@ const expectedWindowsInstallMode = process.platform === 'win32'
 const downloadTimeoutMs = 2 * 60_000;
 const oldProcessExitTimeoutMs = 60_000;
 // The bundled Runtime contains roughly 55k files. A healthy NSIS repair can
-// take more than three minutes on the physical Windows runner, so the gate
-// judges the recorded installer exit code and allows enough time to reach it.
-const relaunchTimeoutMs = 6 * 60_000;
+// take more than three minutes on the physical Windows runner. The production
+// helper bounds NSIS at ten minutes, so the gate waits slightly beyond that
+// boundary and judges the recorded installer exit code.
+const relaunchTimeoutMs = 11 * 60_000;
 
 describe('release candidate automatic update', () => {
   let application: ElectronApplication | undefined;
@@ -113,7 +114,7 @@ describe('release candidate automatic update', () => {
 
     const log = await readFile(join(userData, 'logs', 'desktop.log'), 'utf8');
     expect(log).toContain('"status":"downloaded"');
-  }, 12 * 60_000);
+  }, 16 * 60_000);
 });
 
 async function waitForApplicationClose(
@@ -477,7 +478,7 @@ async function preserveDiagnostics(userDataDirectory: string): Promise<void> {
         (entry) => entry.isDirectory() && entry.name.startsWith('dsh-yukiryou-update-'),
       ));
     for (const directory of handoffDirectories) {
-      for (const file of ['handoff.log', 'handoff.ps1', 'ready']) {
+      for (const file of ['handoff.log', 'handoff.ps1', 'handoff.cjs', 'ready']) {
         await copyFile(
           join(tmpdir(), directory.name, file),
           join(diagnostics, `${directory.name}-${file}`),
