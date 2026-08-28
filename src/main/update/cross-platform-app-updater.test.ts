@@ -93,7 +93,7 @@ describe('cross-platform automatic updater', () => {
     }
   });
 
-  it('does not offer restart on macOS before Squirrel finishes staging the update', () => {
+  it('does not offer restart on macOS before Squirrel finishes staging the update', async () => {
     const native = new FakeNativeUpdater();
     const readiness = new FakeMacInstallReadiness();
     const updater = new CrossPlatformAppUpdater({
@@ -112,7 +112,7 @@ describe('cross-platform automatic updater', () => {
     expect(updater.getState().status).toBe('downloading');
     readiness.markReady();
     expect(updater.getState().status).toBe('downloaded');
-    updater.quitAndInstall();
+    await updater.prepareInstall();
     expect(native.autoRunAppAfterInstall).toBe(true);
     expect(native.quitAndInstall).toHaveBeenCalledWith(false, true);
     updater.dispose();
@@ -147,8 +147,28 @@ describe('cross-platform automatic updater', () => {
 
     native.emit('update-downloaded', updateInfo);
     expect(updater.getState().status).toBe('downloaded');
-    updater.quitAndInstall();
-    expect(native.quitAndInstall).toHaveBeenCalledWith(true, true);
+    await updater.prepareInstall();
+    expect(native.quitAndInstall).toHaveBeenCalledWith(false, true);
+    expect(native.autoInstallOnAppQuit).toBe(false);
     expect(native.installDirectory).toBeDefined();
+  });
+
+  it('confirms the Windows installer handoff before asking the caller to quit', async () => {
+    const native = new FakeNativeUpdater() as FakeNativeUpdater & {
+      prepareInstall: ReturnType<typeof vi.fn>;
+    };
+    native.prepareInstall = vi.fn().mockResolvedValue(undefined);
+    const updater = new CrossPlatformAppUpdater({
+      enabled: true,
+      currentVersion: '1.0.4',
+      platform: 'win32',
+      architecture: 'x64',
+      onError: vi.fn(),
+      createNativeUpdater: () => native,
+    });
+
+    await expect(updater.prepareInstall()).resolves.toBe(true);
+    expect(native.prepareInstall).toHaveBeenCalledWith(true, true);
+    expect(native.quitAndInstall).not.toHaveBeenCalled();
   });
 });

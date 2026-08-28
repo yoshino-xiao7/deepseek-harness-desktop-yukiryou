@@ -1,48 +1,46 @@
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
 
-import {
-  createWindowsUpdateHandoffScript,
-  windowsUpdateHandoffArguments,
-} from './windows-nsis-updater.js';
+import { describe, expect, it, vi } from 'vitest';
+
+import { spawnDetachedInstaller } from './windows-nsis-updater.js';
 
 describe('reliable Windows NSIS update handoff', () => {
-  it('waits for the old process, preserves the per-user install directory, and relaunches only after success', () => {
-    const script = createWindowsUpdateHandoffScript();
+  it('keeps the parent alive through the installer ownership window', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = new EventEmitter() as ChildProcess;
+      child.unref = vi.fn().mockReturnValue(child);
+      let confirmed = false;
+      const handoff = spawnDetachedInstaller(
+        'C:\\Cache\\Update Setup.exe',
+        ['--updated', '/S', '--force-run'],
+        vi.fn().mockReturnValue(child),
+        200,
+      ).then(() => { confirmed = true; });
 
-    expect(script).toContain('Get-Process -Id $ParentProcessId');
-    expect(script).toContain("{ '/allusers' } else { '/currentuser' }");
-    expect(script).toContain("@('--updated', '/S', $installModeArgument, \"/D=$InstallDirectory\")");
-    expect(script).toContain('& $InstallerPath @installerArguments');
-    expect(script).toContain('if ($installerExitCode -ne 0)');
-    expect(script.indexOf('Get-Process -Id $ParentProcessId'))
-      .toBeLessThan(script.indexOf('& $InstallerPath @installerArguments'));
-    expect(script.indexOf('if ($installerExitCode -ne 0)'))
-      .toBeLessThan(script.indexOf('Start-Process -FilePath $ExecutablePath'));
+      expect(child.unref).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(199);
+      expect(confirmed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await handoff;
+      expect(confirmed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    expect(windowsUpdateHandoffArguments({
-      helperPath: 'C:\\Temp\\handoff.ps1',
-      parentProcessId: 42,
-      installerPath: 'C:\\Cache\\Update Setup.exe',
-      installDirectory: 'D:\\Apps\\DeepSeek YukiRyou',
-      executablePath: 'D:\\Apps\\DeepSeek YukiRyou\\DeepSeek YukiRyou.exe',
-      logPath: 'C:\\Temp\\handoff.log',
-    })).toEqual([
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      'C:\\Temp\\handoff.ps1',
-      '-ParentProcessId',
-      '42',
-      '-InstallerPath',
+  it('rejects an asynchronous spawn error before the app is allowed to quit', async () => {
+    const child = new EventEmitter() as ChildProcess;
+    child.unref = vi.fn().mockReturnValue(child);
+    const failure = Object.assign(new Error('access denied'), { code: 'EACCES' });
+    const handoff = spawnDetachedInstaller(
       'C:\\Cache\\Update Setup.exe',
-      '-InstallDirectory',
-      'D:\\Apps\\DeepSeek YukiRyou',
-      '-ExecutablePath',
-      'D:\\Apps\\DeepSeek YukiRyou\\DeepSeek YukiRyou.exe',
-      '-LogPath',
-      'C:\\Temp\\handoff.log',
-    ]);
+      ['--updated'],
+      () => child,
+      200,
+    );
+    child.emit('error', failure);
+    await expect(handoff).rejects.toBe(failure);
   });
 });

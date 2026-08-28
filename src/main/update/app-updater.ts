@@ -19,7 +19,7 @@ export interface AppUpdater {
   getDownloadUrl(): string | undefined;
   subscribe(listener: (state: DesktopUpdateState) => void): () => void;
   startAutomaticChecks(): void;
-  quitAndInstall(): void;
+  prepareInstall(): Promise<boolean>;
   dispose(): void;
 }
 
@@ -70,6 +70,10 @@ export interface NativeUpdateClient {
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
 }
 
+interface ReliableWindowsUpdateClient extends NativeUpdateClient {
+  prepareInstall(isSilent?: boolean, isForceRunAfter?: boolean): Promise<void>;
+}
+
 export class CrossPlatformAppUpdater implements AppUpdater {
   readonly #options: AppUpdaterOptions;
   readonly #native: NativeUpdateClient;
@@ -99,7 +103,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
         ? new ReliableWindowsNsisUpdater(source)
         : new MacUpdater(source));
     this.#native.autoDownload = true;
-    this.#native.autoInstallOnAppQuit = true;
+    this.#native.autoInstallOnAppQuit = options.platform !== 'win32';
     this.#native.autoRunAppAfterInstall = true;
     this.#native.channel = 'latest';
     this.#native.allowDowngrade = false;
@@ -230,13 +234,18 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
   }
 
-  quitAndInstall(): void {
+  async prepareInstall(): Promise<boolean> {
     // The Windows artifact is an assisted NSIS installer with
     // runAfterFinish=false. Its generated installer only honors --force-run
     // during a silent update; a non-silent quitAndInstall therefore installs
     // successfully but leaves the application closed. macOS keeps its native
     // non-silent Squirrel handoff.
-    this.#native.quitAndInstall(this.#options.platform === 'win32', true);
+    if (this.#options.platform === 'win32' && isReliableWindowsUpdateClient(this.#native)) {
+      await this.#native.prepareInstall(true, true);
+      return true;
+    }
+    this.#native.quitAndInstall(false, true);
+    return false;
   }
 
   dispose(): void {
@@ -371,7 +380,7 @@ export class GitHubReleaseAppUpdater implements AppUpdater {
     this.#intervalTimer = setInterval(check, this.#options.automaticCheckIntervalMs ?? 6 * 60 * 60 * 1_000);
   }
 
-  quitAndInstall(): void {}
+  async prepareInstall(): Promise<boolean> { return false; }
 
   dispose(): void {
     clearTimeout(this.#initialTimer);
@@ -569,8 +578,9 @@ class ElectronAppUpdater implements AppUpdater {
     );
   }
 
-  quitAndInstall(): void {
+  async prepareInstall(): Promise<boolean> {
     autoUpdater.quitAndInstall();
+    return false;
   }
 
   dispose(): void {
@@ -590,6 +600,12 @@ class ElectronAppUpdater implements AppUpdater {
     this.#state = state;
     for (const listener of this.#listeners) listener(state);
   }
+}
+
+function isReliableWindowsUpdateClient(
+  client: NativeUpdateClient,
+): client is ReliableWindowsUpdateClient {
+  return 'prepareInstall' in client && typeof client.prepareInstall === 'function';
 }
 
 function optionalReleaseNotes(info: UpdateInfo): { readonly releaseNotes?: string } {

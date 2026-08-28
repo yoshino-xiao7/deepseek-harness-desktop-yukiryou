@@ -1240,26 +1240,24 @@ export class AppCoordinator {
     this.#quitting = true;
     this.#log?.write('update.installing');
     const updater = this.#updater;
-    try {
-      this.#log?.write('update.runtime-stop-started');
-      await waitForApplicationExitCleanup(() => this.#runtime?.stop('update'));
-      this.#log?.write('update.runtime-stop-settled');
-    } finally {
-      this.#runtimeStderr.flush();
-      this.#log?.write('update.native-handoff-started');
-      await handoffApplicationUpdate({
-        log: this.#log,
-        handoff: () => updater?.quitAndInstall(),
-        cleanup: async () => {
-          this.#log?.write('update.exit-cleanup-started');
-          await this.#disposeWindowAndFlushState();
-          this.#log?.write('update.exit-cleanup-settled');
-        },
-        dispose: () => {
-          updater?.dispose();
-        },
-      });
-    }
+    this.#log?.write('update.native-handoff-started');
+    await handoffApplicationUpdate({
+      log: this.#log,
+      handoff: () => updater?.prepareInstall() ?? Promise.resolve(false),
+      cleanup: async () => {
+        this.#log?.write('update.runtime-stop-started');
+        await waitForApplicationExitCleanup(() => this.#runtime?.stop('update'));
+        this.#log?.write('update.runtime-stop-settled');
+        this.#runtimeStderr.flush();
+        this.#log?.write('update.exit-cleanup-started');
+        await this.#disposeWindowAndFlushState();
+        this.#log?.write('update.exit-cleanup-settled');
+      },
+      dispose: () => {
+        updater?.dispose();
+      },
+      quit: () => app.quit(),
+    });
   }
 
   async #recoverRuntime(failure: RuntimeFailure): Promise<void> {

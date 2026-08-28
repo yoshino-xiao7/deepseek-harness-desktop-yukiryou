@@ -15,9 +15,10 @@ export interface ApplicationExitOptions {
 
 export interface ApplicationUpdateHandoffOptions {
   readonly log: AppLog | undefined;
-  readonly handoff: () => void;
+  readonly handoff: () => Promise<boolean>;
   readonly cleanup: () => Promise<void> | void;
   readonly dispose: () => void;
+  readonly quit: () => void;
 }
 
 const APPLICATION_EXIT_CLEANUP_TIMEOUT_MS = 1_000;
@@ -63,20 +64,20 @@ export async function finalizeApplicationExit(
 }
 
 /**
- * Starts the native installer before destroying the final application window.
- * On Windows, destroying that window can begin Electron shutdown immediately,
- * so deferring quitAndInstall until after UI cleanup can terminate the process
- * before electron-updater has spawned the NSIS installer.
+ * Confirms that the native installer owns the update before destroying the
+ * final application window. Windows then quits explicitly only after bounded
+ * cleanup; macOS continues to let Squirrel own the native quit lifecycle.
  */
 export async function handoffApplicationUpdate(
   options: ApplicationUpdateHandoffOptions,
 ): Promise<void> {
-  options.handoff();
+  const callerMustQuit = await options.handoff();
   try {
     await waitForApplicationExitCleanup(options.cleanup);
   } finally {
     options.dispose();
     await waitForApplicationExitCleanup(() => options.log?.close());
+    if (callerMustQuit) options.quit();
   }
 }
 

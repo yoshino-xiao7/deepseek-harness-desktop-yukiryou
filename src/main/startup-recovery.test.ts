@@ -16,21 +16,30 @@ describe('startup recovery', () => {
 
     await handoffApplicationUpdate({
       log: undefined,
-      handoff: () => {
+      handoff: async () => {
         expect(applicationExitStarted).toBe(false);
         calls.push('handoff');
+        await Promise.resolve();
+        calls.push('installer-confirmed');
+        return true;
       },
-      cleanup: () => {
+      cleanup: async () => {
         applicationExitStarted = true;
+        calls.push('stop-runtime');
+        await Promise.resolve();
         calls.push('destroy-last-window');
       },
       dispose: () => calls.push('dispose-updater'),
+      quit: () => calls.push('quit'),
     });
 
     expect(calls).toEqual([
       'handoff',
+      'installer-confirmed',
+      'stop-runtime',
       'destroy-last-window',
       'dispose-updater',
+      'quit',
     ]);
   });
 
