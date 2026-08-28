@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
@@ -333,6 +333,18 @@ async function preserveDiagnostics(userDataDirectory: string): Promise<void> {
     join(userDataDirectory, 'logs', 'desktop.log'),
     join(diagnostics, 'desktop.log'),
   ).catch(() => undefined);
+  if (process.platform === 'win32') {
+    const handoffDirectories = await readdir(tmpdir(), { withFileTypes: true })
+      .then((entries) => entries.filter(
+        (entry) => entry.isDirectory() && entry.name.startsWith('dsh-yukiryou-update-'),
+      ));
+    for (const directory of handoffDirectories) {
+      await copyFile(
+        join(tmpdir(), directory.name, 'handoff.log'),
+        join(diagnostics, `${directory.name}-handoff.log`),
+      ).catch(() => undefined);
+    }
+  }
   await preserveProcessSnapshot('test-cleanup');
 }
 
@@ -345,10 +357,14 @@ async function preserveProcessSnapshot(stage: string): Promise<void> {
         '-NoProfile',
         '-Command',
         [
-          "$names = @('DeepSeek YukiRyou', 'DeepSeek-YukiRyou-Setup', 'cmd', 'conhost');",
-          'Get-Process -ErrorAction SilentlyContinue |',
-          'Where-Object { $names -contains $_.ProcessName -or $_.ProcessName -like "*nsis*" } |',
-          'Select-Object Id,ProcessName,Path,StartTime,Responding |',
+          '$installRoot =', `${powerShellLiteral(dirname(relaunchExecutable))};`,
+          'Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |',
+          'Where-Object {',
+          '($_.Name -like "*DeepSeek*") -or ($_.Name -like "*Setup*") -or',
+          '($_.Name -like "*nsis*") -or',
+          '($_.ExecutablePath -and $_.ExecutablePath.StartsWith($installRoot, [System.StringComparison]::OrdinalIgnoreCase)) -or',
+          '($_.CommandLine -and $_.CommandLine.Contains($installRoot, [System.StringComparison]::OrdinalIgnoreCase))',
+          '} | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate |',
           'ConvertTo-Json -Depth 3',
         ].join(' '),
       ])

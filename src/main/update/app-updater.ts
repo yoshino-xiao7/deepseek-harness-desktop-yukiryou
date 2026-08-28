@@ -1,10 +1,11 @@
 import { autoUpdater, type Event } from 'electron';
 import type { AllPublishOptions, UpdateInfo } from 'builder-util-runtime';
-import { MacUpdater, NsisUpdater } from 'electron-updater';
+import { MacUpdater } from 'electron-updater';
 import { dirname } from 'node:path';
 
 import { updateFeedUrl } from './update-config.js';
 import { updateRecoveryForError } from './update-error.js';
+import { ReliableWindowsNsisUpdater } from './windows-nsis-updater.js';
 import type { DesktopUpdateSource } from '../distribution/distribution-routing.js';
 import type { DesktopUpdateState } from '../../shared/update-bridge.js';
 
@@ -95,7 +96,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     const source = this.#source(0);
     this.#native = options.createNativeUpdater?.(options.platform, source) ??
       (options.platform === 'win32'
-        ? new NsisUpdater(source)
+        ? new ReliableWindowsNsisUpdater(source)
         : new MacUpdater(source));
     this.#native.autoDownload = true;
     this.#native.autoInstallOnAppQuit = true;

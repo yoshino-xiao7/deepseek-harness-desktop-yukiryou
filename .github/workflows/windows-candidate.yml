@@ -180,6 +180,7 @@ jobs:
           path: |
             out/windows-automatic-update-gate/diagnostics/
             out/windows-automatic-update-gate/metadata/
+            out/windows-automatic-update-gate/synthetic-successor/
             out/windows-automatic-update-gate/server.log
             out/windows-automatic-update-gate/server-error.log
             out/windows-automatic-update-gate/state.json
