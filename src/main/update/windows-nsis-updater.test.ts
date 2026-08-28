@@ -1,5 +1,8 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import type { ChildProcess } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -95,54 +98,102 @@ describe('reliable Windows NSIS update handoff', () => {
   });
 
   it('passes the exact update lifecycle paths to the detached helper', () => {
-    expect(windowsUpdateHandoffArguments({
-      helperPath: 'C:\\Temp\\handoff.ps1',
+    const args = windowsUpdateHandoffArguments({
       parentProcessId: 4242,
       installerPath: 'C:\\Cache\\Update Setup.exe',
       installDirectory: 'C:\\Apps\\DeepSeek YukiRyou',
       executablePath: 'C:\\Apps\\DeepSeek YukiRyou\\DeepSeek YukiRyou.exe',
       logPath: 'C:\\Temp\\handoff.log',
       readyPath: 'C:\\Temp\\ready',
-    })).toEqual([
+    });
+    expect(args.slice(0, 5)).toEqual([
       '-NoProfile',
       '-NonInteractive',
       '-ExecutionPolicy',
       'Bypass',
-      '-File',
-      'C:\\Temp\\handoff.ps1',
-      '-ParentProcessId',
-      '4242',
-      '-InstallerPath',
-      'C:\\Cache\\Update Setup.exe',
-      '-InstallDirectory',
-      'C:\\Apps\\DeepSeek YukiRyou',
-      '-ExecutablePath',
-      'C:\\Apps\\DeepSeek YukiRyou\\DeepSeek YukiRyou.exe',
-      '-LogPath',
-      'C:\\Temp\\handoff.log',
-      '-ReadyPath',
-      'C:\\Temp\\ready',
+      '-EncodedCommand',
     ]);
+    const encodedCommand = args[5];
+    expect(encodedCommand).toBeDefined();
+    const command = Buffer.from(encodedCommand ?? '', 'base64').toString('utf16le');
+    expect(command).toContain('$ParentProcessId = 4242');
+    expect(command).toContain("$InstallerPath = 'C:\\Cache\\Update Setup.exe'");
+    expect(command).toContain("$InstallDirectory = 'C:\\Apps\\DeepSeek YukiRyou'");
+    expect(command).toContain("$ExecutablePath = 'C:\\Apps\\DeepSeek YukiRyou\\DeepSeek YukiRyou.exe'");
+    expect(command).toContain("$LogPath = 'C:\\Temp\\handoff.log'");
+    expect(command).toContain("$ReadyPath = 'C:\\Temp\\ready'");
+    expect(encodedCommand?.length).toBeLessThan(30_000);
   });
+
+  it.runIf(process.platform === 'win32')(
+    'receives a ready handshake from the real system PowerShell',
+    async () => {
+      const handoffDirectory = mkdtempSync(join(tmpdir(), 'dsh-helper-contract-'));
+      const readyPath = join(handoffDirectory, 'ready');
+      let child: ChildProcess | undefined;
+      try {
+        const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+        const powershell = join(
+          systemRoot,
+          'System32',
+          'WindowsPowerShell',
+          'v1.0',
+          'powershell.exe',
+        );
+        const args = windowsUpdateHandoffArguments({
+          parentProcessId: process.pid,
+          installerPath: join(handoffDirectory, 'unused-installer.exe'),
+          installDirectory: handoffDirectory,
+          executablePath: join(handoffDirectory, 'unused-app.exe'),
+          logPath: join(handoffDirectory, 'handoff.log'),
+          readyPath,
+        });
+        await spawnDetachedUpdateHelper(powershell, args, readyPath, {
+          spawnProcess: (command, commandArgs) => {
+            child = spawn(command, [...commandArgs], {
+              detached: true,
+              stdio: 'ignore',
+              windowsHide: true,
+            });
+            return child;
+          },
+        });
+        expect(existsSync(readyPath)).toBe(true);
+      } finally {
+        child?.kill();
+        rmSync(handoffDirectory, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 50,
+        });
+      }
+    },
+  );
 
   it('waits for the old app, preserves install mode, installs, then relaunches', () => {
     const script = createWindowsUpdateHandoffScript();
     const signalReady = script.indexOf('Set-Content -LiteralPath $ReadyPath');
     const waitForOldApp = script.indexOf('Get-Process -Id $ParentProcessId');
+    const waitForOldProcessTree = script.indexOf('Get-CimInstance Win32_Process');
     const startInstaller = script.indexOf('Start-Process -FilePath $InstallerPath');
     const verifyInstaller = script.indexOf('if ($installerProcess.ExitCode -ne 0)');
     const relaunchUpdatedApp = script.indexOf('Start-Process -FilePath $ExecutablePath');
 
     expect(signalReady).toBeGreaterThan(-1);
     expect(waitForOldApp).toBeGreaterThan(signalReady);
-    expect(startInstaller).toBeGreaterThan(waitForOldApp);
+    expect(waitForOldProcessTree).toBeGreaterThan(waitForOldApp);
+    expect(startInstaller).toBeGreaterThan(waitForOldProcessTree);
     expect(verifyInstaller).toBeGreaterThan(startInstaller);
     expect(relaunchUpdatedApp).toBeGreaterThan(verifyInstaller);
     expect(script).toContain("{ '/allusers' } else { '/currentuser' }");
     expect(script).toContain('-Wait -PassThru');
     expect(script).toContain("@('--updated', '/S', $installModeArgument, \"/D=$InstallDirectory\")");
     expect(script).not.toContain('--force-run');
+    expect(script).toContain('Get-CimInstance Win32_Process -ErrorAction Stop');
+    expect(script).toContain('StartsWith(\n            $installDirectoryPrefix');
     expect(script).toContain('event=parent-exited');
+    expect(script).toContain('event=application-exited');
     expect(script).toContain('event=completed');
   });
 });

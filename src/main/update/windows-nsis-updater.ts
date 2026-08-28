@@ -13,7 +13,6 @@ const HELPER_READY_POLL_INTERVAL_MS = 25;
 type SpawnDetached = (command: string, args: readonly string[]) => ChildProcess;
 
 export interface WindowsUpdateHandoffArgumentsOptions {
-  readonly helperPath: string;
   readonly parentProcessId: number;
   readonly installerPath: string;
   readonly installDirectory: string;
@@ -25,38 +24,39 @@ export interface WindowsUpdateHandoffArgumentsOptions {
 export function windowsUpdateHandoffArguments(
   options: WindowsUpdateHandoffArgumentsOptions,
 ): string[] {
+  // Execute the helper body directly. On the physical Windows runner,
+  // powershell.exe -File could exit 0 before opening the freshly written temp
+  // script, leaving neither the ready sentinel nor a diagnostic log.
+  const encodedCommand = Buffer.from(
+    createWindowsUpdateHandoffCommand(options),
+    'utf16le',
+  ).toString('base64');
   return [
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy',
     'Bypass',
-    '-File',
-    options.helperPath,
-    '-ParentProcessId',
-    String(options.parentProcessId),
-    '-InstallerPath',
-    options.installerPath,
-    '-InstallDirectory',
-    options.installDirectory,
-    '-ExecutablePath',
-    options.executablePath,
-    '-LogPath',
-    options.logPath,
-    '-ReadyPath',
-    options.readyPath,
+    '-EncodedCommand',
+    encodedCommand,
   ];
 }
 
-export function createWindowsUpdateHandoffScript(): string {
-  return String.raw`param(
-  [Parameter(Mandatory = $true)][int]$ParentProcessId,
-  [Parameter(Mandatory = $true)][string]$InstallerPath,
-  [Parameter(Mandatory = $true)][string]$InstallDirectory,
-  [Parameter(Mandatory = $true)][string]$ExecutablePath,
-  [Parameter(Mandatory = $true)][string]$LogPath,
-  [Parameter(Mandatory = $true)][string]$ReadyPath
-)
+export function createWindowsUpdateHandoffCommand(
+  options: WindowsUpdateHandoffArgumentsOptions,
+): string {
+  return [
+    `$ParentProcessId = ${String(options.parentProcessId)}`,
+    `$InstallerPath = ${powerShellSingleQuotedLiteral(options.installerPath)}`,
+    `$InstallDirectory = ${powerShellSingleQuotedLiteral(options.installDirectory)}`,
+    `$ExecutablePath = ${powerShellSingleQuotedLiteral(options.executablePath)}`,
+    `$LogPath = ${powerShellSingleQuotedLiteral(options.logPath)}`,
+    `$ReadyPath = ${powerShellSingleQuotedLiteral(options.readyPath)}`,
+    createWindowsUpdateHandoffScript(),
+  ].join('\n');
+}
 
+export function createWindowsUpdateHandoffScript(): string {
+  return String.raw`
 $ErrorActionPreference = 'Stop'
 
 function Write-HandoffLog([string]$Message) {
@@ -75,8 +75,30 @@ try {
     Start-Sleep -Milliseconds 200
   }
   Write-HandoffLog "event=parent-exited parent=$ParentProcessId"
-
   $normalizedInstallDirectory = $InstallDirectory.TrimEnd('\')
+  $installDirectoryPrefix = "$normalizedInstallDirectory\"
+  while ($true) {
+    $remainingInstallProcesses = @(
+      Get-CimInstance Win32_Process -ErrorAction Stop |
+        Where-Object {
+          $_.ExecutablePath -and
+          $_.ExecutablePath.StartsWith(
+            $installDirectoryPrefix,
+            [System.StringComparison]::OrdinalIgnoreCase
+          )
+        }
+    )
+    if ($remainingInstallProcesses.Count -eq 0) {
+      break
+    }
+    if ([DateTime]::UtcNow -ge $deadline) {
+      $remainingProcessIds = ($remainingInstallProcesses.ProcessId -join ',')
+      throw "Old installation processes did not exit within 90 seconds: $remainingProcessIds"
+    }
+    Start-Sleep -Milliseconds 200
+  }
+  Write-HandoffLog "event=application-exited installDirectory=$normalizedInstallDirectory"
+
   $uninstallRoots = @(
     'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
     'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
@@ -116,6 +138,10 @@ try {
   exit 1
 }
 `;
+}
+
+function powerShellSingleQuotedLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
 export interface SpawnDetachedUpdateHelperOptions {
@@ -241,7 +267,15 @@ export class ReliableWindowsNsisUpdater extends NsisUpdater {
     const helperPath = join(handoffDirectory, 'handoff.ps1');
     const logPath = join(handoffDirectory, 'handoff.log');
     const readyPath = join(handoffDirectory, 'ready');
-    writeFileSync(helperPath, createWindowsUpdateHandoffScript(), {
+    const handoffOptions: WindowsUpdateHandoffArgumentsOptions = {
+      parentProcessId: process.pid,
+      installerPath,
+      installDirectory,
+      executablePath,
+      logPath,
+      readyPath,
+    };
+    writeFileSync(helperPath, createWindowsUpdateHandoffCommand(handoffOptions), {
       encoding: 'utf8',
       flag: 'wx',
     });
@@ -254,15 +288,7 @@ export class ReliableWindowsNsisUpdater extends NsisUpdater {
       'v1.0',
       'powershell.exe',
     );
-    const args = windowsUpdateHandoffArguments({
-      helperPath,
-      parentProcessId: process.pid,
-      installerPath,
-      installDirectory,
-      executablePath,
-      logPath,
-      readyPath,
-    });
+    const args = windowsUpdateHandoffArguments(handoffOptions);
 
     this.quitAndInstallCalled = true;
     this._logger.info(`Preparing reliable Windows update helper: ${helperPath}`);
