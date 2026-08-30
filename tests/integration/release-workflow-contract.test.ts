@@ -195,7 +195,11 @@ describe('macOS release workflow contract', () => {
     expect(windowsGate).toContain('Remove-StaleGateInstallations');
     expect(windowsGate).toContain("-Filter 'dsh-au-*'");
     expect(windowsGate).toContain("-Filter 'dsh-yukiryou-automatic-update-*'");
+    expect(windowsGate).toContain(
+      '$installParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())',
+    );
     expect(windowsGate).toContain('$installRoot = Join-Path $installParent "dsh-au-$gateIdentity"');
+    expect(windowsGate).not.toContain('if ($env:LOCALAPPDATA)');
     expect(windowsGate).toContain('Recovering stale automatic-update installation');
     expect(windowsGate).toContain('function Remove-DirectoryEventually');
     expect(windowsGate).toContain('if (-not (Test-Path -LiteralPath $Root)) { return }');
