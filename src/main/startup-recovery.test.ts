@@ -25,6 +25,10 @@ describe('startup recovery', () => {
         calls.push('persist-state');
         await Promise.resolve();
       },
+      permitWindowClose: () => {
+        calls.push('permit-window-close');
+        return () => calls.push('revoke-window-close');
+      },
       handoff: async () => {
         calls.push('native-updater');
       },
@@ -33,6 +37,7 @@ describe('startup recovery', () => {
     expect(calls).toEqual([
       'stop-runtime-tree',
       'persist-state',
+      'permit-window-close',
       'native-updater',
     ]);
   });
@@ -41,31 +46,37 @@ describe('startup recovery', () => {
     const failure = new Error('taskkill could not terminate the Runtime tree');
     const onHandoffFailure = vi.fn();
     const persist = vi.fn();
+    const permitWindowClose = vi.fn();
     const handoff = vi.fn();
 
     await expect(handoffApplicationUpdate({
       prepare: vi.fn().mockRejectedValue(failure),
       onHandoffFailure,
       persist,
+      permitWindowClose,
       handoff,
     })).resolves.toBe(false);
 
     expect(onHandoffFailure).toHaveBeenCalledWith(failure);
     expect(persist).not.toHaveBeenCalled();
+    expect(permitWindowClose).not.toHaveBeenCalled();
     expect(handoff).not.toHaveBeenCalled();
   });
 
   it('reports a native handoff failure without a caller-driven quit', async () => {
     const failure = new Error('native updater rejected the handoff');
     const onHandoffFailure = vi.fn();
+    const revokeWindowClose = vi.fn();
 
     await expect(handoffApplicationUpdate({
       prepare: vi.fn().mockResolvedValue(undefined),
       persist: vi.fn(),
+      permitWindowClose: vi.fn(() => revokeWindowClose),
       handoff: vi.fn().mockRejectedValue(failure),
       onHandoffFailure,
     })).resolves.toBe(false);
 
+    expect(revokeWindowClose).toHaveBeenCalledOnce();
     expect(onHandoffFailure).toHaveBeenCalledWith(failure);
   });
 

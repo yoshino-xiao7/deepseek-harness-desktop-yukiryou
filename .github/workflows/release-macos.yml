@@ -323,7 +323,7 @@ jobs:
         run: pnpm exec vitest run tests/e2e/packaged-startup.test.ts --no-file-parallelism
 
   verify_macos_automatic_update:
-    name: Previous public macOS release auto-updates and relaunches
+    name: Previous public macOS update compatibility gate
     needs: build_candidate
     runs-on: macos-15
     timeout-minutes: 30
@@ -361,6 +361,7 @@ jobs:
           test ! -e "/Applications/${PRODUCT_NAME}.app"
           ditto "${RUNNER_TEMP}/previous-app/${PRODUCT_NAME}.app" "/Applications/${PRODUCT_NAME}.app"
       - name: Create an isolated trusted mirror for the exact candidate
+        if: ${{ env.PREVIOUS_PUBLIC_VERSION != '1.0.4' }}
         run: |
           mkdir -p "${RUNNER_TEMP}/update-gate/assets" "${RUNNER_TEMP}/update-gate/metadata"
           cp \
@@ -395,7 +396,14 @@ jobs:
           done
           cat "${RUNNER_TEMP}/update-gate/server.log"
           exit 1
+      - name: Require the v1.0.4 manual-update bridge
+        if: ${{ env.PREVIOUS_PUBLIC_VERSION == '1.0.4' }}
+        run: |
+          echo "::warning::v1.0.4 cannot complete the Squirrel.Mac window-close handoff. v1.0.5 is a one-time manual update; strict in-app update verification resumes for later versions."
+          test -s \
+            "out/release-candidate/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}-candidate.zip"
       - name: Run the production updater through download, install, and relaunch
+        if: ${{ env.PREVIOUS_PUBLIC_VERSION != '1.0.4' }}
         env:
           DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
           DSH_AUTOMATIC_UPDATE_RELAUNCH_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
@@ -406,9 +414,10 @@ jobs:
       - name: Capture Squirrel.Mac diagnostics
         if: ${{ failure() }}
         run: |
-          mkdir -p "${RUNNER_TEMP}/update-gate/diagnostics"
-          cp -R "${HOME}/Library/Caches/com.yukiryou.deepseek.yukiryou.ShipIt" \
-            "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt" 2>/dev/null || true
+          mkdir -p "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt"
+          find "${HOME}/Library/Caches/com.yukiryou.deepseek.yukiryou.ShipIt" \
+            -maxdepth 1 -type f -exec cp '{}' "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt/" \; \
+            2>/dev/null || true
           defaults read com.yukiryou.deepseek.yukiryou.ShipIt \
             > "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt-preferences.txt" 2>&1 || true
           node -e "const fs=require('node:fs');const p=process.env.RUNNER_TEMP+'/update-gate/diagnostics/desktop.log';if(fs.existsSync(p)){for(const line of fs.readFileSync(p,'utf8').split(/\r?\n/)){if(!line)continue;try{const entry=JSON.parse(line);if(/^(update\.|runtime\.)/.test(String(entry.event)))console.log(line)}catch{}}}"

@@ -18,6 +18,8 @@ export interface ApplicationUpdateHandoffOptions {
   readonly prepare: () => Promise<void>;
   /** Best-effort persistence that runs after the hard gate. */
   readonly persist: () => Promise<void> | void;
+  /** Allows the native updater to close windows; returns a synchronous rollback. */
+  readonly permitWindowClose: () => () => void;
   /** The native updater handoff. This must be the final lifecycle action. */
   readonly handoff: () => Promise<void>;
   readonly onHandoffFailure: (error: unknown) => Promise<void> | void;
@@ -81,9 +83,12 @@ export async function handoffApplicationUpdate(
   }
 
   await waitForApplicationExitCleanup(options.persist);
+  let revokeWindowClose = (): void => {};
   try {
+    revokeWindowClose = options.permitWindowClose();
     await options.handoff();
   } catch (error) {
+    revokeWindowClose();
     await options.onHandoffFailure(error);
     return false;
   }

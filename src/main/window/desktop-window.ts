@@ -113,6 +113,7 @@ export interface DesktopWindow {
   setCompanionWorkspace(state: CompanionWorkspaceSnapshot): void;
   notifyWorkspaceChanged(): void;
   captureWindowState(): void;
+  permitApplicationExit(): () => void;
   dispose(): void;
 }
 
@@ -417,6 +418,13 @@ class ElectronDesktopWindow implements DesktopWindow {
     if (this.#lastWindowState !== undefined) {
       this.#options.onWindowStateChange?.(this.#lastWindowState);
     }
+  }
+
+  permitApplicationExit(): () => void {
+    this.#disposing = true;
+    return () => {
+      if (!this.#window.isDestroyed()) this.#disposing = false;
+    };
   }
 
   dispose(): void {
