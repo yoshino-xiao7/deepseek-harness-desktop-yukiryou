@@ -163,6 +163,12 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
 
   captureWindowState(): void {}
 
+  flushStorageData(): void {
+    if (!this.#productWindow.webContents.isDestroyed()) {
+      this.#productWindow.webContents.session.flushStorageData();
+    }
+  }
+
   permitApplicationExit(): () => void {
     this.#disposing = true;
     return () => {

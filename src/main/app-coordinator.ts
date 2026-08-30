@@ -1423,9 +1423,17 @@ export class AppCoordinator {
   }
 
   async #disposeWindowAndFlushState(): Promise<void> {
+    try {
+      this.#window?.flushStorageData();
+    } catch (error) {
+      this.#log?.write(
+        'desktop.renderer-storage-flush-error',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    await this.#flushPersistentState();
     this.#window?.dispose();
     this.#window = undefined;
-    await this.#flushPersistentState();
   }
 
   async #flushPersistentState(): Promise<void> {
