@@ -7,7 +7,7 @@ import semver from 'semver';
 const MAX_LOCK_BYTES = 8 * 1024 * 1024;
 const MAX_PACKAGES = 2_048;
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u;
-const DEFAULT_LOCK_URL = new URL('../../../package-lock.json', import.meta.url);
+const DEFAULT_LOCK_URL = new URL('../package-lock.json', import.meta.url);
 
 export function createRuntimeSnapshot(options = {}) {
   const readLock = options.readLock ?? (() => readBoundedFile(DEFAULT_LOCK_URL));

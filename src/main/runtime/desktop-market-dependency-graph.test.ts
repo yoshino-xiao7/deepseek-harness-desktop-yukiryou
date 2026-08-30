@@ -82,6 +82,36 @@ describe('desktop market dependency graph', () => {
     expect(second.hash).toBe(first.hash);
   });
 
+  it('allows an explicitly requested prerelease dependency without selecting prereleases for stable ranges', async () => {
+    const root = manifest('root-package', '1.0.0', {
+      dependencies: {
+        '@deepseek-ai/runtime-preview': '0.1.1-rc.2',
+        stable: '^1.0.0',
+      },
+    });
+    const manifests = {
+      '@deepseek-ai/runtime-preview@0.1.1-rc.2': manifest(
+        '@deepseek-ai/runtime-preview',
+        '0.1.1-rc.2',
+      ),
+      'stable@1.0.1': manifest('stable', '1.0.1'),
+      'stable@1.1.0-rc.1': manifest('stable', '1.1.0-rc.1'),
+    };
+    const resolver = await createResolver(manifests);
+
+    const result = await resolver.resolve({
+      name: 'root-package',
+      version: '1.0.0',
+      manifest: root,
+    });
+
+    expect(result.nodes.map((entry: { id: string }) => entry.id)).toEqual([
+      '@deepseek-ai/runtime-preview@0.1.1-rc.2',
+      'root-package@1.0.0',
+      'stable@1.0.1',
+    ]);
+  });
+
   it('handles cycles once and skips only platform-incompatible optional dependencies', async () => {
     const root = manifest('root-package', '1.0.0', {
       dependencies: { alpha: '1.0.0' }, optionalDependencies: { 'linux-only': '1.0.0' },
@@ -100,16 +130,53 @@ describe('desktop market dependency graph', () => {
     ]);
   });
 
+  it('prefers supported transitive versions and falls back to deprecated ones only when required', async () => {
+    const root = manifest('root-package', '1.0.0', {
+      dependencies: { preferred: '^1.0.0', legacy: '^1.0.0' },
+    });
+    const manifests = {
+      'preferred@1.0.0': manifest('preferred', '1.0.0', { deprecated: 'old' }),
+      'preferred@1.1.0': manifest('preferred', '1.1.0'),
+      'legacy@1.0.0': manifest('legacy', '1.0.0', { deprecated: 'use a native API' }),
+    };
+    const resolver = await createResolver(manifests);
+
+    const result = await resolver.resolve({ name: 'root-package', version: '1.0.0', manifest: root });
+
+    expect(result.nodes.map((entry: { id: string }) => entry.id)).toEqual([
+      'legacy@1.0.0',
+      'preferred@1.1.0',
+      'root-package@1.0.0',
+    ]);
+  });
+
   it('fails closed on lifecycle scripts and incompatible Node engines', async () => {
-    const root = manifest('root-package', '1.0.0', { dependencies: { unsafe: '1.0.0' } });
-    const unsafe = manifest('unsafe', '1.0.0', { scripts: { install: 'node install.js', prepare: 'node build.js' } });
-    const resolver = await createResolver({ 'unsafe@1.0.0': unsafe });
+    const root = manifest('root-package', '1.0.0', {
+      scripts: { install: 'node install.js', prepare: 'node build.js' },
+    });
+    const resolver = await createResolver({});
     await expect(resolver.resolve({ name: 'root-package', version: '1.0.0', manifest: root }))
       .rejects.toMatchObject({ code: 'catalog:graph-policy', check: 'lifecycle-scripts' });
+
+    const deprecatedRoot = manifest('root-package', '1.0.0', { deprecated: 'replaced' });
+    await expect(resolver.resolve({
+      name: 'root-package', version: '1.0.0', manifest: deprecatedRoot,
+    })).rejects.toMatchObject({ code: 'catalog:graph-policy', check: 'deprecated' });
 
     const engineRoot = manifest('root-package', '1.0.0', { engines: { node: '>=30' } });
     await expect(resolver.resolve({ name: 'root-package', version: '1.0.0', manifest: engineRoot }))
       .rejects.toMatchObject({ code: 'catalog:graph-policy', check: 'node-engine' });
+
+    const dependencyRoot = manifest('root-package', '1.0.0', {
+      dependencies: { scripted: '1.0.0' },
+    });
+    const scripted = manifest('scripted', '1.0.0', {
+      scripts: { postinstall: 'node scripts/postinstall.js' },
+    });
+    const dependencyResolver = await createResolver({ 'scripted@1.0.0': scripted });
+    await expect(dependencyResolver.resolve({
+      name: 'root-package', version: '1.0.0', manifest: dependencyRoot,
+    })).resolves.toMatchObject({ status: 'frozen', summary: { nodes: 2 } });
   });
 
   it('does not treat registry-only prepare metadata as an install-time script', async () => {
