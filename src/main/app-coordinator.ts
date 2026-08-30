@@ -298,6 +298,14 @@ export class AppCoordinator {
       recoveredPreferences = await this.#recoverPreferences(runtimeHome);
       this.#pluginProfileBootstrap = createPluginProfileBootstrap(runtimeHome);
       const launchPlan = await this.#pluginProfileBootstrap.prepareRuntimeLaunch();
+      const managedInventory = await this.#pluginProfileBootstrap.inventory();
+      const adoptionStatus = await this.#externalPluginControl.reconcileAdoption({
+        trialGeneration: launchPlan.trialGeneration,
+        managedPackageNames: new Set(managedInventory.entries.map((entry) => entry.packageName)),
+      });
+      if (adoptionStatus !== 'none' && adoptionStatus !== 'kept') {
+        this.#log.write('plugin-profile.external-adoption-reconciled', adoptionStatus);
+      }
       if (launchPlan.recoveredGeneration !== null) {
         this.#log.write('plugin-profile.recovered', `generation=${launchPlan.recoveredGeneration}`);
       }
@@ -587,11 +595,33 @@ export class AppCoordinator {
       };
     }
     try {
-      const preview = await createRuntimeMarketClient(this.#companionToken).preview(state.origin, {
-        sourceRecordId: request.sourceRecordId,
-        itemId: request.itemId,
-        versionPreference: request.versionPreference,
-      });
+      const expectedExternal = request.externalIdentity === undefined
+        ? undefined
+        : (await this.#externalPluginControl?.inventory())?.find(
+            (entry) => entry.packageName === request.externalIdentity?.packageName &&
+              entry.version === request.externalIdentity.version &&
+              entry.entryIds.includes(request.externalIdentity.entryId),
+          );
+      if (request.externalIdentity !== undefined && expectedExternal === undefined) {
+        return {
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'not-installable',
+        };
+      }
+      const client = createRuntimeMarketClient(this.#companionToken);
+      const preview = expectedExternal === undefined
+        ? await client.preview(state.origin, {
+            sourceRecordId: request.sourceRecordId,
+            itemId: request.itemId,
+            versionPreference: request.versionPreference,
+          })
+        : await client.previewExternal(state.origin, {
+            packageName: expectedExternal.packageName,
+            currentVersion: expectedExternal.version,
+            repository: expectedExternal.repository,
+            versionPreference: request.versionPreference,
+          });
       const summary = validatedManagedPluginPreviewSummary(preview.inspection);
       if (summary === undefined) {
         return {
@@ -604,8 +634,19 @@ export class AppCoordinator {
       const current = inventory?.entries.find(
         (entry) => entry.packageName === preview.candidate.packageName,
       );
+      if (request.externalIdentity !== undefined &&
+        (expectedExternal === undefined ||
+          expectedExternal.packageName !== preview.candidate.packageName || current !== undefined)) {
+        return {
+          requestId: request.requestId,
+          status: 'unavailable',
+          reason: 'not-installable',
+        };
+      }
       const operation: ManagedPluginInstallOperation =
-        current === undefined
+        expectedExternal !== undefined
+          ? { kind: 'adopt', currentVersion: expectedExternal.version }
+          : current === undefined
           ? { kind: 'install' }
           : current.version === preview.candidate.version
             ? { kind: 'reinstall', currentVersion: current.version }
@@ -624,6 +665,14 @@ export class AppCoordinator {
                 packageName: current.packageName,
                 version: current.version,
                 generation: current.generation,
+              },
+        expectedExternal:
+          expectedExternal === undefined
+            ? null
+            : {
+                packageName: expectedExternal.packageName,
+                version: expectedExternal.version,
+                entryId: request.externalIdentity?.entryId ?? expectedExternal.entryIds[0]!,
               },
       });
       this.#log?.write(
@@ -853,7 +902,12 @@ export class AppCoordinator {
         ].join('\n');
     const updating = operation.kind === 'update';
     const reinstalling = operation.kind === 'reinstall';
-    const action = updating
+    const adopting = operation.kind === 'adopt';
+    const action = adopting
+      ? chinese
+        ? '接管'
+        : 'Adopt'
+      : updating
       ? chinese
         ? '更新'
         : 'Update'
@@ -867,12 +921,24 @@ export class AppCoordinator {
     const response = await dialog.showMessageBox({
       type: 'warning',
       title: chinese ? `${action}社区插件` : `${action} community plugin`,
-      message: updating
+      message: adopting
+        ? chinese
+          ? operation.currentVersion === summary.version
+            ? `接管 ${summary.packageName}@${summary.version}？`
+            : `接管 ${summary.packageName}，并从 ${operation.currentVersion} 更新到 ${summary.version}？`
+          : operation.currentVersion === summary.version
+            ? `Adopt ${summary.packageName}@${summary.version}?`
+            : `Adopt ${summary.packageName} and update from ${operation.currentVersion} to ${summary.version}?`
+        : updating
         ? chinese
           ? `将 ${summary.packageName} 从 ${operation.currentVersion} 更新到 ${summary.version}？`
           : `Update ${summary.packageName} from ${operation.currentVersion} to ${summary.version}?`
         : `${action} ${summary.packageName}@${summary.version}?`,
-      detail,
+      detail: adopting
+        ? `${detail}\n\n${chinese
+          ? '接管时会先停用原外部入口并试运行受管版本；失败会恢复原配置，成功后才移除原 profile 安装。'
+          : 'Adoption suppresses the external entry while the managed version is trialed. Failure restores the old profile; success removes the old profile installation.'}`
+        : detail,
       buttons: chinese ? ['取消', `${action}并重启`] : ['Cancel', `${action} and restart`],
       defaultId: 0,
       cancelId: 0,
@@ -975,6 +1041,13 @@ export class AppCoordinator {
         throw new Error('Plugin profile Runtime restart is unavailable');
       }
       this.#pluginTrialGeneration = launchPlan.trialGeneration ?? undefined;
+      const managedInventory = await this.#pluginProfileBootstrap?.inventory();
+      await this.#externalPluginControl?.reconcileAdoption({
+        trialGeneration: launchPlan.trialGeneration,
+        managedPackageNames: new Set(
+          managedInventory?.entries.map((entry) => entry.packageName) ?? [],
+        ),
+      });
       const command = createHarnessRuntimeCommand(
         this.#runtimeRoot,
         this.#carrierMode,
@@ -1116,6 +1189,7 @@ export class AppCoordinator {
       const generation = this.#pluginTrialGeneration;
       if (generation !== undefined) {
         await this.#pluginProfileBootstrap?.recover(generation, 'runtime-unhealthy');
+        await this.#externalPluginControl?.recoverAdoption(generation);
         this.#pluginTrialGeneration = undefined;
       }
       await this.#restartPluginProfileRuntime();
@@ -1276,6 +1350,7 @@ export class AppCoordinator {
     this.#pluginTrialGeneration = undefined;
     try {
       await this.#pluginProfileBootstrap?.recover(generation, 'runtime-unhealthy');
+      await this.#externalPluginControl?.recoverAdoption(generation);
       this.#log?.write(
         'plugin-profile.trial-recovered',
         `generation=${generation} failure=${failure.code}`,
@@ -1392,6 +1467,9 @@ export class AppCoordinator {
                   },
                 },
                 bootstrap,
+                ...(this.#externalPluginControl === undefined
+                  ? {}
+                  : { externalAdoption: this.#externalPluginControl }),
               });
         this.#managedInstallConfirmation =
           transaction === undefined
@@ -1462,6 +1540,13 @@ export class AppCoordinator {
         const generation = this.#pluginTrialGeneration;
         if (generation !== undefined) {
           await this.#pluginProfileBootstrap?.commit(generation);
+          const adoptionStatus = await this.#externalPluginControl?.commitAdoption(generation);
+          if (adoptionStatus === 'pending') {
+            this.#log?.write(
+              'plugin-profile.external-adoption-cleanup-pending',
+              `generation=${generation}`,
+            );
+          }
           this.#pluginTrialGeneration = undefined;
           this.#log?.write('plugin-profile.trial-committed', `generation=${generation}`);
         }

@@ -16,6 +16,11 @@ export interface ManagedPluginPreviewRequest {
   readonly sourceRecordId: string;
   readonly itemId: string;
   readonly versionPreference: 'catalog' | 'latest';
+  readonly externalIdentity?: {
+    readonly packageName: string;
+    readonly version: string;
+    readonly entryId: string;
+  };
 }
 
 export interface ManagedPluginExecuteRequest {
@@ -62,7 +67,7 @@ export interface ManagedPluginPreviewSummary {
 export type ManagedPluginInstallOperation =
   | { readonly kind: 'install' }
   | {
-      readonly kind: 'reinstall' | 'update';
+      readonly kind: 'reinstall' | 'update' | 'adopt';
       readonly currentVersion: string;
     };
 
@@ -91,7 +96,22 @@ export function validatedManagedPluginPreviewRequest(
   const versionPreference = value.versionPreference;
   if (sourceRecordId === undefined || itemId === undefined ||
     (versionPreference !== 'catalog' && versionPreference !== 'latest')) return undefined;
-  return { requestId: value.requestId as string, sourceRecordId, itemId, versionPreference };
+  let externalIdentity: ManagedPluginPreviewRequest['externalIdentity'];
+  if (value.externalIdentity !== undefined) {
+    if (!isRecord(value.externalIdentity)) return undefined;
+    const packageName = boundedString(value.externalIdentity.packageName, 214);
+    const version = boundedString(value.externalIdentity.version, 100);
+    const entryId = boundedString(value.externalIdentity.entryId, 200);
+    if (packageName === undefined || version === undefined || entryId === undefined) return undefined;
+    externalIdentity = { packageName, version, entryId };
+  }
+  return {
+    requestId: value.requestId as string,
+    sourceRecordId,
+    itemId,
+    versionPreference,
+    ...(externalIdentity === undefined ? {} : { externalIdentity }),
+  };
 }
 
 export function validatedManagedPluginPreviewResult(
@@ -130,7 +150,7 @@ function validatedOperation(value: unknown): ManagedPluginInstallOperation | und
   if (!isRecord(value)) return undefined;
   if (value.kind === 'install') return { kind: 'install' };
   if (
-    (value.kind === 'reinstall' || value.kind === 'update') &&
+    (value.kind === 'reinstall' || value.kind === 'update' || value.kind === 'adopt') &&
     boundedString(value.currentVersion, 100) !== undefined
   ) {
     return { kind: value.kind, currentVersion: value.currentVersion as string };

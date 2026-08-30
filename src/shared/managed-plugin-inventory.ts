@@ -48,6 +48,7 @@ export interface ExternalPluginInventoryEntry {
   readonly entryIds: readonly string[];
   readonly enabled: boolean;
   readonly allowedActions: readonly ('enable' | 'disable' | 'uninstall')[];
+  readonly repository: string;
 }
 
 export interface ExternalPluginControlRequest {
@@ -244,7 +245,8 @@ function validatedExternalEntry(value: unknown): ExternalPluginInventoryEntry | 
     value.entryIds.length === 0 || value.entryIds.length > 100 ||
     !value.entryIds.every(validEntryId) ||
     typeof value.enabled !== 'boolean' || !Array.isArray(value.allowedActions) ||
-    !value.allowedActions.every((item) => item === 'enable' || item === 'disable' || item === 'uninstall')) {
+    !value.allowedActions.every((item) => item === 'enable' || item === 'disable' || item === 'uninstall') ||
+    !boundedString(value.repository, 500)) {
     return undefined;
   }
   return {
@@ -253,6 +255,7 @@ function validatedExternalEntry(value: unknown): ExternalPluginInventoryEntry | 
     entryIds: value.entryIds,
     enabled: value.enabled,
     allowedActions: value.allowedActions,
+    repository: value.repository,
   };
 }
 

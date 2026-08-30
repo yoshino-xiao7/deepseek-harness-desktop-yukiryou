@@ -41,6 +41,7 @@ describe('managed plugin inventory boundary', () => {
       externalEntries: [{
         packageName: 'dsh-grok-provider', version: '0.1.1', entryIds: ['llm-grok'],
         enabled: true, allowedActions: ['disable', 'uninstall'],
+        repository: 'https://github.com/example/dsh-grok-provider',
       }],
     })).toMatchObject({
       status: 'ready',
@@ -80,6 +81,7 @@ describe('managed plugin inventory boundary', () => {
       externalEntries: [{
         packageName: 'dsh-grok-provider', version: '0.1.1', entryIds: ['../escape'],
         enabled: true, allowedActions: ['uninstall'],
+        repository: 'https://github.com/example/dsh-grok-provider',
       }],
     })).toBeUndefined();
   });

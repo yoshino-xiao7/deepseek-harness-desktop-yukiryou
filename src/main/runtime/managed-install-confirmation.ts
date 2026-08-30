@@ -5,7 +5,10 @@ import type {
   ManagedPluginPreviewSummary,
 } from '../../shared/managed-plugin-preview.js';
 import type { PluginProfileCandidate } from './plugin-profile-bootstrap.js';
-import type { ManagedInstallTransaction } from './managed-install-transaction.js';
+import type {
+  ManagedInstallExpectedExternal,
+  ManagedInstallTransaction,
+} from './managed-install-transaction.js';
 
 interface ManagedInstallConfirmationOptions {
   readonly transaction: ManagedInstallTransaction;
@@ -37,6 +40,7 @@ export interface ManagedInstallConfirmation {
       readonly version: string;
       readonly generation: string;
     };
+    readonly expectedExternal?: ManagedInstallExpectedExternal;
   }): {
     readonly previewId: string;
     readonly profileGeneration: string;
@@ -79,6 +83,9 @@ export function createManagedInstallConfirmation(
         candidate: input.candidate,
         stagingPreviewId: input.stagingPreviewId,
         expectedReceipt: input.expectedReceipt,
+        ...(input.expectedExternal === undefined
+          ? {}
+          : { expectedExternal: input.expectedExternal }),
       });
       const expiresInSeconds = Math.min(capability.expiresInSeconds, input.expiresInSeconds);
       entries.set(

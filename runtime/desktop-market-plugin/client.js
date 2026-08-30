@@ -64,10 +64,10 @@ window.__ModuleLoader__.load({
         inspectionVerified: '依赖、Runtime 与实际包体校验通过', inspectionBlocked: '当前包或其依赖被安全策略阻止',
         inspectionUnavailable: '暂时无法完成安全预检，请稍后重试。', inspectionNoInstall: '实际包体、内容寻址缓存与 frozen lock 已核验。继续后会生成短期一次性安装预览；最终执行仍需在系统原生确认框中确认。', inspectionNoInstallBlocked: '前置检查尚未全部通过，实际包体与 frozen lock 未生成；当前结果只用于解释阻断原因，不会产生安装操作。',
         inspectionPackage: '精确包', inspectionPlatform: '目标平台', inspectionDependencies: '直接依赖 / Peer', inspectionGraph: '依赖图', inspectionPeers: 'Peer 结果', inspectionArtifacts: '已验证包体',
-        prepareInstall: '准备安装', prepareUpdate: '准备应用版本', prepareReinstall: '准备重新安装', preparingInstall: '正在生成受管变更预览…', installPreviewTitle: '受管安装摘要', updatePreviewTitle: '受管版本变更摘要', reinstallPreviewTitle: '受管重装摘要',
+        prepareInstall: '准备安装', prepareAdopt: '安全预检并接管', prepareUpdate: '准备应用版本', prepareReinstall: '准备重新安装', preparingInstall: '正在生成受管变更预览…', installPreviewTitle: '受管安装摘要', updatePreviewTitle: '受管版本变更摘要', reinstallPreviewTitle: '受管重装摘要',
         installSize: '压缩 / 解包大小', installFiles: '文件数', installGraph: '依赖图', installValidity: '有效期',
         installValidityValue: '约 {minutes} 分钟', installPermissionWarning: '插件与 Harness 共享当前用户权限。确认后应用会重启并试运行新配置；启动失败会自动恢复。',
-        currentVersion: '当前版本', catalogVersion: '目录记录版本', catalogVersionInline: '目录版本 {version}', latestVersion: 'npm 最新版本', upToDate: '当前已是所选版本', updateAvailable: '发现可用更新', installAndRestart: '安装并重启', updateAndRestart: '应用版本并重启', reinstallAndRestart: '重新安装并重启', installCancelled: '已取消操作，当前预览仍可再次确认。', installPrepared: '插件配置已准备完成，正在重启…',
+        currentVersion: '当前版本', catalogVersion: '目录记录版本', catalogVersionInline: '目录版本 {version}', latestVersion: 'npm 最新版本', upToDate: '当前已是所选版本', updateAvailable: '发现可用更新', installAndRestart: '安装并重启', updateAndRestart: '应用版本并重启', reinstallAndRestart: '重新安装并重启', adoptAndRestart: '接管并重启', adoptPreviewTitle: '接管外部安装', installCancelled: '已取消操作，当前预览仍可再次确认。', installPrepared: '插件配置已准备完成，正在重启…',
         installUnavailable: '安装预览已失效或 Runtime 状态发生变化，请重新准备。',
         peerMissing: 'Runtime 缺少', peerIncompatible: '版本不兼容', peerAmbiguous: '提供者不唯一', peerRequired: '需要', peerAvailable: '当前',
         checkExactIdentity: '目录与 npm 精确身份', checkRepository: '仓库回链', checkDeprecated: '废弃状态',
@@ -126,10 +126,10 @@ window.__ModuleLoader__.load({
         inspectionVerified: 'Dependencies, Runtime, and artifact bytes passed', inspectionBlocked: 'The package or one of its dependencies is blocked by safety policy',
         inspectionUnavailable: 'The safety inspection is temporarily unavailable. Try again later.', inspectionNoInstall: 'Artifact bytes, the content-addressed cache, and frozen lock are verified. Continuing creates a short-lived one-time preview; execution still requires native system confirmation.', inspectionNoInstallBlocked: 'Prerequisite checks did not all pass, so artifact bytes and the frozen lock were not produced. This result only explains the blockers and cannot install anything.',
         inspectionPackage: 'Exact package', inspectionPlatform: 'Target platform', inspectionDependencies: 'Direct / peer dependencies', inspectionGraph: 'Dependency graph', inspectionPeers: 'Peer result', inspectionArtifacts: 'Verified artifacts',
-        prepareInstall: 'Prepare install', prepareUpdate: 'Prepare selected version', prepareReinstall: 'Prepare reinstall', preparingInstall: 'Preparing a managed change preview…', installPreviewTitle: 'Managed install summary', updatePreviewTitle: 'Managed version change summary', reinstallPreviewTitle: 'Managed reinstall summary',
+        prepareInstall: 'Prepare install', prepareAdopt: 'Verify and adopt', prepareUpdate: 'Prepare selected version', prepareReinstall: 'Prepare reinstall', preparingInstall: 'Preparing a managed change preview…', installPreviewTitle: 'Managed install summary', updatePreviewTitle: 'Managed version change summary', reinstallPreviewTitle: 'Managed reinstall summary',
         installSize: 'Compressed / unpacked', installFiles: 'Files', installGraph: 'Dependency graph', installValidity: 'Valid for',
         installValidityValue: 'About {minutes} min', installPermissionWarning: 'The plugin shares the current user privileges with Harness. After confirmation the app restarts in trial mode and recovers automatically if startup fails.',
-        currentVersion: 'Current version', catalogVersion: 'Catalog version', catalogVersionInline: 'Catalog version {version}', latestVersion: 'npm latest', upToDate: 'The selected version is already installed', updateAvailable: 'An update is available', installAndRestart: 'Install and restart', updateAndRestart: 'Apply version and restart', reinstallAndRestart: 'Reinstall and restart', installCancelled: 'The operation was cancelled. This preview can still be confirmed again.', installPrepared: 'The plugin profile is ready. Restarting…',
+        currentVersion: 'Current version', catalogVersion: 'Catalog version', catalogVersionInline: 'Catalog version {version}', latestVersion: 'npm latest', upToDate: 'The selected version is already installed', updateAvailable: 'An update is available', installAndRestart: 'Install and restart', updateAndRestart: 'Apply version and restart', reinstallAndRestart: 'Reinstall and restart', adoptAndRestart: 'Adopt and restart', adoptPreviewTitle: 'Adopt external installation', installCancelled: 'The operation was cancelled. This preview can still be confirmed again.', installPrepared: 'The plugin profile is ready. Restarting…',
         installUnavailable: 'The preview expired or Runtime state changed. Prepare it again.',
         peerMissing: 'Missing from Runtime', peerIncompatible: 'Incompatible version', peerAmbiguous: 'Ambiguous provider', peerRequired: 'requires', peerAvailable: 'available',
         checkExactIdentity: 'Catalog and npm identity', checkRepository: 'Repository backlink', checkDeprecated: 'Deprecation status',
@@ -277,10 +277,12 @@ window.__ModuleLoader__.load({
       const managed = new Map((managedSnapshot?.entries ?? []).map((entry) => [entry.packageName, entry]));
       const external = new Map((managedSnapshot?.externalEntries ?? []).flatMap((entry) =>
         entry.entryIds.map((entryId) => [entryId, entry])));
+      const externalByPackage = new Map((managedSnapshot?.externalEntries ?? []).map((entry) =>
+        [entry.packageName, entry]));
       const seenManaged = new Set();
       const entries = runtimeEntries.map((entry) => {
         const receipt = managed.get(entry.moduleName);
-        const externalControl = external.get(entry.entryId);
+        const externalControl = external.get(entry.entryId) ?? externalByPackage.get(entry.moduleName);
         if (receipt !== undefined) seenManaged.add(receipt.packageName);
         return {
           ...entry,
@@ -511,26 +513,32 @@ window.__ModuleLoader__.load({
       };
       const openInstalledDetails = async (entry) => {
         const recordedSourceId = entry.receipt?.sourceId;
+        const external = entry.externalControl;
         const fallback = {
           id: `installed:${entry.entryId}`,
           displayName: entry.moduleName,
           summary: '',
           categories: [],
           provenance: {
-            sourceId: recordedSourceId ?? 'local-runtime',
+            sourceId: external === undefined ? (recordedSourceId ?? 'local-runtime') : 'external-installed',
             observedAt: entry.receipt?.installedAt,
           },
-          installability: { state: 'installed' },
+          ...(external === undefined ? { installability: { state: 'installed' } } : {
+            repository: external.repository,
+            package: { name: external.packageName, version: external.version },
+            installability: { state: 'candidate', reason: 'verified-external-installation' },
+          }),
         };
         setSelected(fallback);
         setSelectedInstalled(entry);
         setSelectedSource(recordedSourceId === undefined
-          ? { id: 'local-runtime', displayName: t('readonlyState') }
+          ? { id: external === undefined ? 'local-runtime' : 'external-installed', displayName: t(external === undefined ? 'readonlyState' : 'externalState') }
           : { id: recordedSourceId, displayName: recordedSourceId });
-        if (entry.receipt !== undefined) {
-          const packageName = entry.receipt.packageName;
+        if (entry.receipt !== undefined || entry.externalControl !== undefined) {
+          const packageName = entry.receipt?.packageName ?? entry.externalControl.packageName;
+          const installedVersion = entry.receipt?.version ?? entry.externalControl.version;
           setUpdateCheck({ status: 'loading', packageName, value: null });
-          readInstalledUpdate(packageName, entry.receipt.version).then(
+          readInstalledUpdate(packageName, installedVersion).then(
             (value) => setUpdateCheck((current) => current.packageName === packageName
               ? { status: 'ready', packageName, value }
               : current),
@@ -628,7 +636,7 @@ window.__ModuleLoader__.load({
           const result = await window.deepSeekYukiRyouPlugins.controlExternal({
             packageName: capability.packageName,
             version: capability.version,
-            entryId: entry.entryId,
+            entryId: capability.entryIds[0],
             action,
           });
           updateState(result?.status === 'prepared'
@@ -670,6 +678,13 @@ window.__ModuleLoader__.load({
             sourceRecordId: selected.provenance.sourceId,
             itemId: selected.id,
             versionPreference,
+            ...(selectedInstalled?.externalControl === undefined ? {} : {
+              externalIdentity: {
+                packageName: selectedInstalled.externalControl.packageName,
+                version: selectedInstalled.externalControl.version,
+                entryId: selectedInstalled.externalControl.entryIds[0],
+              },
+            }),
           });
           setManagedInstall(value.status === 'ready'
             ? { status: 'ready', value }
@@ -700,6 +715,11 @@ window.__ModuleLoader__.load({
           typeof window.deepSeekYukiRyouPlugins?.execute === 'function';
         if (!bridgeAvailable) return null;
         if (managedInstall.status === 'idle') {
+          if (selectedInstalled?.externalControl !== undefined) {
+            return React.createElement('button', {
+              type: 'button', className: 'dsh-market-button dsh-market-primary', onClick: prepareManagedInstall,
+            }, t('prepareAdopt'));
+          }
           const receipt = inventory.entries.find((entry) => entry.receipt?.packageName === selected?.package?.name)?.receipt;
           const candidateVersion = inspection.value?.identity?.version ?? selected?.package?.version;
           const action = receipt === undefined ? 'prepareInstall'
@@ -728,9 +748,11 @@ window.__ModuleLoader__.load({
         const minutes = Math.max(1, Math.ceil(preview.expiresInSeconds / 60));
         const operation = preview.operation?.kind ?? 'install';
         const title = operation === 'update' ? 'updatePreviewTitle'
-          : operation === 'reinstall' ? 'reinstallPreviewTitle' : 'installPreviewTitle';
+          : operation === 'reinstall' ? 'reinstallPreviewTitle'
+            : operation === 'adopt' ? 'adoptPreviewTitle' : 'installPreviewTitle';
         const action = operation === 'update' ? 'updateAndRestart'
-          : operation === 'reinstall' ? 'reinstallAndRestart' : 'installAndRestart';
+          : operation === 'reinstall' ? 'reinstallAndRestart'
+            : operation === 'adopt' ? 'adoptAndRestart' : 'installAndRestart';
         return React.createElement('div', { className: 'dsh-market-install-preview' },
           React.createElement('h5', null, t(title)),
           React.createElement('div', { className: 'dsh-market-inspection-meta' },
@@ -868,7 +890,7 @@ window.__ModuleLoader__.load({
                           React.createElement('span', null, `${t(entry.runtimeState)} · ${t(entry.receipt ? 'managedState' : entry.externalControl ? 'externalState' : 'readonlyState')}`),
                         ),
                         React.createElement('span', { className: 'dsh-market-installed-actions' },
-                          React.createElement('button', { type: 'button', className: 'dsh-market-button', onClick: () => openInstalledDetails(entry) }, t(entry.receipt ? 'checkUpdates' : 'details')),
+                          React.createElement('button', { type: 'button', className: 'dsh-market-button', onClick: () => openInstalledDetails(entry) }, t(entry.receipt || entry.externalControl ? 'checkUpdates' : 'details')),
                           entry.receipt && React.createElement(React.Fragment, null,
                           entry.receipt.rollbackTarget && React.createElement('button', {
                             type: 'button',
@@ -1002,7 +1024,7 @@ window.__ModuleLoader__.load({
               React.createElement('dt', null, t('categories')), React.createElement('dd', null, selected.categories?.join(' · ') || '—'),
               selectedInstalled && React.createElement(React.Fragment, null,
                 React.createElement('dt', null, t('installedVersion')),
-                React.createElement('dd', null, selectedInstalled.receipt?.version ?? '—'),
+                React.createElement('dd', null, selectedInstalled.receipt?.version ?? selectedInstalled.externalControl?.version ?? '—'),
                 React.createElement('dt', null, t('installedOwnership')),
                 React.createElement('dd', null, t(selectedInstalled.ownership)),
                 React.createElement('dt', null, t('installedState')),
@@ -1036,11 +1058,11 @@ window.__ModuleLoader__.load({
                       ? format(t, 'updateFound', { version: updateCheck.value.latestVersion })
                       : t('updateCurrent'))
                     : ''),
-              updateCheck.status === 'ready' && updateCheck.value.updateAvailable &&
+              selectedInstalled?.externalControl === undefined && updateCheck.status === 'ready' && updateCheck.value.updateAvailable &&
                 React.createElement('p', { className: 'dsh-market-source-notice' }, t('updateCatalogRequired')),
             ),
             React.createElement('div', { className: 'dsh-market-trust' }, React.createElement('strong', null, t('trustTitle')), t(developmentFixtureSelected ? 'developmentTrust' : curatedSelected ? 'curatedTrust' : 'trust')),
-            selected.installability?.state === 'candidate' && (!selectedInstalled || selectedInstalled.receipt) && React.createElement('div', { className: 'dsh-market-inspection' },
+            selected.installability?.state === 'candidate' && (!selectedInstalled || selectedInstalled.receipt || selectedInstalled.externalControl) && React.createElement('div', { className: 'dsh-market-inspection' },
               React.createElement('h4', null, t('inspectionTitle')),
               React.createElement('fieldset', { className: 'dsh-market-version-choice', disabled: inspection.status === 'loading' || managedInstall.status !== 'idle' },
                 React.createElement('legend', null, t('versionChoiceTitle')),
@@ -1063,7 +1085,9 @@ window.__ModuleLoader__.load({
                   React.createElement('span', null, t('latestVersionChoiceHelp')),
                 ),
               ),
-              inspection.status === 'idle'
+              selectedInstalled?.externalControl !== undefined
+                ? renderManagedInstall()
+                : inspection.status === 'idle'
                 ? React.createElement('button', { type: 'button', className: 'dsh-market-button dsh-market-primary', onClick: startInspection }, t(selectedInstalled ? 'checkUpdates' : 'inspect'))
                 : inspection.status === 'loading'
                   ? React.createElement('p', { className: 'dsh-market-inspection-summary', role: 'status' }, t(developmentFixtureSelected ? 'inspectionLoadingDevelopment' : 'inspectionLoading'))
@@ -1131,6 +1155,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject;
     exports.apply = apply;
     exports.findInstalledCatalogItem = findInstalledCatalogItem;
+    exports.mergeInstalledInventory = mergeInstalledInventory;
     exports.matchesInstalledScope = matchesInstalledScope;
     return module.exports;
   },
