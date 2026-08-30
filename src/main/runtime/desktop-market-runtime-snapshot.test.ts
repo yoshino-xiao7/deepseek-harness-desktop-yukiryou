@@ -11,7 +11,21 @@ async function createReader(readLock: () => unknown): Promise<RuntimeSnapshotRea
   return module.createRuntimeSnapshot({ readLock });
 }
 
+async function createDefaultReader(): Promise<RuntimeSnapshotReader> {
+  const module = await import(
+    new URL('../../../runtime/desktop-market-plugin/runtime-snapshot.js', import.meta.url).href
+  ) as { readonly createRuntimeSnapshot: () => RuntimeSnapshotReader };
+  return module.createRuntimeSnapshot();
+}
+
 describe('desktop market Runtime compatibility snapshot', () => {
+  it('reads the lockfile shipped beside the desktop market plugin', async () => {
+    const result = await (await createDefaultReader()).read();
+
+    expect(result.packages).toContainEqual(expect.objectContaining({ name: '@deepseek-ai/dsh-agent' }));
+    expect(result.hash).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  });
+
   it('publishes only top-level package names and exact versions with a deterministic hash', async () => {
     const reader = await createReader(() => ({
       lockfileVersion: 3,

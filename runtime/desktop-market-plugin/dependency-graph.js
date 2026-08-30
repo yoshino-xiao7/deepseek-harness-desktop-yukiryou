@@ -29,7 +29,7 @@ export function createDependencyGraphResolver(options = {}) {
 
   return Object.freeze({
     async resolve({ name, version, manifest } = {}) {
-      assertIdentity(name, version, manifest);
+      assertIdentity(name, version, manifest, false);
       const nodes = new Map();
       const edges = [];
       const peerRequirements = [];
@@ -66,7 +66,7 @@ export function createDependencyGraphResolver(options = {}) {
             selected = await selectVersion(dependency.name, dependency.range, requestPackument, packuments);
             const childId = `${dependency.name}@${selected}`;
             const childManifest = await cachedManifest(dependency.name, selected, requestManifest, manifests);
-            assertIdentity(dependency.name, selected, childManifest);
+            assertIdentity(dependency.name, selected, childManifest, true);
             const childDepth = current.depth + 1;
             if (childDepth > maxDepth) throw graphError('budget', 'dependency-graph', 'Dependency graph exceeded depth budget');
             normalizeNode(dependency.name, selected, childManifest, {
@@ -193,9 +193,11 @@ async function selectVersion(name, range, requestPackument, cache) {
   if (versions.length === 0 || versions.length > MAX_VERSIONS) {
     throw graphError('budget', 'dependency-graph', 'Invalid npm version set');
   }
-  const candidates = versions
-    .filter(([candidate, metadata]) => semver.valid(candidate) !== null && semver.prerelease(candidate) === null &&
-      semver.satisfies(candidate, range) && isRecord(metadata) && metadata.deprecated === undefined)
+  const matching = versions
+    .filter(([candidate, metadata]) => semver.valid(candidate) !== null &&
+      semver.satisfies(candidate, range) && isRecord(metadata));
+  const preferred = matching.filter(([, metadata]) => metadata.deprecated === undefined);
+  const candidates = (preferred.length > 0 ? preferred : matching)
     .map(([candidate]) => candidate)
     .sort(semver.rcompare);
   if (candidates.length === 0) throw graphError('unresolved', 'dependency-graph', 'Dependency range has no eligible version');
@@ -213,8 +215,10 @@ async function cachedManifest(name, version, requestManifest, cache) {
 }
 
 function normalizeNode(name, version, manifest, environment) {
-  if (manifest.deprecated !== undefined) throw graphError('policy', 'deprecated', 'Deprecated package in dependency graph');
-  if (dangerousLifecycleScripts(manifest.scripts).length > 0) {
+  if (environment.depth === 0 && manifest.deprecated !== undefined) {
+    throw graphError('policy', 'deprecated', 'Root package is deprecated');
+  }
+  if (environment.depth === 0 && dangerousLifecycleScripts(manifest.scripts).length > 0) {
     throw graphError('policy', 'lifecycle-scripts', 'Lifecycle scripts in dependency graph');
   }
   const integrity = validSha512(manifest.dist?.integrity);
@@ -268,8 +272,9 @@ function normalizePeerRequirements(manifest) {
   });
 }
 
-function assertIdentity(name, version, manifest) {
-  if (!NPM_PACKAGE_PATTERN.test(name ?? '') || semver.valid(version) === null || semver.prerelease(version) !== null ||
+function assertIdentity(name, version, manifest, allowPrerelease) {
+  if (!NPM_PACKAGE_PATTERN.test(name ?? '') || semver.valid(version) === null ||
+    (!allowPrerelease && semver.prerelease(version) !== null) ||
     !isRecord(manifest) || manifest.name !== name || manifest.version !== version) {
     throw graphError('invalid-metadata', 'exact-identity', 'Invalid exact package manifest');
   }

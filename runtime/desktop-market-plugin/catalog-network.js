@@ -5,6 +5,8 @@ import { BlockList, isIP } from 'node:net';
 import process from 'node:process';
 import { URL, URLSearchParams } from 'node:url';
 
+import semver from 'semver';
+
 const GITHUB_REQUEST = Object.freeze({
   hostname: 'api.github.com',
   path: '/search/repositories?q=topic%3Adsh-plugin&sort=stars&order=desc&per_page=100',
@@ -41,10 +43,9 @@ const DSH_1024STORE_REQUEST = Object.freeze({
 const DSHFIND_HOSTNAME = 'api.dshfind.com';
 const NPM_REGISTRY_HOSTNAME = 'registry.npmjs.org';
 const NPM_PACKAGE_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u;
-const STABLE_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_MEDIA_RESPONSE_BYTES = 1024 * 1024;
-const MAX_PACKUMENT_RESPONSE_BYTES = 8 * 1024 * 1024;
+const MAX_PACKUMENT_RESPONSE_BYTES = 16 * 1024 * 1024;
 const MAX_TARBALL_RESPONSE_BYTES = 32 * 1024 * 1024;
 const MAX_DSHFIND_PAGES = 200;
 const BLOCKED_NETWORKS = new BlockList();
@@ -98,7 +99,7 @@ export function requestDshfindPage(page, dataVersion) {
 }
 
 export function requestNpmManifest(packageName, version) {
-  if (!NPM_PACKAGE_PATTERN.test(packageName ?? '') || !STABLE_VERSION_PATTERN.test(version ?? '')) {
+  if (!NPM_PACKAGE_PATTERN.test(packageName ?? '') || semver.valid(version) === null) {
     return Promise.reject(catalogError('invalid-request', 'Invalid npm package identity'));
   }
   return requestFixedJson({
@@ -126,7 +127,7 @@ export function requestNpmPackument(packageName) {
 }
 
 export function requestNpmTarball({ packageName, version, tarball } = {}) {
-  if (!NPM_PACKAGE_PATTERN.test(packageName ?? '') || !STABLE_VERSION_PATTERN.test(version ?? '')) {
+  if (!NPM_PACKAGE_PATTERN.test(packageName ?? '') || semver.valid(version) === null) {
     return Promise.reject(catalogError('invalid-request', 'Invalid npm package identity'));
   }
   const target = normalizeNpmTarballUrl(tarball, { name: packageName, version });

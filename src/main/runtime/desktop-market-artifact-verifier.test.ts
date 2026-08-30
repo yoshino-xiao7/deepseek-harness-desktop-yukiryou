@@ -115,13 +115,90 @@ describe('desktop market artifact verifier', () => {
     })).rejects.toMatchObject({ code: 'catalog:artifact-integrity', check: 'artifact-bytes' });
   });
 
+  it('keeps root lifecycle scripts blocked while safely ignoring transitive dependency scripts', async () => {
+    const rootBytes = archive([
+      {
+        path: 'package/package.json',
+        body: JSON.stringify({
+          name: '@community/example',
+          version: '1.2.3',
+          dependencies: { scripted: '1.0.0' },
+        }),
+      },
+      { path: 'package/cordis.patch.yml' },
+    ]);
+    const dependencyBytes = archive([
+      {
+        path: 'scripted/package.json',
+        body: JSON.stringify({
+          name: 'scripted',
+          version: '1.0.0',
+          scripts: { postinstall: 'node scripts/postinstall.js' },
+        }),
+      },
+      { path: 'scripted/index.js' },
+    ]);
+    const frozen = graph(rootBytes, {
+      edges: [{
+        from: '@community/example@1.2.3',
+        to: 'scripted@1.0.0',
+        name: 'scripted',
+        requested: '1.0.0',
+        kind: 'runtime',
+      }],
+      nodes: [
+        {
+          id: '@community/example@1.2.3',
+          name: '@community/example',
+          version: '1.2.3',
+          tarball: 'https://registry.npmjs.org/@community/example/-/example-1.2.3.tgz',
+          integrity: `sha512-${createHash('sha512').update(rootBytes).digest('base64')}`,
+        },
+        {
+          id: 'scripted@1.0.0',
+          name: 'scripted',
+          version: '1.0.0',
+          tarball: 'https://registry.npmjs.org/scripted/-/scripted-1.0.0.tgz',
+          integrity: `sha512-${createHash('sha512').update(dependencyBytes).digest('base64')}`,
+        },
+      ],
+    });
+    const verifier = await loadVerifier({
+      requestTarball: async ({ packageName }: { readonly packageName: string }) =>
+        packageName === 'scripted' ? dependencyBytes : rootBytes,
+      store: { enabled: false, put: async () => undefined },
+    });
+
+    await expect(verifier.verify({ graph: frozen, rootBundlePath: 'cordis.patch.yml' }))
+      .resolves.toMatchObject({ status: 'verified', summary: { artifacts: 2 } });
+  });
+
+  it('deduplicates byte-identical npm entries that contain a harmless dot segment', async () => {
+    const packageJson = JSON.stringify({ name: '@community/example', version: '1.2.3' });
+    const bytes = archive([
+      { path: 'package/package.json', body: packageJson },
+      { path: 'package/cordis.patch.yml' },
+      { path: 'package/./dist/index.js', body: 'export {}' },
+      { path: 'package/dist/index.js', body: 'export {}' },
+    ]);
+    const verifier = await loadVerifier({
+      requestTarball: async () => bytes,
+      store: { enabled: false, put: async () => undefined },
+    });
+
+    await expect(verifier.verify({ graph: graph(bytes), rootBundlePath: 'cordis.patch.yml' }))
+      .resolves.toMatchObject({ status: 'verified', summary: { fileCount: 3 } });
+  });
+
   it.each([
     ['path traversal', [{ path: 'package/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3' }) }, { path: 'package/../escape.js' }], 'catalog:artifact-unsafe-path'],
     ['symbolic link', [{ path: 'package/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3' }) }, { path: 'package/link', type: '2' }], 'catalog:artifact-unsafe-entry'],
     ['missing bundle', [{ path: 'package/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3' }) }], 'catalog:artifact-bundle-missing'],
     ['duplicate paths', [{ path: 'package/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3' }) }, { path: 'package/CORDIS.patch.yml' }, { path: 'package/cordis.patch.yml' }], 'catalog:artifact-unsafe-path'],
+    ['conflicting normalized paths', [{ path: 'package/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3' }) }, { path: 'package/./cordis.patch.yml', body: 'first' }, { path: 'package/cordis.patch.yml', body: 'second' }], 'catalog:artifact-unsafe-path'],
     ['install lifecycle scripts', [{ path: 'package/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3', scripts: { install: 'node install.js' } }) }, { path: 'package/cordis.patch.yml' }], 'catalog:artifact-lifecycle-scripts'],
     ['installer-owned node_modules', [{ path: 'package/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3' }) }, { path: 'package/cordis.patch.yml' }, { path: 'package/node_modules/injected/index.js' }], 'catalog:artifact-unsafe-path'],
+    ['unrelated archive root', [{ path: 'unrelated/package.json', body: JSON.stringify({ name: '@community/example', version: '1.2.3' }) }, { path: 'unrelated/cordis.patch.yml' }], 'catalog:artifact-unsafe-path'],
   ])('rejects %s archives', async (_label, entries, code) => {
     const bytes = archive(entries);
     const verifier = await loadVerifier({ requestTarball: async () => bytes, store: { enabled: false, put: async () => undefined } });

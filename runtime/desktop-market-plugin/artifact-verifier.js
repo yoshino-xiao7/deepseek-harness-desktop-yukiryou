@@ -157,7 +157,7 @@ function inspectArchive(compressed, identity, collectFiles = false) {
   let bundleFound = identity.requiredBundle === undefined;
   let pendingPaxPath;
   let ended = false;
-  const paths = new Set();
+  const paths = new Map();
   const files = [];
   while (offset + 512 <= tar.length) {
     const header = tar.subarray(offset, offset + 512);
@@ -182,15 +182,21 @@ function inspectArchive(compressed, identity, collectFiles = false) {
     } else {
       const path = pendingPaxPath ?? headerPath;
       pendingPaxPath = undefined;
-      const relative = normalizeArchivePath(path);
+      const relative = normalizeArchivePath(path, identity.name);
       if (relative === 'node_modules' || relative.startsWith('node_modules/')) {
         throw artifactError('unsafe-path', 'Archive contains installer-owned node_modules');
       }
       if (type !== '0' && type !== '5') throw artifactError('unsafe-entry', 'Archive contains unsupported entry type');
       const pathKey = relative.normalize('NFC').toLowerCase();
-      if (paths.has(pathKey)) throw artifactError('unsafe-path', 'Archive contains duplicate paths');
-      paths.add(pathKey);
-      if (type === '0') {
+      const mode = parseTarNumber(header.subarray(100, 108));
+      const fingerprint = `${type}:${mode}:${size}:${createHash('sha256').update(data).digest('hex')}`;
+      const existingPath = paths.get(pathKey);
+      if (existingPath !== undefined && (existingPath.relative !== relative || existingPath.fingerprint !== fingerprint)) {
+        throw artifactError('unsafe-path', 'Archive contains conflicting duplicate paths');
+      }
+      const duplicate = existingPath !== undefined;
+      if (!duplicate) paths.set(pathKey, Object.freeze({ relative, fingerprint }));
+      if (type === '0' && !duplicate) {
         fileCount += 1;
         unpackedBytes += size;
         if (fileCount > MAX_GRAPH_FILES || unpackedBytes > (identity.maxUnpackedBytes ?? identity.maxOutputLength)) {
@@ -205,7 +211,7 @@ function inspectArchive(compressed, identity, collectFiles = false) {
           files.push(Object.freeze({
             path: relative,
             bytes: Buffer.from(data),
-            executable: (parseTarNumber(header.subarray(100, 108)) & 0o111) !== 0,
+            executable: (mode & 0o111) !== 0,
           }));
         }
       }
@@ -216,7 +222,9 @@ function inspectArchive(compressed, identity, collectFiles = false) {
   if (packageIdentity?.name !== identity.name || packageIdentity?.version !== identity.version) {
     throw artifactError('package-identity', 'Archive package identity does not match frozen graph');
   }
-  if (packageIdentity.lifecycleScripts.length > 0) throw artifactError('lifecycle-scripts', 'Archive package contains install lifecycle scripts');
+  if (identity.requiredBundle !== undefined && packageIdentity.lifecycleScripts.length > 0) {
+    throw artifactError('lifecycle-scripts', 'Root plugin archive contains install lifecycle scripts');
+  }
   if (JSON.stringify(packageIdentity.dependencies) !== JSON.stringify(normalizeExpectedDependencies(identity.dependencies))) {
     throw artifactError('dependency-mismatch', 'Archive dependencies do not match frozen graph');
   }
@@ -232,18 +240,24 @@ function inspectArchive(compressed, identity, collectFiles = false) {
   });
 }
 
-function normalizeArchivePath(value) {
+function normalizeArchivePath(value, packageName) {
   if (
     typeof value !== 'string' || value.includes('\\') || hasControlCharacter(value) ||
-    Buffer.byteLength(value, 'utf8') > MAX_PATH_BYTES
+    value.startsWith('/') || Buffer.byteLength(value, 'utf8') > MAX_PATH_BYTES
   ) {
     throw artifactError('unsafe-path', 'Archive path is invalid');
   }
-  const segments = value.split('/').filter((segment) => segment !== '');
-  if (segments[0] !== 'package' || segments.some((segment) => segment === '.' || segment === '..')) {
+  const segments = value.split('/');
+  while (segments.at(-1) === '') segments.pop();
+  const packageBaseName = packageName.slice(packageName.lastIndexOf('/') + 1);
+  const acceptedRoots = new Set(['package', packageBaseName]);
+  if (
+    segments.length === 0 || !acceptedRoots.has(segments[0]) ||
+    segments.some((segment) => segment === '' || segment === '..')
+  ) {
     throw artifactError('unsafe-path', 'Archive entry escaped package root');
   }
-  return segments.slice(1).join('/');
+  return segments.slice(1).filter((segment) => segment !== '.').join('/');
 }
 
 function hasControlCharacter(value) {
