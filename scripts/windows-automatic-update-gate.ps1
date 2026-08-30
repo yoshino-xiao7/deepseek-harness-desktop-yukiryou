@@ -13,11 +13,11 @@ $gateIdentity = if ($env:GITHUB_RUN_ID -and $env:GITHUB_RUN_ATTEMPT) {
 } else {
   'local'
 }
-$installParent = if ($env:LOCALAPPDATA) {
-  [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
-} else {
-  [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-}
+# Keep the update-gate install root on the same short temp volume used by the
+# independently exercised NSIS lifecycle gate. Installing the same candidate
+# directly under LOCALAPPDATA can make the assisted installer terminate with
+# 0xC0000005 before the updater/relaunch assertions can run.
+$installParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $installRoot = Join-Path $installParent "dsh-au-$gateIdentity"
 $executable = Join-Path $installRoot 'DeepSeek YukiRyou.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall DeepSeek YukiRyou.exe'
