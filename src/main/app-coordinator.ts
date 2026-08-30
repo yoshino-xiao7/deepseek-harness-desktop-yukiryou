@@ -1302,6 +1302,7 @@ export class AppCoordinator {
         await this.#log?.flush();
         this.#log?.write('update.exit-cleanup-settled');
       },
+      permitWindowClose: () => this.#window?.permitApplicationExit() ?? (() => {}),
       handoff: async () => {
         if (updater === undefined) {
           throw new Error('Native updater is unavailable');

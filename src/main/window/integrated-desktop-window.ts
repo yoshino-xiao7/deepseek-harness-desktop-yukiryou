@@ -163,6 +163,15 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
 
   captureWindowState(): void {}
 
+  permitApplicationExit(): () => void {
+    this.#disposing = true;
+    return () => {
+      if (!this.#productWindow.isDestroyed() || !this.#recoveryWindow.isDestroyed()) {
+        this.#disposing = false;
+      }
+    };
+  }
+
   dispose(): void {
     this.#disposing = true;
     this.#cancelReadiness();

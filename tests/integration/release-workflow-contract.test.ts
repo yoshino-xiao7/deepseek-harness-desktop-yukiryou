@@ -5,6 +5,7 @@ import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 
 interface WorkflowStep {
+  if?: string;
   name?: string;
   run?: string;
   uses?: string;
@@ -54,6 +55,15 @@ describe('macOS release workflow contract', () => {
     const diagnostics = automaticUpdateSteps.find(
       (step) => step.name === 'Upload updater gate diagnostics',
     );
+    const captureDiagnostics = automaticUpdateSteps.find(
+      (step) => step.name === 'Capture Squirrel.Mac diagnostics',
+    );
+    const manualBridge = automaticUpdateSteps.find(
+      (step) => step.name === 'Require the v1.0.4 manual-update bridge',
+    );
+    const strictUpdate = automaticUpdateSteps.find(
+      (step) => step.name === 'Run the production updater through download, install, and relaunch',
+    );
 
     expect(automaticUpdate?.needs).toBe('build_candidate');
     expect(downloadedArtifact?.with?.name).toBe('macos-release-candidate');
@@ -64,8 +74,17 @@ describe('macOS release workflow contract', () => {
     expect(mirror?.run).toContain(
       '${ARTIFACT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip',
     );
+    expect(mirror?.if).toContain("PREVIOUS_PUBLIC_VERSION != '1.0.4'");
+    expect(manualBridge?.if).toContain("PREVIOUS_PUBLIC_VERSION == '1.0.4'");
+    expect(manualBridge?.run).toContain('one-time manual update');
+    expect(manualBridge?.run).toContain(
+      '${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}-candidate.zip',
+    );
+    expect(strictUpdate?.if).toContain("PREVIOUS_PUBLIC_VERSION != '1.0.4'");
     expect(diagnostics?.with?.path).toContain('update-gate/diagnostics/');
     expect(diagnostics?.with?.path).not.toContain('update-gate/assets/');
+    expect(captureDiagnostics?.run).toContain('-maxdepth 1 -type f');
+    expect(captureDiagnostics?.run).not.toContain('cp -R');
     expect(workflow.jobs?.windows?.needs).toBe('verify_macos_automatic_update');
     expect(workflow.jobs?.verify_candidate?.needs).toBe(
       'verify_macos_automatic_update',
