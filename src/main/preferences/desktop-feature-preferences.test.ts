@@ -12,32 +12,31 @@ describe('desktop feature preferences persistence', () => {
     if (directory !== undefined) await rm(directory, { recursive: true, force: true });
   });
 
-  it('defaults both optional desktop surfaces to enabled', async () => {
+  it('defaults the optional desktop workspace surface to enabled', async () => {
     directory = await mkdtemp(join(tmpdir(), 'desktop-feature-preferences-'));
     const store = await createDesktopFeaturePreferencesPersistence(join(directory, 'features.json'));
-    expect(store.initialState).toEqual({ accountBalance: true, workspaceReview: true });
+    expect(store.initialState).toEqual({ workspaceReview: true });
   });
 
-  it('persists independent account and workspace switches', async () => {
+  it('persists the workspace switch while ignoring legacy account state', async () => {
     directory = await mkdtemp(join(tmpdir(), 'desktop-feature-preferences-'));
     const path = join(directory, 'features.json');
     const store = await createDesktopFeaturePreferencesPersistence(path);
-    store.update({ accountBalance: false, workspaceReview: true });
+    store.update({ workspaceReview: false });
     await store.flush();
     expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({
       schemaVersion: 1,
-      accountBalance: false,
-      workspaceReview: true,
+      workspaceReview: false,
     });
     const restored = await createDesktopFeaturePreferencesPersistence(path);
-    expect(restored.initialState).toEqual({ accountBalance: false, workspaceReview: true });
+    expect(restored.initialState).toEqual({ workspaceReview: false });
   });
 
   it('fails closed to defaults for malformed state', async () => {
     directory = await mkdtemp(join(tmpdir(), 'desktop-feature-preferences-'));
     const path = join(directory, 'features.json');
-    await writeFile(path, '{"schemaVersion":1,"accountBalance":"no"}');
+    await writeFile(path, '{"schemaVersion":1,"accountBalance":false}');
     const store = await createDesktopFeaturePreferencesPersistence(path);
-    expect(store.initialState).toEqual({ accountBalance: true, workspaceReview: true });
+    expect(store.initialState).toEqual({ workspaceReview: true });
   });
 });

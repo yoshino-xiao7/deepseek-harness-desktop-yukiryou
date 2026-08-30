@@ -6,6 +6,19 @@
 
 ## [未发布]
 
+## [1.0.5] - 2026-08-30
+
+### Provider 账户信息插件化
+
+- 桌面端不再内置 DeepSeek 账户余额查询、今日消耗估算、余额 RPC、preload bridge、侧栏卡片或账户概览开关；余额功能迁移到可独立安装和升级的 `dsh-deepseek-account` 插件。
+- 保留对旧偏好文件的安全降级，但旧 `account.balance` companion RPC 已关闭并返回无效请求，避免插件与桌面端重复查询或重复展示。
+- 文档和集成门禁现在明确要求实际 bundled Runtime 不包含旧余额组件；Workspace Review、插件市场和桌面 companion 的其他能力保持不变。
+
+### 验证
+
+- lint、类型检查与 467 项单元测试通过。
+- bundled Harness 集成测试确认旧余额 UI 不再随桌面端交付，旧余额 RPC 不再可用。
+
 ## [1.0.4] - 2026-08-28
 
 ### 自动更新

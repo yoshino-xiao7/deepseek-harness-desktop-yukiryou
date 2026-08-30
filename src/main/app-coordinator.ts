@@ -82,7 +82,6 @@ import {
   type WindowStatePersistence,
 } from './window/window-state.js';
 import type { UpdateCommand } from '../shared/update-bridge.js';
-import type { AccountBalanceSnapshot } from '../shared/account-balance.js';
 import type { HarnessContextSnapshot } from '../shared/desktop-companion.js';
 import type {
   WorkspaceReviewRequest,
@@ -262,7 +261,6 @@ export class AppCoordinator {
       onCopyDiagnostics: () => this.#copyDiagnostics(),
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
       onUpdateCommand: (command) => void this.#handleUpdateCommand(command),
-      onAccountBalanceRequest: (force) => this.#readAccountBalance(force),
       onFeaturePreferencesChange: (preferences) =>
         this.#setDesktopFeaturePreferences(preferences),
       onHarnessContext: (snapshot) => void this.#handleHarnessContext(snapshot),
@@ -415,28 +413,6 @@ export class AppCoordinator {
       validatedDesktopLocale(app.getLocale()) ?? 'zh-CN',
     );
     await this.#startRuntime();
-  }
-
-  async #readAccountBalance(force: boolean): Promise<AccountBalanceSnapshot> {
-    if (!this.#desktopFeaturePreferences.accountBalance) {
-      return {
-        status: 'unavailable',
-        reason: 'network',
-        today: { status: 'unavailable' },
-      };
-    }
-    const state = this.#runtime?.getState();
-    if (state?.kind !== 'ready' || this.#companionToken === '') {
-      return {
-        status: 'unavailable',
-        reason: 'network',
-        today: { status: 'unavailable' },
-      };
-    }
-    return createRuntimeCompanionClient(this.#companionToken).readAccountBalance(
-      state.origin,
-      force,
-    );
   }
 
   async #handleHarnessContext(snapshot: HarnessContextSnapshot): Promise<void> {

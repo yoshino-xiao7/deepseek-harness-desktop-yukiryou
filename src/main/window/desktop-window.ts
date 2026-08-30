@@ -21,9 +21,6 @@ import {
   transitionCompanionWorkspace,
 } from '../../shared/desktop-companion.js';
 import {
-  type AccountBalanceSnapshot,
-} from '../../shared/account-balance.js';
-import {
   TOOLBAR_APPEARANCE_CHANNEL,
   type DesktopAppearanceSnapshot,
 } from '../../shared/appearance-sync.js';
@@ -132,9 +129,6 @@ export interface DesktopWindowOptions {
   readonly onCopyDiagnostics: () => void;
   readonly onExportDiagnostics: () => void;
   readonly onUpdateCommand: (command: UpdateCommand) => void;
-  readonly onAccountBalanceRequest: (
-    force: boolean,
-  ) => Promise<AccountBalanceSnapshot>;
   readonly onFeaturePreferencesChange: (
     preferences: DesktopFeaturePreferences,
   ) => void;
@@ -239,7 +233,6 @@ class ElectronDesktopWindow implements DesktopWindow {
         options.onLocale(locale);
       },
       onUpdateCommand: options.onUpdateCommand,
-      onAccountBalanceRequest: options.onAccountBalanceRequest,
       onFeaturePreferencesChange: (preferences) => {
         options.onFeaturePreferencesChange(preferences);
         this.setFeaturePreferences(preferences);

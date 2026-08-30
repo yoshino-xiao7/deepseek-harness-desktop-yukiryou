@@ -1,16 +1,10 @@
-import {
-  type AccountBalanceSnapshot,
-  validatedAccountBalanceSnapshot,
-} from '../../shared/account-balance.js';
 import { isAbsolute } from 'node:path';
 
 const ROUTE = '/plugins/@dsh-desktop/companion/rpc';
 const MAX_RESPONSE_BYTES = 32 * 1024;
-const ACCOUNT_BALANCE_TIMEOUT_MS = 7_500;
 const WORKSPACE_AUTHORIZATION_TIMEOUT_MS = 2_000;
 
 export interface RuntimeCompanionClient {
-  readAccountBalance(origin: string, force: boolean): Promise<AccountBalanceSnapshot>;
   authorizeWorkspace(
     origin: string,
     input: { readonly sessionId: string; readonly workspaceId?: string },
@@ -25,28 +19,6 @@ export interface WorkspaceAuthority {
 
 export function createRuntimeCompanionClient(token: string): RuntimeCompanionClient {
   return {
-    async readAccountBalance(origin, force) {
-      try {
-        const response = await fetch(new URL(ROUTE, origin), {
-          method: 'POST',
-          redirect: 'error',
-          headers: {
-            accept: 'application/json',
-            'content-type': 'application/json',
-            'x-dsh-desktop-companion-token': token,
-          },
-          body: JSON.stringify({ kind: 'account.balance', force }),
-          signal: AbortSignal.timeout(ACCOUNT_BALANCE_TIMEOUT_MS),
-        });
-        if (!response.ok) return unavailableBalance();
-        const body = await readBoundedBody(response, MAX_RESPONSE_BYTES);
-        return validatedAccountBalanceSnapshot(JSON.parse(body)) ?? {
-          status: 'unavailable', reason: 'invalid-response', today: { status: 'unavailable' },
-        };
-      } catch {
-        return unavailableBalance();
-      }
-    },
     async authorizeWorkspace(origin, input) {
       try {
         const payload = await execute(origin, token, {
@@ -66,10 +38,6 @@ export function createRuntimeCompanionClient(token: string): RuntimeCompanionCli
       }
     },
   };
-}
-
-function unavailableBalance(): AccountBalanceSnapshot {
-  return { status: 'unavailable', reason: 'network', today: { status: 'unavailable' } };
 }
 
 async function execute(

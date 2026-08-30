@@ -3,20 +3,14 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { clearInterval, setInterval } from 'node:timers';
 
-import { createAccountBalance } from './account-balance.js';
-
 const ROUTE = '/plugins/@dsh-desktop/companion/rpc';
 const TOKEN_HEADER = 'x-dsh-desktop-companion-token';
 const MAX_REQUEST_BYTES = 4 * 1024;
 
-export const inject = ['webServer', 'credentials', 'workspaceRegistry', 'sessionQuery'];
+export const inject = ['webServer', 'workspaceRegistry'];
 
 export function apply(ctx) {
   const expectedToken = process.env.DSH_DESKTOP_COMPANION_TOKEN ?? '';
-  const accountBalance = createAccountBalance({
-    credentials: ctx.credentials,
-    sessionQuery: ctx.sessionQuery,
-  });
   ctx.effect(
     () => monitorDesktopOwner(process.env.DSH_DESKTOP_OWNER_PID),
     'deepseek-yukiryou: desktop owner watchdog',
@@ -39,9 +33,7 @@ export function apply(ctx) {
               : endJson(response, 200, { status: 'ready', proof });
           }
           if (!authorized(expectedToken, request.headers[TOKEN_HEADER])) return end(response, 403);
-          const snapshot = payload.kind === 'account.balance'
-            ? await readBalance(accountBalance, payload)
-            : payload.kind === 'workspace.authorize'
+          const snapshot = payload.kind === 'workspace.authorize'
               ? await authorizeWorkspace(ctx.workspaceRegistry, payload)
               : undefined;
           if (snapshot === undefined) return end(response, 400);
@@ -76,11 +68,6 @@ export function createRuntimeHealthProof(secret, nonce) {
     !/^[A-Za-z0-9_-]{43}$/.test(nonce)
   ) return undefined;
   return createHmac('sha256', secret).update(nonce).digest('base64url');
-}
-
-async function readBalance(accountBalance, payload) {
-  if (payload.force !== undefined && typeof payload.force !== 'boolean') return undefined;
-  return accountBalance.read({ force: payload.force === true });
 }
 
 export async function authorizeWorkspace(registry, payload) {

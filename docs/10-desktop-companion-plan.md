@@ -6,6 +6,8 @@ updated: 2026-08-21
 
 # Desktop Companion 完整实现方案
 
+> 当前状态（2026-08-30）：本文保留最初的实施历史。内置账户余额阶段已经下线，余额 RPC、preload bridge、桌面设置开关和侧栏 UI 已从桌面端移除；DeepSeek 余额与官方充值入口改由独立 `dsh-deepseek-account` 插件提供。
+
 ## 文档目的
 
 本文冻结下一阶段的产品语义、架构 seam、Module Interface、安全约束、实施顺序与验收门。后续开发以本文为主计划，每个阶段仍需在同一 PR 中同步当前架构、安全模型、测试说明和实现状态。
