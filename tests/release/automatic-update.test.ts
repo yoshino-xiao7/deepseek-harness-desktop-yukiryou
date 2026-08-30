@@ -10,7 +10,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { closeElectronTestApplication } from '../e2e/electron-cleanup.js';
 import { waitForUpdateShell } from './update-shell.js';
-import { createWindowsInstallDirectoryProcessScript } from './windows-process-scope.js';
+import {
+  createWindowsInstallDirectoryProcessScript,
+  stopWindowsProcessTree,
+} from './windows-process-scope.js';
 
 const execute = promisify(execFile);
 const sourceExecutable = requiredEnvironment('DSH_AUTOMATIC_UPDATE_SOURCE_EXECUTABLE_PATH');
@@ -94,7 +97,7 @@ describe('release candidate automatic update', () => {
       throw error;
     }
 
-    await stopRelaunched(relaunchExecutable);
+    await stopRelaunched(relaunchExecutable, previousWindowsProcessIds);
     const smoke = await execute(relaunchExecutable, ['--release-smoke-test'], {
       timeout: 30_000,
     });
@@ -377,11 +380,23 @@ async function visibleWindowsInstallerDialog(): Promise<string | undefined> {
   return title === undefined || title === '' ? undefined : title;
 }
 
-async function stopRelaunched(executable: string): Promise<void> {
+async function stopRelaunched(
+  executable: string,
+  previousWindowsProcessIds: ReadonlySet<number>,
+): Promise<void> {
   if (process.platform === 'win32') {
-    const installDirectory = dirname(executable);
-    const script = createWindowsInstallDirectoryProcessScript(installDirectory, 'stop');
-    await execute('powershell.exe', ['-NoProfile', '-Command', script]);
+    const relaunchedProcessIds = [...await windowsExecutableProcessIds(executable)]
+      .filter((processId) => !previousWindowsProcessIds.has(processId));
+    if (relaunchedProcessIds.length === 0) {
+      throw new Error('Relaunched Windows application process disappeared before cleanup');
+    }
+    for (const processId of relaunchedProcessIds) {
+      stopWindowsProcessTree(processId);
+    }
+    await expect.poll(() => isRelaunched(executable, previousWindowsProcessIds), {
+      timeout: 10_000,
+      interval: 100,
+    }).toBe(false);
     return;
   }
   const result = await execute('/bin/ps', ['-axo', 'pid=,command=']);

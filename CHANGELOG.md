@@ -8,9 +8,11 @@
 
 ## [1.0.5] - 2026-08-30
 
-### Provider 账户信息插件化
+### 独立账户侧栏插件
 
 - 桌面端不再内置 DeepSeek 账户余额查询、今日消耗估算、余额 RPC、preload bridge、侧栏卡片或账户概览开关；余额功能迁移到可独立安装和升级的 `dsh-deepseek-account` 插件。
+- `dsh-deepseek-account` 独立接管账户侧栏并按当前会话模型只显示一份信息；Grok/Codex 未安装时仍可正常显示 DeepSeek Key 余额和打开官方充值入口，未知自定义模型回退到 DeepSeek。
+- Grok 与 Codex 插件不增加新的侧栏实现且原有能力保持不变；账户插件只在对应插件已安装时读取其既有额度数据，Grok/Codex 显示重置时间，Codex 额外显示五小时额度。
 - 保留对旧偏好文件的安全降级，但旧 `account.balance` companion RPC 已关闭并返回无效请求，避免插件与桌面端重复查询或重复展示。
 - 文档和集成门禁现在明确要求实际 bundled Runtime 不包含旧余额组件；Workspace Review、插件市场和桌面 companion 的其他能力保持不变。
 

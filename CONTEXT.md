@@ -33,7 +33,7 @@ _Avoid_: 最新版、用户安装版本
 _Avoid_: Harness 版本
 
 **桌面伴侣（Desktop Companion）**：
-由桌面壳承载的只读辅助能力集合。当前包含 Harness 官方 slot 账户余额、右栏与 Workspace Review，但不复制 Agent、会话或工具详情 UI。宠物实验已归档，不属于当前产品线。
+由桌面壳承载的只读辅助能力集合。当前包含右栏与 Workspace Review，但不复制 Agent、会话、工具详情或账户余额 UI；账户侧栏由可独立安装的 `dsh-deepseek-account` 插件提供。宠物实验已归档，不属于当前产品线。
 _Avoid_: 新 Harness UI、文件编辑器
 
 **Workspace Review**：

@@ -73,7 +73,7 @@
 
 Desktop Companion 的完整产品语义、架构、安全 seam、文件落点、测试矩阵与阶段退出条件已冻结在 [`10-desktop-companion-plan.md`](10-desktop-companion-plan.md)。非宠物阶段已实现并随 `v0.2.1-beta.1` 完成签名、公证和异机发布验证；相对 Markdown 文件链接、64 MiB 有界预览缓存和 820px 最小窗口响应式矩阵也已收口。下一实施阶段是一体化 DesktopProductCarrier、DesktopFramePlugin、受管插件目录与 Windows 发行适配。
 
-Desktop Companion 已完成的实施顺序为：安全契约与双 preload → 账户余额（后续已迁移为独立插件）→ 右栏与 Workspace Capability → 文件树和安全预览 → Git 变更与审阅 → 无宠物版本稳定性验收。当前桌面端不再承载余额查询、桥接或 UI；账户信息由 provider 插件按当前会话模型选择按需显示。宠物实验已停止并存入冷备份分支；不得把它自动恢复到后续开发或发行分支。该专题阶段不得反向改写上文已经完成的基础 Phase 0–4。
+Desktop Companion 已完成的实施顺序为：安全契约与双 preload → 账户余额（后续已迁移为独立插件）→ 右栏与 Workspace Capability → 文件树和安全预览 → Git 变更与审阅 → 无宠物版本稳定性验收。当前桌面端不再承载余额查询、桥接或 UI；独立的 `dsh-deepseek-account` 插件接管账户侧栏，并按当前会话模型读取可用的 Provider 额度数据。Grok 或 Codex 插件未安装时不影响 DeepSeek 余额与官方充值入口；无法识别的自定义模型回退到 DeepSeek。宠物实验已停止并存入冷备份分支；不得把它自动恢复到后续开发或发行分支。该专题阶段不得反向改写上文已经完成的基础 Phase 0–4。
 
 ## 首批 Issue 切分
 
