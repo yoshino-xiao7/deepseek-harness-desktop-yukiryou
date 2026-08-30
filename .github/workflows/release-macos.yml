@@ -28,6 +28,7 @@ env:
 jobs:
   windows:
     name: Build and verify Windows EXE + portable ZIP
+    needs: verify_macos_automatic_update
     uses: ./.github/workflows/windows-candidate.yml
     with:
       release_version: ${{ inputs.version }}
@@ -108,7 +109,7 @@ jobs:
 
   verify_candidate:
     name: Fresh-runner install, upgrade, and smoke gate
-    needs: build_candidate
+    needs: verify_macos_automatic_update
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -323,7 +324,7 @@ jobs:
 
   verify_macos_automatic_update:
     name: Previous public macOS release auto-updates and relaunches
-    needs: verify_final
+    needs: build_candidate
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -338,8 +339,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v5
         with:
-          name: macos-notarized-artifacts
-          path: out/release
+          name: macos-release-candidate
+          path: out/release-candidate
       - name: Resolve and install the previous public release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -362,7 +363,9 @@ jobs:
       - name: Create an isolated trusted mirror for the exact candidate
         run: |
           mkdir -p "${RUNNER_TEMP}/update-gate/assets" "${RUNNER_TEMP}/update-gate/metadata"
-          cp "out/release/${ARTIFACT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip" "${RUNNER_TEMP}/update-gate/assets/"
+          cp \
+            "out/release-candidate/${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}-candidate.zip" \
+            "${RUNNER_TEMP}/update-gate/assets/${ARTIFACT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip"
           node scripts/prepare-update-metadata.ts \
             --assets="${RUNNER_TEMP}/update-gate/assets" \
             --output="${RUNNER_TEMP}/update-gate/metadata" \
@@ -408,12 +411,26 @@ jobs:
             "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt" 2>/dev/null || true
           defaults read com.yukiryou.deepseek.yukiryou.ShipIt \
             > "${RUNNER_TEMP}/update-gate/diagnostics/ShipIt-preferences.txt" 2>&1 || true
+          node -e "const fs=require('node:fs');const p=process.env.RUNNER_TEMP+'/update-gate/diagnostics/desktop.log';if(fs.existsSync(p)){for(const line of fs.readFileSync(p,'utf8').split(/\r?\n/)){if(!line)continue;try{const entry=JSON.parse(line);if(/^(update\.|runtime\.)/.test(String(entry.event)))console.log(line)}catch{}}}"
+          for snapshot in "${RUNNER_TEMP}/update-gate/diagnostics"/{application-old-process-exit-timeout.json,processes-old-process-exit-timeout.log,installed-version.txt}; do
+            if [[ -f "${snapshot}" ]]; then
+              echo "===== $(basename "${snapshot}") ====="
+              if [[ "${snapshot}" == *processes-* ]]; then
+                grep -E 'DeepSeek YukiRyou|ShipIt|Squirrel' "${snapshot}" || true
+              else
+                cat "${snapshot}"
+              fi
+            fi
+          done
       - name: Upload updater gate diagnostics
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
           name: macos-automatic-update-diagnostics
-          path: ${{ runner.temp }}/update-gate/
+          path: |
+            ${{ runner.temp }}/update-gate/diagnostics/
+            ${{ runner.temp }}/update-gate/metadata/
+            ${{ runner.temp }}/update-gate/server.log
           if-no-files-found: warn
           retention-days: 14
 

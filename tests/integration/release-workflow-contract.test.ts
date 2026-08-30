@@ -36,6 +36,44 @@ interface ReleaseWorkflow {
 }
 
 describe('macOS release workflow contract', () => {
+  it('runs the previous-release automatic-update gate before expensive release jobs', async () => {
+    const workflow = parse(
+      await readFile(
+        join(process.cwd(), '.github', 'workflows', 'release-macos.yml'),
+        'utf8',
+      ),
+    ) as ReleaseWorkflow;
+    const automaticUpdate = workflow.jobs?.verify_macos_automatic_update;
+    const automaticUpdateSteps = automaticUpdate?.steps ?? [];
+    const downloadedArtifact = automaticUpdateSteps.find((step) =>
+      step.uses?.startsWith('actions/download-artifact@'),
+    );
+    const mirror = automaticUpdateSteps.find(
+      (step) => step.name === 'Create an isolated trusted mirror for the exact candidate',
+    );
+    const diagnostics = automaticUpdateSteps.find(
+      (step) => step.name === 'Upload updater gate diagnostics',
+    );
+
+    expect(automaticUpdate?.needs).toBe('build_candidate');
+    expect(downloadedArtifact?.with?.name).toBe('macos-release-candidate');
+    expect(downloadedArtifact?.with?.path).toBe('out/release-candidate');
+    expect(mirror?.run).toContain(
+      '${PRODUCT_NAME}-darwin-arm64-${RELEASE_VERSION}-candidate.zip',
+    );
+    expect(mirror?.run).toContain(
+      '${ARTIFACT_NAME}-darwin-arm64-${RELEASE_VERSION}.zip',
+    );
+    expect(diagnostics?.with?.path).toContain('update-gate/diagnostics/');
+    expect(diagnostics?.with?.path).not.toContain('update-gate/assets/');
+    expect(workflow.jobs?.windows?.needs).toBe('verify_macos_automatic_update');
+    expect(workflow.jobs?.verify_candidate?.needs).toBe(
+      'verify_macos_automatic_update',
+    );
+    expect(workflow.jobs?.soak_candidate?.needs).toBe('verify_candidate');
+    expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
+  });
+
   it('blocks release on the release candidate automatic update and relaunch gate', async () => {
     const [releaseSource, windowsSource, automaticUpdateTest, windowsGate] = await Promise.all([
       readFile(join(process.cwd(), '.github', 'workflows', 'release-macos.yml'), 'utf8'),
