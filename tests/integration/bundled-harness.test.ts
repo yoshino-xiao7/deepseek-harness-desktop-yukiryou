@@ -149,6 +149,7 @@ describe('bundled Harness runtime', () => {
       expect(companionScript).toContain("conversation.chat.turnTail");
       expect(companionScript).toContain("desktop-turn-changes");
       expect(companionScript).toContain("deepSeekYukiRyouReview");
+      expect(companionScript).not.toContain("dsh-balance");
       const unauthorized = await fetch(
         `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
         { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"kind":"account.balance"}' },
@@ -171,7 +172,7 @@ describe('bundled Harness runtime', () => {
         },
       );
       expect(authenticatedMarket.status).toBe(400);
-      const balance = await fetch(
+      const legacyBalance = await fetch(
         `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
         {
           method: 'POST',
@@ -182,12 +183,7 @@ describe('bundled Harness runtime', () => {
           body: '{"kind":"account.balance"}',
         },
       );
-      expect(balance.status).toBe(200);
-      await expect(balance.json()).resolves.toMatchObject({
-        status: 'unavailable',
-        reason: 'credential-unconfigured',
-        today: { status: 'ready', currency: 'CNY', amount: '0' },
-      });
+      expect(legacyBalance.status).toBe(400);
     },
     75_000,
   );

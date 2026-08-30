@@ -25,6 +25,7 @@ interface PreviewEntry {
   readonly candidate: PluginProfileCandidate;
   readonly stagingPreviewId: string;
   readonly expectedReceipt: ManagedInstallExpectedReceipt;
+  readonly expectedExternal: ManagedInstallExpectedExternal;
   readonly expiresAt: number;
 }
 
@@ -34,12 +35,19 @@ export type ManagedInstallExpectedReceipt = null | {
   readonly generation: string;
 };
 
+export type ManagedInstallExpectedExternal = null | {
+  readonly packageName: string;
+  readonly version: string;
+  readonly entryId: string;
+};
+
 export interface ManagedInstallTransaction {
   issue(input: {
     readonly generation: string;
     readonly candidate: PluginProfileCandidate;
     readonly stagingPreviewId: string;
     readonly expectedReceipt: ManagedInstallExpectedReceipt;
+    readonly expectedExternal?: ManagedInstallExpectedExternal;
   }): {
     readonly previewId: string;
     readonly profileGeneration: string;
@@ -55,6 +63,10 @@ export interface ManagedInstallTransaction {
 interface ManagedInstallTransactionOptions {
   readonly installer: ManagedInstaller;
   readonly bootstrap: Pick<PluginProfileBootstrap, 'prepare'>;
+  readonly externalAdoption?: {
+    prepareAdoption(identity: Exclude<ManagedInstallExpectedExternal, null>, generation: string): Promise<void>;
+    recoverAdoption(generation: string): Promise<void>;
+  };
   readonly now?: () => number;
   readonly randomId?: () => string;
   readonly ttlMs?: number;
@@ -83,6 +95,7 @@ export function createManagedInstallTransaction(
       readonly candidate: PluginProfileCandidate;
       readonly stagingPreviewId: string;
       readonly expectedReceipt: ManagedInstallExpectedReceipt;
+      readonly expectedExternal?: ManagedInstallExpectedExternal;
     }) {
       pruneExpired(previews, now());
       if (previews.size >= MAX_PREVIEWS) {
@@ -116,6 +129,8 @@ export function createManagedInstallTransaction(
           stagingPreviewId: input.stagingPreviewId,
           expectedReceipt:
             input.expectedReceipt === null ? null : Object.freeze({ ...input.expectedReceipt }),
+          expectedExternal:
+            input.expectedExternal == null ? null : Object.freeze({ ...input.expectedExternal }),
           expiresAt: now() + ttlMs,
         }),
       );
@@ -144,6 +159,7 @@ export function createManagedInstallTransaction(
       }
       previews.delete(previewId);
       mutationActive = true;
+      let adoptionPrepared = false;
       try {
         const staged = await options.installer.stage({
           generation: entry.generation,
@@ -155,6 +171,13 @@ export function createManagedInstallTransaction(
           !sameCandidate(staged.candidate, entry.candidate)
         ) {
           throw transactionError('generation-mismatch', 'Staged generation does not match preview');
+        }
+        if (entry.expectedExternal !== null) {
+          if (options.externalAdoption === undefined) {
+            throw transactionError('execute-failed', 'External plugin adoption is unavailable');
+          }
+          await options.externalAdoption.prepareAdoption(entry.expectedExternal, entry.generation);
+          adoptionPrepared = true;
         }
         await options.bootstrap.prepare(
           entry.generation,
@@ -168,6 +191,9 @@ export function createManagedInstallTransaction(
           stagingStatus: staged.status,
         });
       } catch (error) {
+        if (adoptionPrepared) {
+          await options.externalAdoption?.recoverAdoption(entry.generation).catch(() => undefined);
+        }
         if (isTransactionError(error)) throw error;
         throw transactionError(
           'execute-failed',

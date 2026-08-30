@@ -22,6 +22,15 @@ export interface RuntimeMarketClient {
       readonly versionPreference: 'catalog' | 'latest';
     },
   ): Promise<RuntimeManagedPreview>;
+  previewExternal(
+    origin: string,
+    identity: {
+      readonly packageName: string;
+      readonly currentVersion: string;
+      readonly repository: string;
+      readonly versionPreference: 'catalog' | 'latest';
+    },
+  ): Promise<RuntimeManagedPreview>;
   stage(origin: string, previewId: string): Promise<{
     readonly status: string;
     readonly profileGeneration: string;
@@ -45,6 +54,27 @@ export function createRuntimeMarketClient(token: string): RuntimeMarketClient {
         kind: 'preview',
         sourceRecordId: identity.sourceRecordId,
         itemId: identity.itemId,
+        versionPreference: identity.versionPreference,
+      });
+      const preview = validatedPreview(value);
+      if (preview === undefined) throw new Error('Runtime returned an invalid managed preview');
+      return preview;
+    },
+
+    async previewExternal(
+      origin: string,
+      identity: {
+        readonly packageName: string;
+        readonly currentVersion: string;
+        readonly repository: string;
+        readonly versionPreference: 'catalog' | 'latest';
+      },
+    ) {
+      const value = await execute(origin, token, {
+        kind: 'preview-external',
+        packageName: identity.packageName,
+        currentVersion: identity.currentVersion,
+        repository: identity.repository,
         versionPreference: identity.versionPreference,
       });
       const preview = validatedPreview(value);

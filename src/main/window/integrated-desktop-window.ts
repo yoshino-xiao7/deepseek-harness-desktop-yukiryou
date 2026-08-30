@@ -55,7 +55,6 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       onAppearance: () => {},
       onLocale: options.onLocale,
       onUpdateCommand: options.onUpdateCommand,
-      onAccountBalanceRequest: options.onAccountBalanceRequest,
       onFeaturePreferencesChange: options.onFeaturePreferencesChange,
       onHarnessContext: options.onHarnessContext,
       onHarnessReviewIntent: options.onHarnessReviewIntent,
@@ -72,7 +71,7 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       onExternalPluginControl: options.onExternalPluginControl,
     });
     this.#productBridge.setFeaturePreferences(
-      options.initialFeaturePreferences ?? { accountBalance: true, workspaceReview: true },
+      options.initialFeaturePreferences ?? { workspaceReview: true },
     );
     this.#productWindow.webContents.on('did-finish-load', () => {
       this.#productBridge.restoreAfterLoad();

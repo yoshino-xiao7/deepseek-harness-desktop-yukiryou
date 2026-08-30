@@ -25,10 +25,8 @@ export function createManagedPreviewVault(options) {
   const previews = new Map();
   let mutationActive = false;
 
-  return Object.freeze({
-    async issue(identity) {
+  async function issueInspected(inspected) {
       pruneExpired(previews, now(), cancel);
-      const inspected = await inspector.inspectVerified(identity);
       if (!isRecord(inspected) || !isRecord(inspected.value) || !isRecord(inspected.installation)) {
         throw vaultError('not-installable', 'Inspection did not produce a verified installation');
       }
@@ -74,6 +72,15 @@ export function createManagedPreviewVault(options) {
         candidate: installation.candidate,
         inspection: inspected.value,
       });
+  }
+
+  return Object.freeze({
+    async issue(identity) {
+      return issueInspected(await inspector.inspectVerified(identity));
+    },
+
+    async issueExternal(identity) {
+      return issueInspected(await inspector.inspectExternalVerified(identity));
     },
 
     async stage(previewId) {

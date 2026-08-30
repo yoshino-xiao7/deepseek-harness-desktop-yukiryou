@@ -44,6 +44,32 @@ describe('RuntimeMarketClient', () => {
     );
   });
 
+  it('uses the protected external preview operation for an installed package', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      value: {
+        previewId: 'preview-77777777-7777-4777-8777-777777777777',
+        profileGeneration: generation,
+        expiresInSeconds: 300,
+        candidate,
+        inspection: { status: 'artifact-verified', executionReady: false },
+      },
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createRuntimeMarketClient(token);
+
+    await expect(client.previewExternal('http://127.0.0.1:31337', {
+      packageName: '@community/example', currentVersion: '1.2.3',
+      repository: 'https://github.com/community/example', versionPreference: 'latest',
+    })).resolves.toMatchObject({ profileGeneration: generation });
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({
+      body: JSON.stringify({
+        kind: 'preview-external', packageName: '@community/example', currentVersion: '1.2.3',
+        repository: 'https://github.com/community/example', versionPreference: 'latest',
+      }),
+    }));
+  });
+
   it('rejects malformed Host responses and invalid preview IDs before staging', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       ok: true,

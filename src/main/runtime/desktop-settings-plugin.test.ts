@@ -135,7 +135,7 @@ describe('desktop plugin management tab', () => {
     const setFeaturePreference = vi.fn();
     const window = {
       deepSeekYukiRyouFeatures: {
-        getSnapshot: () => ({ accountBalance: true, workspaceReview: true }),
+        getSnapshot: () => ({ workspaceReview: true }),
         subscribe: vi.fn().mockReturnValue(vi.fn()),
         set: setFeaturePreference,
       },
@@ -192,15 +192,13 @@ describe('desktop plugin management tab', () => {
     });
     const featureTree = features?.component({ t: (key: string) => key });
     const switches = elements(featureTree).filter((node) => node.props.role === 'switch');
-    expect(switches).toHaveLength(2);
-    expect(switches.map((node) => node.props['aria-checked'])).toEqual([true, true]);
+    expect(switches).toHaveLength(1);
+    expect(switches.map((node) => node.props['aria-checked'])).toEqual([true]);
     (switches[0]?.props.onClick as (() => void) | undefined)?.();
     (switches[0]?.props.onClick as (() => void) | undefined)?.();
-    (switches[1]?.props.onClick as (() => void) | undefined)?.();
     expect(setFeaturePreference.mock.calls).toEqual([
-      [{ key: 'accountBalance', enabled: false }],
-      [{ key: 'accountBalance', enabled: true }],
       [{ key: 'workspaceReview', enabled: false }],
+      [{ key: 'workspaceReview', enabled: true }],
     ]);
   });
 });

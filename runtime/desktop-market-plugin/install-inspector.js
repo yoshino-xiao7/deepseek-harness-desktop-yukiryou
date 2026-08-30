@@ -69,10 +69,60 @@ export function createInstallInspector(options) {
       }
   }
 
+  async function inspectExternalVerified({ packageName, currentVersion, repository, versionPreference = 'latest' } = {}) {
+    const canonicalRepository = canonicalGitHubRepository(repository);
+    if (!NPM_PACKAGE_PATTERN.test(packageName ?? '') || !STABLE_VERSION_PATTERN.test(currentVersion ?? '') ||
+      canonicalRepository === undefined || canonicalRepository.length > 300 ||
+      (versionPreference !== 'catalog' && versionPreference !== 'latest')) {
+      throw inspectionError('invalid-request', 'Invalid external plugin identity');
+    }
+    const key = `external\0${packageName}\0${currentVersion}\0${canonicalRepository}\0${versionPreference}`;
+    const timestamp = now();
+    const cached = cache.get(key);
+    if (cached !== undefined && timestamp - cached.storedAt < CACHE_MS) return cached.value;
+    const pending = inFlight.get(key);
+    if (pending !== undefined) return pending;
+    const operation = (async () => {
+      let targetVersion = currentVersion;
+      if (versionPreference === 'latest') {
+        const packument = await requestPackument(packageName);
+        const tags = isRecord(packument) && isRecord(packument['dist-tags']) ? packument['dist-tags'] : undefined;
+        const latest = tags?.latest;
+        if (typeof latest !== 'string' || !STABLE_VERSION_PATTERN.test(latest)) {
+          throw inspectionError('invalid-metadata', 'npm latest version is unavailable');
+        }
+        if (compareStableVersions(latest, currentVersion) > 0) targetVersion = latest;
+      }
+      const item = Object.freeze({
+        id: `external-installed:${packageName}`,
+        displayName: packageName,
+        repository: canonicalRepository,
+        categories: Object.freeze([]),
+        package: Object.freeze({ name: packageName, version: targetVersion }),
+        installability: Object.freeze({ state: 'candidate', reason: 'verified-external-installation' }),
+        provenance: Object.freeze({ sourceId: 'external-installed', observedAt: new Date(now()).toISOString() }),
+      });
+      const manifest = await requestManifest(packageName, targetVersion);
+      const value = await inspectManifest(item, manifest, {
+        catalogVersion: currentVersion,
+        observedAt: new Date(now()).toISOString(), platform, architecture,
+      }, graphResolver, artifactVerifier);
+      cache.set(key, { value, storedAt: now() });
+      return value;
+    })();
+    inFlight.set(key, operation);
+    try {
+      return await operation;
+    } finally {
+      inFlight.delete(key);
+    }
+  }
+
   return Object.freeze({
     async inspect(identity) {
       return (await inspectVerified(identity)).value;
     },
+    inspectExternalVerified,
     inspectVerified,
   });
 }

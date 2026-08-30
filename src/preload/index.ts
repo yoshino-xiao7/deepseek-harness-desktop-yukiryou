@@ -9,13 +9,6 @@ import {
   validatedHarnessContext,
 } from '../shared/desktop-companion.js';
 import {
-  ACCOUNT_BALANCE_REQUEST_CHANNEL,
-  ACCOUNT_BALANCE_STATE_CHANNEL,
-  type AccountBalanceSnapshot,
-  validatedAccountBalanceSnapshot,
-} from '../shared/account-balance.js';
-
-import {
   DESKTOP_CHROME_CONTENT_TOKEN,
   DESKTOP_CHROME_SIDEBAR_TOKEN,
   HARNESS_APPEARANCE_CHANNEL,
@@ -108,8 +101,6 @@ let featurePreferences = DEFAULT_DESKTOP_FEATURE_PREFERENCES;
 const featurePreferenceListeners = new Set<(
   state: DesktopFeaturePreferences,
 ) => void>();
-let balanceState: AccountBalanceSnapshot = { status: 'loading' };
-const balanceListeners = new Set<(state: AccountBalanceSnapshot) => void>();
 const workspaceReferenceListeners = new Map<
   string,
   Set<(reference: WorkspaceConversationInsertion) => void>
@@ -379,28 +370,6 @@ contextBridge.exposeInMainWorld('deepSeekYukiRyouPlugins', {
       pendingManagedPluginExecutions.set(requestId, { resolve, timer });
       ipcRenderer.send(MANAGED_PLUGIN_EXECUTE_REQUEST_CHANNEL, request);
     });
-  },
-});
-
-ipcRenderer.on(ACCOUNT_BALANCE_STATE_CHANNEL, (_event, value: unknown) => {
-  const snapshot = validatedAccountBalanceSnapshot(value);
-  if (snapshot === undefined) return;
-  if (
-    snapshot.status === 'loading' &&
-    (balanceState.status === 'ready' || balanceState.status === 'unavailable' && balanceState.lastGood !== undefined)
-  ) return;
-  balanceState = snapshot;
-  for (const listener of balanceListeners) listener(snapshot);
-});
-
-contextBridge.exposeInMainWorld('deepSeekYukiRyouBalance', {
-  getSnapshot: (): AccountBalanceSnapshot => balanceState,
-  subscribe: (listener: (state: AccountBalanceSnapshot) => void): (() => void) => {
-    balanceListeners.add(listener);
-    return () => balanceListeners.delete(listener);
-  },
-  refresh: (force = false): void => {
-    ipcRenderer.send(ACCOUNT_BALANCE_REQUEST_CHANNEL, force === true);
   },
 });
 

@@ -1,4 +1,4 @@
-/* global clearTimeout, document, setTimeout, window */
+/* global document, window */
 
 window.__ModuleLoader__.load({
   id: '@dsh-desktop/companion',
@@ -223,102 +223,11 @@ window.__ModuleLoader__.load({
       return normalizedPath.startsWith(`${normalizedRoot}/`) ? normalizedPath.slice(normalizedRoot.length + 1) : path;
     }
 
-    function BalanceCard({ wide }) {
-      const bridge = window.deepSeekYukiRyouBalance;
-      const featureBridge = window.deepSeekYukiRyouFeatures;
-      const [features, setFeatures] = React.useState(
-        () => featureBridge?.getSnapshot() ?? { accountBalance: true, workspaceReview: true },
-      );
-      const [snapshot, setSnapshot] = React.useState(
-        () => bridge?.getSnapshot() ?? {
-          status: 'unavailable', reason: 'network', today: { status: 'unavailable' },
-        },
-      );
-      const todayRetryCount = React.useRef(0);
-      React.useEffect(
-        () => featureBridge?.subscribe((next) => setFeatures(next)),
-        [featureBridge],
-      );
-      React.useEffect(() => {
-        if (bridge === undefined || !features.accountBalance) return undefined;
-        const unsubscribe = bridge.subscribe((next) => setSnapshot(next));
-        bridge.refresh(false);
-        return unsubscribe;
-      }, [bridge, features.accountBalance]);
-      React.useEffect(() => {
-        if (bridge === undefined || !features.accountBalance || snapshot.status !== 'ready') return undefined;
-        if (snapshot.today.status === 'ready') {
-          todayRetryCount.current = 0;
-          return undefined;
-        }
-        if (todayRetryCount.current >= 8) return undefined;
-        todayRetryCount.current += 1;
-        const timer = setTimeout(() => bridge.refresh(false), 1_000);
-        return () => clearTimeout(timer);
-      }, [bridge, features.accountBalance, snapshot]);
-      if (!features.accountBalance) return null;
-      const language = document.documentElement.lang.toLowerCase();
-      const zh = !language.startsWith('en');
-      const shown = snapshot.status === 'unavailable' && snapshot.lastGood ? snapshot.lastGood : snapshot;
-      const values = shown.status === 'ready' ? shown.balances : [];
-      const balanceSummary = values.length > 0
-        ? values.map((amount) => `${amount.currency === 'CNY' ? '¥' : '$'}${amount.total} ${amount.currency}`).join(' · ')
-        : label(snapshot, zh);
-      const today = snapshot.today ?? shown.today;
-      const todaySummary = today?.status === 'ready'
-        ? `${today.partial ? '≈ ' : ''}¥${today.amount}`
-        : (zh ? '暂时无法统计' : 'Temporarily unavailable');
-      if (!wide) {
-        return React.createElement('span', { className: 'dsh-balance-wrap dsh-balance-wrap-rail' },
-          React.createElement('button', {
-            type: 'button', className: 'dsh-balance-rail',
-            onClick: () => bridge?.refresh(true),
-            'aria-label': `${zh ? '账户余额' : 'Account balance'} ${balanceSummary}; ${zh ? '今日消耗' : 'Today spend'} ${todaySummary}`,
-          },
-            React.createElement('span', { className: 'dsh-balance-rail-default' }, '¥'),
-            React.createElement('span', { className: 'dsh-balance-rail-today' }, todaySummary),
-          ),
-        );
-      }
-      return React.createElement('span', { className: 'dsh-balance-wrap' },
-        React.createElement('button', {
-          type: 'button', className: 'dsh-balance-card', 'data-testid': 'desktop-account-overview',
-          onClick: () => bridge?.refresh(true), disabled: snapshot.status === 'loading',
-        },
-          React.createElement('span', { className: 'dsh-balance-icon', 'aria-hidden': 'true' }, '¥'),
-          React.createElement('span', { className: 'dsh-balance-copy' },
-            React.createElement('span', { className: 'dsh-balance-state dsh-balance-account' },
-              React.createElement('span', { className: 'dsh-balance-label' }, zh ? '账户余额' : 'Account balance'),
-              React.createElement('span', { className: 'dsh-balance-value' }, balanceSummary),
-            ),
-            React.createElement('span', { className: 'dsh-balance-state dsh-balance-today' },
-              React.createElement('span', { className: 'dsh-balance-label' }, zh ? '今日消耗' : 'Today spend'),
-              React.createElement('span', { className: 'dsh-balance-value' }, todaySummary),
-            ),
-          ),
-          React.createElement('span', { className: 'dsh-balance-refresh', 'aria-hidden': 'true' }, '↻'),
-        ),
-      );
-    }
-
-    function label(snapshot, zh) {
-      if (snapshot.status === 'loading') return zh ? '正在查询余额…' : 'Loading balance…';
-      if (snapshot.status === 'ready') return snapshot.isAvailable ? (zh ? '余额可用' : 'Balance available') : (zh ? '余额不足' : 'Balance unavailable');
-      const labels = {
-        'credential-unconfigured': zh ? '请先在模型设置中配置 API Key' : 'Configure an API key in Models',
-        'credential-unauthorized': zh ? 'API Key 无效，请检查设置' : 'API key was rejected',
-        'rate-limited': zh ? '查询过于频繁，请稍后重试' : 'Too many requests; try later',
-        network: zh ? '暂时无法查询余额' : 'Balance is temporarily unavailable',
-        'invalid-response': zh ? '余额服务返回异常' : 'Unexpected balance response',
-      };
-      return labels[snapshot.reason];
-    }
-
     function installStyle() {
-      if (document.querySelector('style[data-dsh-balance-style]')) return;
+      if (document.querySelector('style[data-dsh-desktop-companion-style]')) return;
       const style = document.createElement('style');
-      style.dataset.dshBalanceStyle = '';
-      style.textContent = `.dsh-balance-wrap{position:relative;display:block;width:100%}.dsh-balance-card{display:grid;width:100%;min-height:48px;margin:3px 0;padding:4px 3px;border:0;border-radius:8px;grid-template-columns:22px minmax(0,1fr) 16px;align-items:center;column-gap:10px;color:inherit;background:transparent;cursor:pointer;font:inherit;text-align:left}.dsh-balance-card:hover{background:rgb(127 127 127/.08)}.dsh-balance-card:focus-visible{outline:2px solid rgb(73 101 223/.45);outline-offset:-2px}.dsh-balance-card:disabled{cursor:default;opacity:.7}.dsh-balance-icon{display:grid;width:22px;height:22px;place-items:center;color:currentColor;font-size:14px;font-weight:600}.dsh-balance-copy{display:block;min-width:0}.dsh-balance-state{min-width:0}.dsh-balance-today{display:none}.dsh-balance-card:hover .dsh-balance-account,.dsh-balance-card:focus-visible .dsh-balance-account{display:none}.dsh-balance-card:hover .dsh-balance-today,.dsh-balance-card:focus-visible .dsh-balance-today{display:block}.dsh-balance-label,.dsh-balance-value{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh-balance-label{font-size:14px;font-weight:400;line-height:18px}.dsh-balance-value{width:100%;color:rgb(107 114 128);font-size:11px;line-height:16px}.dsh-balance-refresh{width:16px;color:rgb(107 114 128);font-size:14px;text-align:center}.dsh-balance-rail{display:grid;width:36px;height:36px;margin:4px auto;border:0;border-radius:8px;place-items:center;color:inherit;background:transparent;cursor:pointer;font-weight:600}.dsh-balance-rail:hover{background:rgb(127 127 127/.08)}.dsh-balance-rail-today{display:none;max-width:34px;overflow:hidden;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.dsh-balance-rail:hover .dsh-balance-rail-default,.dsh-balance-rail:focus-visible .dsh-balance-rail-default{display:none}.dsh-balance-rail:hover .dsh-balance-rail-today,.dsh-balance-rail:focus-visible .dsh-balance-rail-today{display:block}.dsh-produced-files{display:grid;margin-top:16px;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:6px 8px;font-size:13px;line-height:22px}.dsh-produced-label,.dsh-produced-more{color:var(--dsw-alias-label-tertiary)}.dsh-produced-row{display:flex;min-width:0;gap:8px;overflow:hidden}.dsh-produced-file{max-width:320px;padding:0 8px;overflow:hidden;border:0;border-radius:6px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);cursor:pointer;font:inherit;text-overflow:ellipsis;white-space:nowrap}.dsh-produced-file:hover{color:var(--dsw-alias-label-primary);text-decoration:underline}.dsh-turn-changes{margin-top:16px;overflow:hidden;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base)}.dsh-turn-changes-header{display:flex;min-height:58px;padding:10px 14px;align-items:center;gap:11px;border-bottom:1px solid var(--dsw-alias-border-l2)}.dsh-turn-changes-icon{display:grid;width:34px;height:34px;flex:none;border-radius:9px;place-items:center;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);font-size:15px}.dsh-turn-changes-heading{display:flex;min-width:0;flex:1;flex-direction:column;line-height:20px}.dsh-turn-changes-heading strong{overflow:hidden;font-size:14px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.dsh-turn-changes-heading small{font-size:12px}.dsh-turn-additions{color:var(--dsw-alias-green-label,#079447)}.dsh-turn-deletions{color:var(--dsw-alias-red-label,#c93736)}.dsh-turn-actions{display:flex;flex:none;align-items:center}.dsh-turn-change-list{padding:4px 0}.dsh-turn-change-row{display:flex;width:100%;height:40px;padding:0 16px;border:0;align-items:center;gap:12px;color:inherit;background:transparent;cursor:pointer;font:inherit;text-align:left}.dsh-turn-change-row:hover{background:var(--dsw-alias-interactive-bg-hover)}.dsh-turn-change-row:focus-visible,.dsh-turn-show-more:focus-visible{box-shadow:inset 0 0 0 2px var(--dsw-alias-border-l3);outline:none}.dsh-turn-change-path{min-width:0;flex:1;overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.dsh-turn-directory{color:var(--dsw-alias-label-tertiary)}.dsh-turn-change-stats{flex:none;font-size:12px}.dsh-turn-show-more{width:100%;height:36px;padding:0 16px;border:0;border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:transparent;cursor:pointer;font:inherit;font-size:12px;text-align:left}.dsh-turn-show-more:hover{background:var(--dsw-alias-interactive-bg-hover)}`;
+      style.dataset.dshDesktopCompanionStyle = '';
+      style.textContent = `.dsh-produced-files{display:grid;margin-top:16px;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:6px 8px;font-size:13px;line-height:22px}.dsh-produced-label,.dsh-produced-more{color:var(--dsw-alias-label-tertiary)}.dsh-produced-row{display:flex;min-width:0;gap:8px;overflow:hidden}.dsh-produced-file{max-width:320px;padding:0 8px;overflow:hidden;border:0;border-radius:6px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);cursor:pointer;font:inherit;text-overflow:ellipsis;white-space:nowrap}.dsh-produced-file:hover{color:var(--dsw-alias-label-primary);text-decoration:underline}.dsh-turn-changes{margin-top:16px;overflow:hidden;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base)}.dsh-turn-changes-header{display:flex;min-height:58px;padding:10px 14px;align-items:center;gap:11px;border-bottom:1px solid var(--dsw-alias-border-l2)}.dsh-turn-changes-icon{display:grid;width:34px;height:34px;flex:none;border-radius:9px;place-items:center;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);font-size:15px}.dsh-turn-changes-heading{display:flex;min-width:0;flex:1;flex-direction:column;line-height:20px}.dsh-turn-changes-heading strong{overflow:hidden;font-size:14px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.dsh-turn-changes-heading small{font-size:12px}.dsh-turn-additions{color:var(--dsw-alias-green-label,#079447)}.dsh-turn-deletions{color:var(--dsw-alias-red-label,#c93736)}.dsh-turn-actions{display:flex;flex:none;align-items:center}.dsh-turn-change-list{padding:4px 0}.dsh-turn-change-row{display:flex;width:100%;height:40px;padding:0 16px;border:0;align-items:center;gap:12px;color:inherit;background:transparent;cursor:pointer;font:inherit;text-align:left}.dsh-turn-change-row:hover{background:var(--dsw-alias-interactive-bg-hover)}.dsh-turn-change-row:focus-visible,.dsh-turn-show-more:focus-visible{box-shadow:inset 0 0 0 2px var(--dsw-alias-border-l3);outline:none}.dsh-turn-change-path{min-width:0;flex:1;overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.dsh-turn-directory{color:var(--dsw-alias-label-tertiary)}.dsh-turn-change-stats{flex:none;font-size:12px}.dsh-turn-show-more{width:100%;height:36px;padding:0 16px;border:0;border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:transparent;cursor:pointer;font:inherit;font-size:12px;text-align:left}.dsh-turn-show-more:hover{background:var(--dsw-alias-interactive-bg-hover)}`;
       document.head.append(style);
     }
 
@@ -408,15 +317,6 @@ window.__ModuleLoader__.load({
       installStyle();
       ctx.conversationEvents.register(turnChangesDefinition);
       ctx.effect(() => installContextPublisher(ctx), 'dsh-desktop: companion context publisher');
-      ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register(
-        {
-          name: 'sidebar.footer.action',
-          id: 'desktop-account-balance',
-          order: 10,
-          label: 'Account balance',
-        },
-        BalanceCard,
-      ));
       ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register(
         {
           name: 'conversation.chat.turnTail',

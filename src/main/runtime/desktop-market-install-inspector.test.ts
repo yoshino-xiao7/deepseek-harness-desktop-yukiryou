@@ -9,6 +9,12 @@ interface Inspector {
     readonly itemId: string;
     readonly versionPreference?: 'catalog' | 'latest';
   }): Promise<Record<string, unknown>>;
+  inspectExternalVerified(identity: {
+    readonly packageName: string;
+    readonly currentVersion: string;
+    readonly repository: string;
+    readonly versionPreference?: 'catalog' | 'latest';
+  }): Promise<Record<string, unknown>>;
 }
 
 const item = {
@@ -145,6 +151,56 @@ describe('desktop market install inspector', () => {
     });
 
     expect(requestManifest).toHaveBeenCalledTimes(2);
+  });
+
+  it('inspects an installed external package without requiring a catalog record', async () => {
+    const latestManifest = {
+      ...manifest,
+      version: '1.3.0',
+      dist: {
+        ...manifest.dist,
+        tarball: 'https://registry.npmjs.org/@community/dsh-example/-/dsh-example-1.3.0.tgz',
+      },
+    };
+    const requestManifest = vi.fn(async () => latestManifest);
+    const inspector = await createInspector({
+      catalog: { read: vi.fn(() => { throw new Error('catalog must not be used'); }) },
+      requestPackument: async () => ({ 'dist-tags': { latest: '1.3.0' } }),
+      requestManifest,
+    });
+
+    const result = await inspector.inspectExternalVerified({
+      packageName: item.package.name,
+      currentVersion: item.package.version,
+      repository: 'git+https://github.com/community/example.git',
+      versionPreference: 'latest',
+    });
+
+    expect(requestManifest).toHaveBeenCalledWith(item.package.name, '1.3.0');
+    expect(result).toMatchObject({
+      value: {
+        status: 'artifact-verified',
+        identity: {
+          sourceRecordId: 'external-installed',
+          packageName: item.package.name,
+          catalogVersion: item.package.version,
+          version: '1.3.0',
+        },
+      },
+      installation: { candidate: { packageName: item.package.name, version: '1.3.0' } },
+    });
+  });
+
+  it('blocks external adoption when npm repository continuity does not match', async () => {
+    const inspector = await createInspector();
+    const result = await inspector.inspectExternalVerified({
+      packageName: item.package.name,
+      currentVersion: item.package.version,
+      repository: 'https://github.com/another-owner/another-repository',
+      versionPreference: 'catalog',
+    });
+
+    expect(result).toMatchObject({ value: { status: 'blocked', blockers: ['repository'] } });
   });
 
   it('rejects unknown version preferences', async () => {

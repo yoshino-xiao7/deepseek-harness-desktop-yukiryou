@@ -526,6 +526,10 @@ describe('desktop community plugin catalog', () => {
         entry: Record<string, unknown>,
         items: readonly Record<string, unknown>[],
       ): Record<string, unknown> | undefined;
+      mergeInstalledInventory(
+        entries: readonly Record<string, unknown>[],
+        snapshot: Record<string, unknown>,
+      ): readonly Record<string, unknown>[];
       matchesInstalledScope(entry: Record<string, unknown>, scope: 'user' | 'system' | 'all'): boolean;
     } | undefined;
     const register = vi.fn();
@@ -581,9 +585,11 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain("referrerPolicy: 'no-referrer'");
     expect(source).toContain("'/plugins/@dsh-desktop/market/install-inspection'");
     expect(source).toContain("'/plugins/@dsh-desktop/market/update-check'");
-    expect(source).toContain('readInstalledUpdate(packageName, entry.receipt.version)');
+    expect(source).toContain('readInstalledUpdate(packageName, installedVersion)');
     expect(hostSource).toContain("const UPDATE_CHECK_ROUTE = '/plugins/@dsh-desktop/market/update-check'");
     expect(hostSource).toContain('const value = await updateChecker.check({');
+    expect(hostSource).toContain("payload?.kind === 'preview-external'");
+    expect(hostSource).toContain('managedPreviewVault.issueExternal({');
     expect(source).toContain("'x-dsh-desktop-market-inspection': '1'");
     expect(source).toContain("executionReady !== false");
     expect(source).toContain('formatDateTime(selected.provenance.observedAt)');
@@ -597,11 +603,15 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain('window.deepSeekYukiRyouPlugins.controlExternal');
     expect(source).toContain('entry.externalControl.enabled');
     expect(source).toContain("controlExternalPlugin(entry, 'uninstall')");
+    expect(source).toContain('entryId: capability.entryIds[0]');
+    expect(source).toContain("installability: { state: 'candidate', reason: 'verified-external-installation' }");
+    expect(source).toContain("operation === 'adopt' ? 'adoptPreviewTitle'");
+    expect(source).toContain("t(external === undefined ? 'readonlyState' : 'externalState')");
     expect(source).toContain("ownership: receipt === undefined ? inferredOwnership(entry.moduleName) : 'managed'");
     expect(source).toContain("format(t, 'installedAt', { time: formatDateTime(entry.receipt.installedAt) })");
     expect(source).toContain("format(t, 'blockedAttempt', { version: entry.receipt.lastBlockedAttempt.version })");
     expect(source).toContain('onClick: () => openInstalledDetails(entry)');
-    expect(source).toContain("t(entry.receipt ? 'checkUpdates' : 'details')");
+    expect(source).toContain("t(entry.receipt || entry.externalControl ? 'checkUpdates' : 'details')");
     expect(source).toContain("selectedInstalled ? 'checkUpdates' : 'inspect'");
     expect(source).toContain("inspection.value.identity.catalogVersion");
     expect(source).toContain("format(t, 'catalogVersionInline', { version: item.package.version })");
@@ -635,6 +645,24 @@ describe('desktop community plugin catalog', () => {
     expect(plugin?.matchesInstalledScope({ ownership: 'system' }, 'system')).toBe(true);
     expect(plugin?.matchesInstalledScope({ ownership: 'managed' }, 'system')).toBe(false);
     expect(plugin?.matchesInstalledScope({ ownership: 'dependency' }, 'all')).toBe(true);
+    expect(plugin?.mergeInstalledInventory([{
+      entryId: 'profile-bundle:dsh-deepseek-account',
+      moduleName: 'dsh-deepseek-account',
+      enabled: true,
+    }], {
+      entries: [],
+      externalEntries: [{
+        packageName: 'dsh-deepseek-account',
+        version: '0.1.2',
+        entryIds: ['deepseek-account'],
+        enabled: true,
+        allowedActions: ['disable', 'uninstall'],
+        repository: 'https://github.com/yoshino-xiao7/dsh-deepseek-account',
+      }],
+    })).toEqual([expect.objectContaining({
+      moduleName: 'dsh-deepseek-account',
+      externalControl: expect.objectContaining({ packageName: 'dsh-deepseek-account' }),
+    })]);
   });
 });
 

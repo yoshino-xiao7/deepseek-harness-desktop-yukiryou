@@ -198,68 +198,17 @@ describe('packaged desktop application', () => {
             );
             if (harness === undefined) return undefined;
             return harness.executeJavaScript(`(() => {
-              const bridge = window.deepSeekYukiRyouBalance;
-              const card = document.querySelector('[data-testid="desktop-account-overview"]');
-              const value = card?.querySelector('.dsh-balance-value');
-              const balanceIcon = card?.querySelector('.dsh-balance-icon');
-              const accountState = card?.querySelector('.dsh-balance-account');
-              const todayState = card?.querySelector('.dsh-balance-today');
-              const settings = [...document.querySelectorAll('button')].find(
-                (button) => /^(设置|Settings)$/.test(button.textContent?.trim() ?? ''),
-              );
-              const settingsIcon = settings?.querySelector('svg');
-              const balanceIconBounds = balanceIcon?.getBoundingClientRect();
-              const settingsIconBounds = settingsIcon?.getBoundingClientRect();
-              const labelBounds = card?.querySelector('.dsh-balance-label')?.getBoundingClientRect();
-              const valueBounds = value?.getBoundingClientRect();
               return {
-                text: card?.textContent,
-                hasCard: card !== null,
-                hasPopup: document.querySelector('[role="tooltip"]') !== null,
-                hasStyle: document.querySelector('style[data-dsh-balance-style]') !== null,
-                accountVisible: accountState === null
-                  ? undefined
-                  : getComputedStyle(accountState).display !== 'none',
-                todayDisplay: todayState === null
-                  ? undefined
-                  : getComputedStyle(todayState).display,
-                valueClipped: value instanceof HTMLElement
-                  ? value.scrollWidth > value.clientWidth
-                  : undefined,
-                valueBelowLabel: labelBounds && valueBounds
-                  ? valueBounds.top >= labelBounds.bottom
-                  : undefined,
-                leadingOffset: balanceIconBounds && settingsIconBounds
-                  ? Math.round(
-                      balanceIconBounds.left + balanceIconBounds.width / 2
-                      - settingsIconBounds.left - settingsIconBounds.width / 2,
-                    )
-                  : undefined,
-                bridgeShape: {
-                  getSnapshot: typeof bridge?.getSnapshot,
-                  subscribe: typeof bridge?.subscribe,
-                  refresh: typeof bridge?.refresh,
-                },
+                bridge: typeof window.deepSeekYukiRyouBalance,
+                hasLegacyCard: document.querySelector('[data-testid="desktop-account-overview"]') !== null,
               };
             })()`);
           }),
           { timeout: 10_000 },
         )
         .toMatchObject({
-          hasCard: true,
-          hasPopup: false,
-          hasStyle: true,
-          text: expect.stringMatching(/账户余额|Account balance/),
-          accountVisible: true,
-          todayDisplay: 'none',
-          valueClipped: false,
-          valueBelowLabel: true,
-          leadingOffset: 0,
-          bridgeShape: {
-            getSnapshot: 'function',
-            subscribe: 'function',
-            refresh: 'function',
-          },
+          bridge: 'undefined',
+          hasLegacyCard: false,
         });
       expect(
         await shellPage!.evaluate(

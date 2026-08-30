@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 interface ManagedPreviewVault {
   issue(identity: Record<string, unknown>): Promise<Record<string, unknown>>;
+  issueExternal(identity: Record<string, unknown>): Promise<Record<string, unknown>>;
   stage(previewId: string): Promise<Record<string, unknown>>;
 }
 
@@ -21,12 +22,11 @@ const candidate = {
 const plan = { schemaVersion: 1, root: '@community/example@1.2.3' };
 
 function inspector(installation: unknown = { generation, candidate, plan }) {
-  return {
-    inspectVerified: vi.fn(async () => ({
+  const result = async () => ({
       value: { status: installation == null ? 'blocked' : 'artifact-verified', executionReady: false },
       installation,
-    })),
-  };
+    });
+  return { inspectVerified: vi.fn(result), inspectExternalVerified: vi.fn(result) };
 }
 
 describe('desktop market managed preview vault', () => {
@@ -61,6 +61,21 @@ describe('desktop market managed preview vault', () => {
     expect(stage).toHaveBeenCalledWith({ generation, plan: planWithArtifacts });
     await expect(vault.stage(preview.previewId as string)).rejects
       .toMatchObject({ code: 'catalog:vault-preview-unavailable' });
+  });
+
+  it('issues external previews through the same frozen one-shot vault', async () => {
+    const source = inspector();
+    const vault = await createVault({
+      inspector: source, installer: { stage: vi.fn(async () => ({ status: 'staged' })) },
+      randomId: () => '66666666-6666-4666-8666-666666666666',
+    });
+
+    await expect(vault.issueExternal({
+      packageName: '@community/example', currentVersion: '1.2.3',
+      repository: 'https://github.com/community/example', versionPreference: 'latest',
+    })).resolves.toMatchObject({ candidate, profileGeneration: generation });
+    expect(source.inspectExternalVerified).toHaveBeenCalledOnce();
+    expect(source.inspectVerified).not.toHaveBeenCalled();
   });
 
   it('expires previews and blocks unverified inspections without staging', async () => {

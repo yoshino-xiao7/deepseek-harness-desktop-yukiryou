@@ -223,6 +223,13 @@ export function apply(ctx) {
                 itemId: payload.itemId,
                 versionPreference: payload.versionPreference,
               })
+            : payload?.kind === 'preview-external'
+              ? await managedPreviewVault.issueExternal({
+                  packageName: payload.packageName,
+                  currentVersion: payload.currentVersion,
+                  repository: payload.repository,
+                  versionPreference: payload.versionPreference,
+                })
             : payload?.kind === 'stage'
               ? await managedPreviewVault.stage(payload.previewId)
               : undefined;

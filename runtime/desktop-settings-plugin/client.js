@@ -10,8 +10,6 @@ window.__ModuleLoader__.load({
     const namespace = 'settings.desktop';
     const dictionaries = {
       zh: {
-        'features.balance.title': '显示账户余额',
-        'features.balance.description': '在主侧栏显示账户余额与今日消耗；关闭后也停止桌面端余额查询，避免与插件提供的同类功能冲突。',
         'features.workspace.title': '启用 Workspace Review',
         'features.workspace.description': '显示右侧只读工作区、变更和文件预览；关闭后隐藏入口且不能再展开工作区。',
         'plugins.tab': '管理说明',
@@ -76,8 +74,6 @@ window.__ModuleLoader__.load({
         'about.footer': 'Built with DeepSeek Harness · Designed by YukiRyou',
       },
       en: {
-        'features.balance.title': 'Show account balance',
-        'features.balance.description': 'Show balance and today’s spend in the main sidebar. Turning this off also stops desktop balance requests to avoid conflicts with similar plugins.',
         'features.workspace.title': 'Enable Workspace Review',
         'features.workspace.description': 'Show the read-only workspace, changes, and file preview panel. Turning this off hides and disables its entry point.',
         'plugins.tab': 'Management',
@@ -679,7 +675,7 @@ window.__ModuleLoader__.load({
     function DesktopFeatureSettingsRow({ t }) {
       const bridge = window.deepSeekYukiRyouFeatures;
       const [features, setFeatures] = React.useState(
-        () => bridge?.getSnapshot() ?? { accountBalance: true, workspaceReview: true },
+        () => bridge?.getSnapshot() ?? { workspaceReview: true },
       );
       const featuresRef = React.useRef(features);
       React.useEffect(
@@ -716,7 +712,6 @@ window.__ModuleLoader__.load({
       return React.createElement(
         'div',
         { className: 'dsh-desktop-feature-settings' },
-        setting('accountBalance', 'features.balance.title', 'features.balance.description'),
         setting('workspaceReview', 'features.workspace.title', 'features.workspace.description'),
       );
     }

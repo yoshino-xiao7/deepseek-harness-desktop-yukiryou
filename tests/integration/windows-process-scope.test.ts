@@ -1,9 +1,13 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 
-import { createWindowsInstallDirectoryProcessScript } from '../release/windows-process-scope.js';
+import {
+  createWindowsInstallDirectoryProcessScript,
+  stopWindowsProcessTree,
+} from '../release/windows-process-scope.js';
 
 const execute = promisify(execFile);
 
@@ -44,4 +48,40 @@ describe('Windows release process scope', () => {
     },
     20_000,
   );
+
+  it.runIf(process.platform === 'win32')(
+    'stops an exact Windows process tree without masking a live target',
+    async () => {
+      const child = spawn(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          'Start-Process powershell.exe -ArgumentList @("-NoProfile", "-Command", "Start-Sleep -Seconds 30"); Start-Sleep -Seconds 30',
+        ],
+        { stdio: 'ignore' },
+      );
+      const processId = child.pid;
+      if (processId === undefined) throw new Error('Windows process-tree fixture did not start');
+      await delay(500);
+
+      stopWindowsProcessTree(processId);
+
+      await expect.poll(() => isRunning(processId), {
+        timeout: 5_000,
+        interval: 100,
+      }).toBe(false);
+    },
+    20_000,
+  );
 });
+
+function isRunning(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}

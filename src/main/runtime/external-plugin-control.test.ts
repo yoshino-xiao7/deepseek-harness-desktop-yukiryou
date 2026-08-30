@@ -18,6 +18,7 @@ async function fixture(): Promise<{ runtimeHome: string; packageRoot: string }> 
   }));
   await writeFile(join(packageRoot, 'package.json'), JSON.stringify({
     name: 'dsh-grok-provider', version: '0.1.1',
+    repository: 'https://github.com/example/dsh-grok-provider',
     dsh: { bundle: { patch: 'cordis.patch.yml' } },
   }));
   await writeFile(join(packageRoot, 'cordis.patch.yml'), [
@@ -40,6 +41,7 @@ describe('external plugin control', () => {
         entryIds: ['llm-grok'],
         enabled: true,
         allowedActions: ['disable', 'uninstall'],
+        repository: 'https://github.com/example/dsh-grok-provider',
       },
     ]);
   });
@@ -56,6 +58,7 @@ describe('external plugin control', () => {
     expect(result.status).toBe('prepared');
     expect(await readFile(join(packageRoot, 'cordis.patch.yml'), 'utf8')).toBe(original);
     expect(parse(await readFile(control.overlayPath, 'utf8'))).toEqual([
+      { id: 'dsh-grok-provider', disabled: true },
       { id: 'llm-grok', disabled: true },
     ]);
     await expect(control.inventory()).resolves.toMatchObject([{ enabled: false }]);
@@ -122,6 +125,47 @@ describe('external plugin control', () => {
       expect.objectContaining({
         env: expect.objectContaining({ PATH: expect.stringContaining('C:\\runtime\\node;') }),
       }),
+    );
+  });
+
+  it('suppresses an exact external package while a managed adoption trials and restores on failure', async () => {
+    const { runtimeHome } = await fixture();
+    const control = createExternalPluginControl({ runtimeHome, runtimeRoot: '/runtime' });
+    const generation = `gen-${'a'.repeat(64)}`;
+
+    await control.prepareAdoption({
+      packageName: 'dsh-grok-provider', version: '0.1.1', entryId: 'llm-grok',
+    }, generation);
+
+    await expect(control.inventory()).resolves.toMatchObject([{ enabled: false }]);
+    await expect(control.reconcileAdoption({
+      trialGeneration: generation,
+      managedPackageNames: new Set(),
+    })).resolves.toBe('kept');
+    await control.recoverAdoption(generation);
+    await expect(control.inventory()).resolves.toMatchObject([{ enabled: true }]);
+  });
+
+  it('removes the old external package only after its managed adoption commits', async () => {
+    const { runtimeHome } = await fixture();
+    const execute = vi.fn(async () => undefined);
+    const control = createExternalPluginControl({
+      runtimeHome,
+      runtimeRoot: '/runtime',
+      execute,
+      platform: 'darwin',
+      architecture: 'arm64',
+    });
+    const generation = `gen-${'b'.repeat(64)}`;
+    await control.prepareAdoption({
+      packageName: 'dsh-grok-provider', version: '0.1.1', entryId: 'llm-grok',
+    }, generation);
+
+    await expect(control.commitAdoption(generation)).resolves.toBe('cleaned');
+    expect(execute).toHaveBeenCalledWith(
+      '/runtime/node/bin/node',
+      expect.arrayContaining(['remove', 'dsh-grok-provider']),
+      expect.objectContaining({ runtimeHome }),
     );
   });
 });

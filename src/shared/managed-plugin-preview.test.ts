@@ -49,8 +49,23 @@ describe('managed plugin preview contract', () => {
         sourceRecordId: 'dshfind',
         itemId: 'example',
         versionPreference: 'latest',
+        externalIdentity: {
+          packageName: 'dsh-deepseek-account',
+          version: '0.1.2',
+          entryId: 'deepseek-account',
+        },
       }),
-    ).toEqual({ requestId, sourceRecordId: 'dshfind', itemId: 'example', versionPreference: 'latest' });
+    ).toEqual({
+      requestId,
+      sourceRecordId: 'dshfind',
+      itemId: 'example',
+      versionPreference: 'latest',
+      externalIdentity: {
+        packageName: 'dsh-deepseek-account',
+        version: '0.1.2',
+        entryId: 'deepseek-account',
+      },
+    });
     expect(
       validatedManagedPluginPreviewRequest({
         requestId: '../bad',

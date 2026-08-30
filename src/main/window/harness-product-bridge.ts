@@ -1,11 +1,6 @@
 import type { BrowserWindow, WebContents } from 'electron';
 
 import {
-  ACCOUNT_BALANCE_REQUEST_CHANNEL,
-  ACCOUNT_BALANCE_STATE_CHANNEL,
-  type AccountBalanceSnapshot,
-} from '../../shared/account-balance.js';
-import {
   HARNESS_APPEARANCE_CHANNEL,
   type DesktopAppearanceSnapshot,
   validatedAppearanceSnapshot,
@@ -108,9 +103,6 @@ export interface HarnessProductBridgeOptions {
   readonly onAppearance: (appearance: DesktopAppearanceSnapshot) => void;
   readonly onLocale: (locale: DesktopLocale) => void;
   readonly onUpdateCommand: (command: UpdateCommand) => void;
-  readonly onAccountBalanceRequest: (
-    force: boolean,
-  ) => Promise<AccountBalanceSnapshot>;
   readonly onFeaturePreferencesChange: (
     preferences: DesktopFeaturePreferences,
   ) => void;
@@ -172,7 +164,6 @@ export function createHarnessProductBridge(
   let trustedOriginRevision = 0;
   let updateState: DesktopUpdateState | undefined;
   let featurePreferences = DEFAULT_DESKTOP_FEATURE_PREFERENCES;
-  let balanceRequestRevision = 0;
   let lastHarnessContextRevision = -1;
   let contextRateWindowStartedAt = 0;
   let contextRateCount = 0;
@@ -305,9 +296,6 @@ export function createHarnessProductBridge(
       const command = validatedDesktopFeaturePreferenceCommand(value);
       if (command === undefined) return;
       featurePreferences = { ...featurePreferences, [command.key]: command.enabled };
-      if (command.key === 'accountBalance' && !command.enabled) {
-        balanceRequestRevision += 1;
-      }
       options.onFeaturePreferencesChange(featurePreferences);
       if (!webContents.isDestroyed()) {
         webContents.send(DESKTOP_FEATURE_PREFERENCES_STATE_CHANNEL, featurePreferences);
@@ -621,21 +609,6 @@ export function createHarnessProductBridge(
         .finally(() => { managedMutationActive = false; });
       return;
     }
-    if (channel !== ACCOUNT_BALANCE_REQUEST_CHANNEL || typeof value !== 'boolean') {
-      return;
-    }
-    if (!featurePreferences.accountBalance) return;
-    const revision = ++balanceRequestRevision;
-    webContents.send(ACCOUNT_BALANCE_STATE_CHANNEL, { status: 'loading' });
-    void options.onAccountBalanceRequest(value).then((snapshot) => {
-      if (
-        !disposed &&
-        revision === balanceRequestRevision &&
-        !webContents.isDestroyed()
-      ) {
-        webContents.send(ACCOUNT_BALANCE_STATE_CHANNEL, snapshot);
-      }
-    });
   };
   const onDownload = (event: Electron.Event): void => event.preventDefault();
 
@@ -714,7 +687,6 @@ export function createHarnessProductBridge(
     dispose() {
       disposed = true;
       managedPreviewRequests.clear();
-      balanceRequestRevision += 1;
       webContents.removeListener('will-navigate', onNavigate);
       webContents.removeListener('ipc-message', onIpcMessage);
       webContents.removeListener('did-create-window', onDidCreateWindow);

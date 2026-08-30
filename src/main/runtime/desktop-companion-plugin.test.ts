@@ -89,16 +89,7 @@ describe('desktop companion turn card', () => {
         },
       },
     });
-    const Balance = registrations.get('sidebar.footer.action');
-    const balanceTree = Balance?.({ wide: true });
-    expect(textContent(balanceTree)).toContain('今日消耗');
-    expect(textContent(balanceTree)).toContain('账户余额');
-    expect(elements(balanceTree).some((node) =>
-      node.props['data-testid'] === 'desktop-account-overview'
-    )).toBe(true);
-    expect(elements(balanceTree).some((node) =>
-      node.props.role === 'tooltip'
-    )).toBe(false);
+    expect(registrations.has('sidebar.footer.action')).toBe(false);
 
     const Component = registrations.get('conversation.chat.turnTail');
     expect(Component).toBeDefined();

@@ -209,4 +209,38 @@ describe('ManagedInstallTransaction', () => {
       code: 'catalog:transaction-generation-mismatch',
     });
   });
+
+  it('suppresses an exact external plugin before preparing its managed replacement', async () => {
+    const prepareAdoption = vi.fn(async () => undefined);
+    const recoverAdoption = vi.fn(async () => undefined);
+    const prepare = vi.fn(async () => undefined);
+    const transaction = createManagedInstallTransaction({
+      installer: {
+        stage: async () => ({
+          status: 'staged', profileGeneration: generation, candidate, cacheDigests,
+        }),
+      },
+      bootstrap: { prepare },
+      externalAdoption: { prepareAdoption, recoverAdoption },
+      randomId: () => '77777777-7777-4777-8777-777777777777',
+    });
+    const externalIdentity = {
+      packageName: candidate.packageName,
+      version: '1.2.2',
+      entryId: 'community-example',
+    };
+    const preview = transaction.issue({
+      generation,
+      candidate,
+      stagingPreviewId,
+      expectedReceipt: null,
+      expectedExternal: externalIdentity,
+    });
+
+    await transaction.execute(preview.previewId);
+
+    expect(prepareAdoption).toHaveBeenCalledWith(externalIdentity, generation);
+    expect(prepare).toHaveBeenCalledWith(generation, candidate, cacheDigests, null);
+    expect(recoverAdoption).not.toHaveBeenCalled();
+  });
 });
