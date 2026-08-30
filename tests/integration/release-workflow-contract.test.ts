@@ -122,6 +122,8 @@ describe('macOS release workflow contract', () => {
     expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'check')");
     expect(automaticUpdateTest).toContain("invokeUpdate(shell, 'install')");
     expect(automaticUpdateTest).toContain('waitForPreviousMacUpdaterReadiness');
+    expect(automaticUpdateTest).toContain('PREVIOUS_PUBLIC_VERSION');
+    expect(automaticUpdateTest).toContain("previousVersion !== '1.0.3'");
     expect(automaticUpdateTest).toContain('updates[value]()');
     expect(automaticUpdateTest).toContain('relaunch');
     expect(automaticUpdateTest).not.toContain("DSH_DESKTOP_E2E: '1'");
