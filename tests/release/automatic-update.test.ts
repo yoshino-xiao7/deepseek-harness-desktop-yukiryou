@@ -212,17 +212,21 @@ async function waitForPreviousMacUpdaterReadiness(
     throw new Error('PREVIOUS_PUBLIC_VERSION is required for the macOS update gate');
   }
 
-  // v1.0.3 exposed electron-updater's public download event before the
-  // Squirrel.Mac bridge had finished staging the same ZIP. That released
-  // version cannot be changed retroactively. Wait for its native staging
-  // process here; v1.0.4 and later already keep the restart action hidden
-  // until Electron's native update-downloaded event arrives.
-  if (previousVersion !== '1.0.3') return;
-
+  // Always require the exact candidate to exist in Squirrel.Mac's staging
+  // cache before asking an already-released app to install it. v1.0.4 and
+  // later hide restart until Electron's native update-downloaded event, but
+  // the staged bundle can still become observable just after that event.
   await expect.poll(() => hasStagedMacUpdate(version), {
     timeout: 10 * 60_000,
     interval: 1_000,
   }).toBe(true);
+
+  // v1.0.3 exposed electron-updater's public download event before the
+  // Squirrel.Mac bridge had finished staging the same ZIP. That released
+  // version cannot be changed retroactively, so only it also needs the legacy
+  // ShipIt process-exit guard. Newer releases can keep ShipIt resident.
+  if (previousVersion !== '1.0.3') return;
+
   await expect.poll(() => isMacShipItRunning(), {
     timeout: 2 * 60_000,
     interval: 500,
