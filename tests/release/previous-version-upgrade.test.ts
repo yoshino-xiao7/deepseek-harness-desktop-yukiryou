@@ -253,9 +253,6 @@ async function activateHarnessStorageSelection(
       .getAllWebContents()
       .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
     if (harness === undefined) throw new Error('Harness webContents is missing');
-    await harness.executeJavaScript(
-      `window.localStorage.setItem(${JSON.stringify(payload.key)}, ${JSON.stringify(JSON.stringify({ sessionId: payload.sessionId }))})`,
-    );
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Harness reload timed out after selecting the session'));
@@ -264,7 +261,12 @@ async function activateHarnessStorageSelection(
         clearTimeout(timeout);
         resolve();
       });
-      harness.reload();
+      void harness.executeJavaScript(
+        `window.localStorage.setItem(${JSON.stringify(payload.key)}, ${JSON.stringify(JSON.stringify({ sessionId: payload.sessionId }))}); window.location.reload()`,
+      ).catch((error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
     });
   }, { key: currentSessionStorageKey, sessionId });
 }

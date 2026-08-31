@@ -586,6 +586,8 @@ describe('macOS release workflow contract', () => {
 
     expect(source).toContain('await activateHarnessStorageSelection(');
     expect(source).toContain("reject(new Error('Harness reload timed out after selecting the session'))");
+    expect(source).toContain('; window.location.reload()`');
+    expect(source).not.toContain('harness.reload();');
     expect(source).toMatch(
       /activateHarnessStorageSelection\([\s\S]+?readCurrentSessionId\(electronApp!\)[\s\S]+?electronApp\.close\(\)/,
     );
