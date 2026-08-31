@@ -96,7 +96,7 @@ describe('previous-version upgrade', () => {
       });
     const sessionsBeforeUpgrade = await readSessionIds(previousOrigin);
     expect(sessionsBeforeUpgrade).toContain(expectedSessionId);
-    await activateHarnessStorageSelection(electronApp, expectedSessionId);
+    await activateHarnessUiSelection(electronApp, expectedSessionId);
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
@@ -244,7 +244,7 @@ async function readCurrentSessionId(
   }
 }
 
-async function activateHarnessStorageSelection(
+async function activateHarnessUiSelection(
   application: ElectronApplication,
   sessionId: string,
 ): Promise<void> {
@@ -253,21 +253,26 @@ async function activateHarnessStorageSelection(
       .getAllWebContents()
       .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
     if (harness === undefined) throw new Error('Harness webContents is missing');
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Harness reload timed out after selecting the session'));
-      }, 15_000);
-      harness.once('did-finish-load', () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-      void harness.executeJavaScript(
-        `window.localStorage.setItem(${JSON.stringify(payload.key)}, ${JSON.stringify(JSON.stringify({ sessionId: payload.sessionId }))}); window.location.reload()`,
-      ).catch((error: unknown) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-    });
+    const result = await harness.executeJavaScript(`(async () => {
+      const rows = [...document.querySelectorAll('[role="treeitem"][aria-selected]')];
+      for (const row of rows) {
+        if (!(row instanceof HTMLElement)) continue;
+        row.click();
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
+        try {
+          const current = JSON.parse(window.localStorage.getItem(${JSON.stringify(payload.key)}) ?? 'null');
+          if (current?.sessionId === ${JSON.stringify(payload.sessionId)}) {
+            return { selected: true, rowCount: rows.length };
+          }
+        } catch {}
+      }
+      return { selected: false, rowCount: rows.length };
+    })()`);
+    if (result?.selected !== true) {
+      throw new Error(
+        `Harness sidebar could not select the real session from ${String(result?.rowCount ?? 0)} rows`,
+      );
+    }
   }, { key: currentSessionStorageKey, sessionId });
 }
 
