@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { SESSION_SELECTION_PATCH_MARKER } from '../src/main/runtime/vendor-session-selection-patch.ts';
 import { CONTEXT_METER_TOOLTIP_PATCH_MARKER } from '../src/main/runtime/vendor-context-meter-tooltip-patch.ts';
@@ -94,6 +94,26 @@ await verifyBundledExtension('market', 'desktop-market-plugin', [
   'managed-preview-vault.js', 'package.json', 'runtime-snapshot.js',
   'source-registry.js', 'update-checker.js',
 ]);
+const installedRuntimeSnapshotModule = await import(pathToFileURL(join(
+  runtimeNodeModules,
+  '@dsh-desktop',
+  'market',
+  'runtime-snapshot.js',
+)).href) as {
+  readonly createRuntimeSnapshot: () => {
+    read(): Promise<{
+      readonly packages: readonly { readonly name: string; readonly version: string }[];
+    }>;
+  };
+};
+const installedRuntimeSnapshot = await installedRuntimeSnapshotModule
+  .createRuntimeSnapshot()
+  .read();
+if (!installedRuntimeSnapshot.packages.some(
+  (entry) => entry.name === '@deepseek-ai/dsh-agent' && entry.version === sourceManifest.dsh.version,
+)) {
+  throw new Error('Installed desktop market could not read the bundled Runtime lock');
+}
 const desktopMarketCache = await readFile(
   join(runtimeNodeModules, '@dsh-desktop', 'market', 'catalog-cache.js'),
   'utf8',

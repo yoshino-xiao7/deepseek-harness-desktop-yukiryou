@@ -1,3 +1,8 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it, vi } from 'vitest';
 
 interface RuntimeSnapshotReader {
@@ -5,10 +10,14 @@ interface RuntimeSnapshotReader {
 }
 
 async function createReader(readLock: () => unknown): Promise<RuntimeSnapshotReader> {
+  return createReaderWithOptions({ readLock });
+}
+
+async function createReaderWithOptions(options: Record<string, unknown>): Promise<RuntimeSnapshotReader> {
   const module = await import(
     new URL('../../../runtime/desktop-market-plugin/runtime-snapshot.js', import.meta.url).href
   ) as { readonly createRuntimeSnapshot: (options: Record<string, unknown>) => RuntimeSnapshotReader };
-  return module.createRuntimeSnapshot({ readLock });
+  return module.createRuntimeSnapshot(options);
 }
 
 async function createDefaultReader(): Promise<RuntimeSnapshotReader> {
@@ -24,6 +33,34 @@ describe('desktop market Runtime compatibility snapshot', () => {
 
     expect(result.packages).toContainEqual(expect.objectContaining({ name: '@deepseek-ai/dsh-agent' }));
     expect(result.hash).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  });
+
+  it('reads the Runtime lock from the installed scoped-package layout', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'desktop-market-installed-layout-'));
+    try {
+      const modulePath = join(
+        root,
+        'dsh',
+        'node_modules',
+        '@dsh-desktop',
+        'market',
+        'runtime-snapshot.js',
+      );
+      await mkdir(dirname(modulePath), { recursive: true });
+      await writeFile(join(root, 'dsh', 'package-lock.json'), JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          'node_modules/@deepseek-ai/dsh-agent': { version: '0.1.1-rc.2' },
+        },
+      }));
+
+      const reader = await createReaderWithOptions({ moduleUrl: pathToFileURL(modulePath) });
+      await expect(reader.read()).resolves.toMatchObject({
+        packages: [{ name: '@deepseek-ai/dsh-agent', version: '0.1.1-rc.2' }],
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('publishes only top-level package names and exact versions with a deterministic hash', async () => {
