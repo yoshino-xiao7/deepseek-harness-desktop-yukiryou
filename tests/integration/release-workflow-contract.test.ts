@@ -578,18 +578,18 @@ describe('macOS release workflow contract', () => {
     expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
   });
 
-  it('activates the previous-release session through a reload before closing it', async () => {
+  it('activates the previous-release session through the real sidebar before closing it', async () => {
     const source = await readFile(
       join(process.cwd(), 'tests', 'release', 'previous-version-upgrade.test.ts'),
       'utf8',
     );
 
-    expect(source).toContain('await activateHarnessStorageSelection(');
-    expect(source).toContain("reject(new Error('Harness reload timed out after selecting the session'))");
-    expect(source).toContain('; window.location.reload()`');
-    expect(source).not.toContain('harness.reload();');
+    expect(source).toContain('await activateHarnessUiSelection(');
+    expect(source).toContain("document.querySelectorAll('[role=\"treeitem\"][aria-selected]')");
+    expect(source).toContain('row.click();');
+    expect(source).not.toContain('window.localStorage.setItem(');
     expect(source).toMatch(
-      /activateHarnessStorageSelection\([\s\S]+?readCurrentSessionId\(electronApp!\)[\s\S]+?electronApp\.close\(\)/,
+      /activateHarnessUiSelection\([\s\S]+?readCurrentSessionId\(electronApp!\)[\s\S]+?electronApp\.close\(\)/,
     );
     expect(source).not.toContain('async function writeHarnessStorage(');
   });
