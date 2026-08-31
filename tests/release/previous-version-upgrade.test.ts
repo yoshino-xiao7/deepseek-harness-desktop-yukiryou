@@ -96,11 +96,10 @@ describe('previous-version upgrade', () => {
       });
     const sessionsBeforeUpgrade = await readSessionIds(previousOrigin);
     expect(sessionsBeforeUpgrade).toContain(expectedSessionId);
-    await writeHarnessStorage(
-      electronApp,
-      currentSessionStorageKey,
-      JSON.stringify({ sessionId: expectedSessionId }),
-    );
+    await activateHarnessStorageSelection(electronApp, expectedSessionId);
+    await expect
+      .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
+      .toBe(expectedSessionId);
     await electronApp.close();
     electronApp = undefined;
 
@@ -245,10 +244,9 @@ async function readCurrentSessionId(
   }
 }
 
-async function writeHarnessStorage(
+async function activateHarnessStorageSelection(
   application: ElectronApplication,
-  key: string,
-  value: string,
+  sessionId: string,
 ): Promise<void> {
   await application.evaluate(async ({ webContents }, payload) => {
     const harness = webContents
@@ -256,9 +254,19 @@ async function writeHarnessStorage(
       .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
     if (harness === undefined) throw new Error('Harness webContents is missing');
     await harness.executeJavaScript(
-      `window.localStorage.setItem(${JSON.stringify(payload.key)}, ${JSON.stringify(payload.value)})`,
+      `window.localStorage.setItem(${JSON.stringify(payload.key)}, ${JSON.stringify(JSON.stringify({ sessionId: payload.sessionId }))})`,
     );
-  }, { key, value });
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Harness reload timed out after selecting the session'));
+      }, 15_000);
+      harness.once('did-finish-load', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      harness.reload();
+    });
+  }, { key: currentSessionStorageKey, sessionId });
 }
 
 async function readSessionIds(origin: string): Promise<string[]> {

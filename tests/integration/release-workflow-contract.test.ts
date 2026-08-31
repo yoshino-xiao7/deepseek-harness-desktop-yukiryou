@@ -14,6 +14,7 @@ interface WorkflowStep {
 }
 
 interface WorkflowJob {
+  name?: string;
   needs?: string | string[];
   if?: string;
   'timeout-minutes'?: number;
@@ -575,6 +576,41 @@ describe('macOS release workflow contract', () => {
     expect(workflowSource).not.toContain('UPGRADE_FROM_VERSION: 0.2.3-beta.3');
     expect(workflow.jobs?.soak_candidate?.needs).toBe('verify_candidate');
     expect(workflow.jobs?.notarize?.needs).toBe('soak_candidate');
+  });
+
+  it('activates the previous-release session through a reload before closing it', async () => {
+    const source = await readFile(
+      join(process.cwd(), 'tests', 'release', 'previous-version-upgrade.test.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('await activateHarnessStorageSelection(');
+    expect(source).toContain("reject(new Error('Harness reload timed out after selecting the session'))");
+    expect(source).toMatch(
+      /activateHarnessStorageSelection\([\s\S]+?readCurrentSessionId\(electronApp!\)[\s\S]+?electronApp\.close\(\)/,
+    );
+    expect(source).not.toContain('async function writeHarnessStorage(');
+  });
+
+  it('can isolate the previous-version upgrade gate against an existing candidate', async () => {
+    const workflowSource = await readFile(
+      join(process.cwd(), '.github', 'workflows', 'macos-upgrade-candidate.yml'),
+      'utf8',
+    );
+    const workflow = parse(workflowSource) as ReleaseWorkflow;
+    const job = workflow.jobs?.validate_upgrade;
+    const commands = (job?.steps ?? [])
+      .map((step) => step.run?.trim() ?? '')
+      .join('\n');
+
+    expect(job?.name).toBe('Exercise only previous-version upgrade');
+    expect(workflowSource).toContain('source_run_id:');
+    expect(workflowSource).toContain('source_sha:');
+    expect(commands).toContain('.github/workflows/release-macos.yml');
+    expect(commands).toContain('candidate-manifest.json');
+    expect(commands).toContain('pnpm test:upgrade');
+    expect(commands).not.toContain('release:mac:candidate');
+    expect(commands).not.toContain('gh release create');
   });
 
   it('keeps the five-hour soak in an independent scheduled workflow', async () => {
