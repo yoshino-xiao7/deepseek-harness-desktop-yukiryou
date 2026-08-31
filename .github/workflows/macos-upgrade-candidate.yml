@@ -65,7 +65,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          node -e "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync('out/release-candidate/candidate-manifest.json','utf8'));if(m.schemaVersion!==1||m.version!==process.env.RELEASE_VERSION||m.architecture!=='arm64'||m.gitCommit!==process.env.SOURCE_SHA||m.dirtyWorktree!==false)throw new Error('macOS candidate provenance does not match the requested source run')"
+          node -e "const crypto=require('node:crypto');const fs=require('node:fs');const path=require('node:path');const root='out/release-candidate';const m=JSON.parse(fs.readFileSync(path.join(root,'candidate-manifest.json'),'utf8'));const expected='DeepSeek YukiRyou-darwin-arm64-'+process.env.RELEASE_VERSION+'-candidate.zip';const archive=path.join(root,m.archive?.file??'');const digest=crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');if(m.schemaVersion!==1||m.productName!=='DeepSeek YukiRyou'||m.version!==process.env.RELEASE_VERSION||m.architecture!=='arm64'||m.gitCommit!==process.env.SOURCE_SHA||m.archive?.file!==expected||m.archive?.sha256!==digest)throw new Error('macOS candidate provenance does not match the requested source run')"
       - name: Install the exact existing candidate
         run: |
           pnpm verify:distribution -- \
