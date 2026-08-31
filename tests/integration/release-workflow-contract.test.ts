@@ -589,6 +589,8 @@ describe('macOS release workflow contract', () => {
     expect(source).toContain('const deadline = Date.now() + 15_000;');
     expect(source).toContain('row.click();');
     expect(source).not.toContain('window.localStorage.setItem(');
+    expect(source).toContain('unexpected.length <= 1');
+    expect(source).toContain('unexpected.every((session) => session.blank)');
     expect(source).toMatch(
       /activateHarnessUiSelection\([\s\S]+?readCurrentSessionId\(electronApp!\)[\s\S]+?electronApp\.close\(\)/,
     );
