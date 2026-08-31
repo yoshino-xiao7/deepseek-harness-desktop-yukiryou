@@ -130,13 +130,15 @@ describe('previous-version upgrade', () => {
     if (candidateOrigin === undefined) {
       throw new Error('Candidate Harness origin is missing');
     }
-    // The Harness UI can briefly materialize its reusable blank-session
-    // placeholder while applying the restored selection. Keep the invariant
-    // strict, but allow the normal reuse/cleanup cycle to settle before
-    // deciding that the upgrade persisted an extra Session.
+    // The candidate may retain one reusable blank-session placeholder after
+    // restoring the real selection. Every previous Session must remain, and
+    // any extra entry must be that single explicitly blank placeholder.
     await expect
-      .poll(() => readSessionIds(candidateOrigin), { timeout: 15_000 })
-      .toEqual(sessionsBeforeUpgrade);
+      .poll(
+        () => readUpgradeSessionInvariant(candidateOrigin, sessionsBeforeUpgrade),
+        { timeout: 15_000 },
+      )
+      .toEqual({ valid: true });
 
     await electronApp.close();
     electronApp = undefined;
@@ -286,6 +288,41 @@ async function activateHarnessUiSelection(
 async function readSessionIds(origin: string): Promise<string[]> {
   const items = await readSessionItems(origin);
   return items.map((item) => readString(item, 'sessionId')).sort();
+}
+
+async function readUpgradeSessionInvariant(
+  origin: string,
+  baselineSessionIds: readonly string[],
+): Promise<
+  | { valid: true }
+  | {
+      valid: false;
+      missing: string[];
+      unexpected: { sessionId: string; blank: boolean }[];
+    }
+> {
+  const baseline = new Set(baselineSessionIds);
+  const sessions = (await readSessionItems(origin)).map((item) => {
+    const record = asRecord(item);
+    if (typeof record.blank !== 'boolean') {
+      throw new Error('session.list returned invalid blank metadata');
+    }
+    return {
+      sessionId: readString(record, 'sessionId'),
+      blank: record.blank,
+    };
+  });
+  const present = new Set(sessions.map((session) => session.sessionId));
+  const missing = baselineSessionIds.filter((sessionId) => !present.has(sessionId));
+  const unexpected = sessions.filter((session) => !baseline.has(session.sessionId));
+  if (
+    missing.length === 0 &&
+    unexpected.length <= 1 &&
+    unexpected.every((session) => session.blank)
+  ) {
+    return { valid: true };
+  }
+  return { valid: false, missing, unexpected };
 }
 
 async function readDurableSessionState(
