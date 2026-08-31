@@ -254,19 +254,26 @@ async function activateHarnessUiSelection(
       .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
     if (harness === undefined) throw new Error('Harness webContents is missing');
     const result = await harness.executeJavaScript(`(async () => {
-      const rows = [...document.querySelectorAll('[role="treeitem"][aria-selected]')];
-      for (const row of rows) {
-        if (!(row instanceof HTMLElement)) continue;
-        row.click();
-        await new Promise((resolve) => window.setTimeout(resolve, 100));
-        try {
-          const current = JSON.parse(window.localStorage.getItem(${JSON.stringify(payload.key)}) ?? 'null');
-          if (current?.sessionId === ${JSON.stringify(payload.sessionId)}) {
-            return { selected: true, rowCount: rows.length };
-          }
-        } catch {}
+      const deadline = Date.now() + 15_000;
+      let maxRowCount = 0;
+      while (Date.now() < deadline) {
+        const rows = [...document.querySelectorAll('[role="treeitem"][aria-selected]')];
+        maxRowCount = Math.max(maxRowCount, rows.length);
+        for (let index = 0; index < rows.length; index += 1) {
+          const row = document.querySelectorAll('[role="treeitem"][aria-selected]')[index];
+          if (!(row instanceof HTMLElement)) continue;
+          row.click();
+          await new Promise((resolve) => window.setTimeout(resolve, 100));
+          try {
+            const current = JSON.parse(window.localStorage.getItem(${JSON.stringify(payload.key)}) ?? 'null');
+            if (current?.sessionId === ${JSON.stringify(payload.sessionId)}) {
+              return { selected: true, rowCount: rows.length };
+            }
+          } catch {}
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
       }
-      return { selected: false, rowCount: rows.length };
+      return { selected: false, rowCount: maxRowCount };
     })()`);
     if (result?.selected !== true) {
       throw new Error(
