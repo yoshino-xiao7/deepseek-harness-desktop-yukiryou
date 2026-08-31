@@ -33,6 +33,24 @@ describe('desktop update bridge', () => {
     ).toBeUndefined();
   });
 
+  it('accepts bounded progress only while downloading', () => {
+    expect(validatedUpdateState({
+      status: 'downloading',
+      currentVersion: '1.0.6',
+      downloadPercent: 42.6,
+    })).toMatchObject({ downloadPercent: 42.6 });
+    expect(validatedUpdateState({
+      status: 'downloading',
+      currentVersion: '1.0.6',
+      downloadPercent: 101,
+    })).toBeUndefined();
+    expect(validatedUpdateState({
+      status: 'downloaded',
+      currentVersion: '1.0.6',
+      downloadPercent: 100,
+    })).toBeUndefined();
+  });
+
   it('hides the Harness update action when updates are unavailable or already current', () => {
     expect(
       shouldShowHeaderUpdate({ status: 'latest', currentVersion: '0.1.0' }),
