@@ -16,6 +16,7 @@ export type UpdateStatus =
 export interface DesktopUpdateState {
   readonly status: UpdateStatus;
   readonly currentVersion: string;
+  readonly downloadPercent?: number;
   readonly releaseName?: string;
   readonly releaseNotes?: string;
   readonly checkedAt?: string;
@@ -62,6 +63,18 @@ export function validatedUpdateState(
     status: candidate.status as UpdateStatus,
     currentVersion: candidate.currentVersion,
   };
+  if (candidate.downloadPercent !== undefined) {
+    if (
+      candidate.status !== 'downloading' ||
+      typeof candidate.downloadPercent !== 'number' ||
+      !Number.isFinite(candidate.downloadPercent) ||
+      candidate.downloadPercent < 0 ||
+      candidate.downloadPercent > 100
+    ) {
+      return undefined;
+    }
+    Object.assign(state, { downloadPercent: candidate.downloadPercent });
+  }
   if (typeof candidate.releaseName === 'string') {
     if (candidate.releaseName.length > 80) return undefined;
     Object.assign(state, { releaseName: candidate.releaseName });

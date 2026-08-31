@@ -85,6 +85,19 @@ describe('desktop plugin management tab', () => {
     expect(source).not.toContain("React.createElement('small', null, t(description))");
   });
 
+  it('renders native download percentage as a determinate About progress bar', async () => {
+    const source = await readFile(
+      new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).toContain("'aria-valuenow': update.downloadPercent");
+    expect(source).toContain("className: 'dsh-desktop-update-progress-fill'");
+    expect(source).toContain("style: { width: `${String(update.downloadPercent)}%` }");
+    expect(source).toContain("`${t('about.downloading')}${progressSuffix}`");
+    expect(source).toContain('.dsh-desktop-update-progress[data-indeterminate="true"]::after');
+  });
+
   it('mounts a read-only explanation through the official plugins tab', async () => {
     const source = await readFile(
       new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),

@@ -666,6 +666,7 @@ describe('packaged desktop application', () => {
         harness?.send('dsh-desktop:update-state', {
           status: 'downloading',
           currentVersion: '0.1.0',
+          downloadPercent: 43,
           checkedAt: new Date().toISOString(),
         });
       });
@@ -700,17 +701,21 @@ describe('packaged desktop application', () => {
                   : undefined,
                 card: document.querySelector('.dsh-desktop-update-button')?.textContent?.trim(),
                 progress: document.querySelector('.dsh-desktop-update-progress')?.getAttribute('role'),
+                progressNow: document.querySelector('.dsh-desktop-update-progress')?.getAttribute('aria-valuenow'),
+                progressWidth: document.querySelector('.dsh-desktop-update-progress-fill')?.style.width,
               };
             })()`);
           }),
         )
         .toMatchObject({
-          header: '',
+          header: '43%',
           parentIsSidebar: true,
           rightGap: 12,
           bottomGap: 12,
-          card: expect.stringMatching(/^(下载中…|Downloading…)$/),
+          card: expect.stringMatching(/^(下载中…|Downloading…) 43%$/),
           progress: 'progressbar',
+          progressNow: '43',
+          progressWidth: '43%',
         });
 
       await electronApp.evaluate(({ webContents }) => {

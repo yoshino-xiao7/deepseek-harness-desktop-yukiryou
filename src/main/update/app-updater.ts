@@ -1,5 +1,5 @@
 import { autoUpdater, type Event } from 'electron';
-import type { AllPublishOptions, UpdateInfo } from 'builder-util-runtime';
+import type { AllPublishOptions, ProgressInfo, UpdateInfo } from 'builder-util-runtime';
 import { MacUpdater, NsisUpdater } from 'electron-updater';
 import { dirname } from 'node:path';
 
@@ -68,8 +68,10 @@ export interface NativeUpdateClient {
   disableDifferentialDownload: boolean;
   installDirectory?: string;
   on(event: 'update-available' | 'update-not-available' | 'update-downloaded', listener: (info: UpdateInfo) => void): unknown;
+  on(event: 'download-progress', listener: (progress: ProgressInfo) => void): unknown;
   on(event: 'error', listener: (error: Error) => void): unknown;
   removeListener(event: 'update-available' | 'update-not-available' | 'update-downloaded', listener: (info: UpdateInfo) => void): unknown;
+  removeListener(event: 'download-progress', listener: (progress: ProgressInfo) => void): unknown;
   removeListener(event: 'error', listener: (error: Error) => void): unknown;
   setFeedURL(source: AllPublishOptions): void;
   checkForUpdates(): Promise<{ readonly updateInfo: UpdateInfo } | null>;
@@ -119,6 +121,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
       this.#native.installDirectory = dirname(process.execPath);
     }
     this.#native.on('update-available', this.#handleAvailable);
+    this.#native.on('download-progress', this.#handleDownloadProgress);
     this.#native.on('update-not-available', this.#handleNotAvailable);
     this.#native.on('update-downloaded', this.#handleDownloaded);
     this.#native.on('error', this.#handleError);
@@ -151,6 +154,16 @@ export class CrossPlatformAppUpdater implements AppUpdater {
       status: 'latest',
       currentVersion: this.#options.currentVersion,
       checkedAt: new Date().toISOString(),
+    });
+  };
+
+  readonly #handleDownloadProgress = (progress: ProgressInfo): void => {
+    if (this.#state.status !== 'downloading' || !Number.isFinite(progress.percent)) {
+      return;
+    }
+    this.#setState({
+      ...this.#state,
+      downloadPercent: Math.max(0, Math.min(100, Math.round(progress.percent))),
     });
   };
 
@@ -263,6 +276,7 @@ export class CrossPlatformAppUpdater implements AppUpdater {
     clearTimeout(this.#initialTimer);
     clearInterval(this.#intervalTimer);
     this.#native.removeListener('update-available', this.#handleAvailable);
+    this.#native.removeListener('download-progress', this.#handleDownloadProgress);
     this.#native.removeListener('update-not-available', this.#handleNotAvailable);
     this.#native.removeListener('update-downloaded', this.#handleDownloaded);
     this.#native.removeListener('error', this.#handleError);

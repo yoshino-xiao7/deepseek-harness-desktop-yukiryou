@@ -521,13 +521,13 @@ window.__ModuleLoader__.load({
         position: relative;
         display: block;
         width: min(240px, 100%);
-        height: 3px;
+        height: 5px;
         margin-top: 7px;
         overflow: hidden;
         border-radius: 999px;
         background: rgb(77 107 254 / 13%);
       }
-      .dsh-desktop-update-progress::after {
+      .dsh-desktop-update-progress[data-indeterminate="true"]::after {
         position: absolute;
         inset: 0 auto 0 -42%;
         width: 42%;
@@ -535,6 +535,13 @@ window.__ModuleLoader__.load({
         background: var(--dsw-static-deepseek-500, #4d6bfe);
         animation: dsh-desktop-update-progress 1.1s ease-in-out infinite;
         content: '';
+      }
+      .dsh-desktop-update-progress-fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        border-radius: inherit;
+        background: var(--dsw-static-deepseek-500, #4d6bfe);
+        transition: width 180ms ease-out;
       }
       @keyframes dsh-desktop-update-progress {
         from { transform: translateX(0); }
@@ -893,13 +900,18 @@ window.__ModuleLoader__.load({
         manual: 'about.updateManual',
         error: 'about.updateError',
       };
+      const downloadPercent = state.status === 'downloading' && Number.isFinite(state.downloadPercent)
+        ? Math.max(0, Math.min(100, Math.round(state.downloadPercent)))
+        : undefined;
+      const progressSuffix = downloadPercent === undefined ? '' : ` ${String(downloadPercent)}%`;
       return {
-        description: t(statusKeys[state.status] ?? 'about.updateIdle'),
+        description: `${t(statusKeys[state.status] ?? 'about.updateIdle')}${progressSuffix}`,
+        downloadPercent,
         button:
           state.status === 'downloaded'
             ? t('about.install')
             : state.status === 'downloading'
-              ? t('about.downloading')
+              ? `${t('about.downloading')}${progressSuffix}`
               : state.status === 'checking'
               ? t('about.checking')
               : state.status === 'manual'
@@ -973,11 +985,28 @@ window.__ModuleLoader__.load({
               update.description,
             ),
             state.status === 'downloading'
-              ? React.createElement('span', {
-                  className: 'dsh-desktop-update-progress',
-                  role: 'progressbar',
-                  'aria-label': t('about.downloading'),
-                })
+              ? React.createElement(
+                  'span',
+                  {
+                    className: 'dsh-desktop-update-progress',
+                    role: 'progressbar',
+                    'aria-label': t('about.downloading'),
+                    'aria-valuemin': 0,
+                    'aria-valuemax': 100,
+                    'aria-valuenow': update.downloadPercent,
+                    'aria-valuetext': update.downloadPercent === undefined
+                      ? undefined
+                      : `${String(update.downloadPercent)}%`,
+                    'data-indeterminate': update.downloadPercent === undefined ? 'true' : 'false',
+                  },
+                  update.downloadPercent === undefined
+                    ? null
+                    : React.createElement('span', {
+                        className: 'dsh-desktop-update-progress-fill',
+                        style: { width: `${String(update.downloadPercent)}%` },
+                        'aria-hidden': true,
+                      }),
+                )
               : null,
           ),
           React.createElement(

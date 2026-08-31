@@ -667,20 +667,28 @@ function reconcileHarnessUpdateButton(): void {
   const manual = updateState.status === 'manual';
   const checking = updateState.status === 'checking';
   const downloading = updateState.status === 'downloading';
+  const downloadPercent = downloading && updateState.downloadPercent !== undefined
+    ? Math.round(updateState.downloadPercent)
+    : undefined;
   const language = document.documentElement.lang.toLowerCase();
   const english = language.startsWith('en');
   const accessibleLabel = (() => {
     switch (updateState.status) {
       case 'checking': return english ? 'Checking for updates' : '正在检查更新';
       case 'latest': return english ? 'Up to date. Check again' : '已是最新版本，点击重新检查';
-      case 'downloading': return english ? 'Downloading update' : '正在下载更新';
+      case 'downloading': return downloadPercent === undefined
+        ? (english ? 'Downloading update' : '正在下载更新')
+        : (english ? `Downloading update ${String(downloadPercent)}%` : `正在下载更新 ${String(downloadPercent)}%`);
       case 'downloaded': return english ? 'Restart to update' : '重启更新';
       case 'manual': return english ? 'Download update manually' : '手动下载更新';
       case 'error': return english ? 'Update check failed. Try again' : '检查失败，点击重试';
       default: return english ? 'Check for updates' : '检查更新';
     }
   })();
-  button.replaceChildren(createUpdateIcon());
+  const progressLabel = downloadPercent === undefined
+    ? []
+    : [createUpdateProgressLabel(downloadPercent)];
+  button.replaceChildren(createUpdateIcon(), ...progressLabel);
   button.title = accessibleLabel;
   button.setAttribute('aria-label', accessibleLabel);
   button.disabled = checking || downloading;
@@ -714,7 +722,7 @@ function createUpdateIcon(): SVGElement {
   const path = document.createElementNS(namespace, 'path');
   path.setAttribute(
     'd',
-    'M15.8 7.1A6.2 6.2 0 1 0 16 12m-.2-4.9V3.8m0 3.3h-3.3',
+    'M10 3.5v9.2m0 0 3.6-3.6M10 12.7 6.4 9.1M4 16.5h12',
   );
   path.setAttribute('stroke', 'currentColor');
   path.setAttribute('stroke-linecap', 'round');
@@ -722,6 +730,14 @@ function createUpdateIcon(): SVGElement {
   path.setAttribute('stroke-width', '1.7');
   icon.append(path);
   return icon;
+}
+
+function createUpdateProgressLabel(percent: number): HTMLSpanElement {
+  const label = document.createElement('span');
+  label.className = 'dsh-desktop-header-update-progress';
+  label.textContent = `${String(percent)}%`;
+  label.setAttribute('aria-hidden', 'true');
+  return label;
 }
 
 function installHarnessUpdateButton(): void {
@@ -752,6 +768,13 @@ function installHarnessUpdateButton(): void {
         transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
       }
       .dsh-desktop-header-update svg { width: 18px; height: 18px; flex: none; }
+      .dsh-desktop-header-update-progress {
+        min-width: 3ch;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        text-align: right;
+      }
       .dsh-desktop-header-update:hover:not(:disabled) {
         color: var(--dsw-alias-label-primary, #252b37);
         background: var(--dsw-alias-interactive-bg-hover, rgb(127 127 127 / 8%));

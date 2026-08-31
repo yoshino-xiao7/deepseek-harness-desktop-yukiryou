@@ -1,4 +1,4 @@
-import type { AllPublishOptions, UpdateInfo } from 'builder-util-runtime';
+import type { AllPublishOptions, ProgressInfo, UpdateInfo } from 'builder-util-runtime';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -134,6 +134,29 @@ describe('cross-platform automatic updater', () => {
     await updater.prepareInstall();
     expect(native.autoRunAppAfterInstall).toBe(true);
     expect(native.quitAndInstall).toHaveBeenCalledWith(false, true);
+    updater.dispose();
+  });
+
+  it('publishes native download progress while the update is downloading', () => {
+    const native = new FakeNativeUpdater();
+    const updater = new CrossPlatformAppUpdater({
+      enabled: true,
+      currentVersion: '1.0.6',
+      platform: 'darwin',
+      architecture: 'arm64',
+      onError: vi.fn(),
+      createNativeUpdater: () => native,
+      macInstallReadiness: new FakeMacInstallReadiness(),
+    });
+
+    native.emit('update-available', { version: '1.0.7' } as UpdateInfo);
+    native.emit('download-progress', { percent: 42.6 } as ProgressInfo);
+
+    expect(updater.getState()).toMatchObject({
+      status: 'downloading',
+      releaseName: '1.0.7',
+      downloadPercent: 43,
+    });
     updater.dispose();
   });
 
