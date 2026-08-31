@@ -608,6 +608,8 @@ describe('macOS release workflow contract', () => {
     expect(workflowSource).toContain('source_sha:');
     expect(commands).toContain('.github/workflows/release-macos.yml');
     expect(commands).toContain('candidate-manifest.json');
+    expect(commands).toContain("createHash('sha256')");
+    expect(commands).not.toContain('m.dirtyWorktree');
     expect(commands).toContain('pnpm test:upgrade');
     expect(commands).not.toContain('release:mac:candidate');
     expect(commands).not.toContain('gh release create');
