@@ -104,7 +104,7 @@ const PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS = 15_000;
 
 export interface DesktopWindow {
   showLoading(): Promise<void>;
-  showHarness(origin: string): Promise<void>;
+  showHarness(url: string): Promise<void>;
   showFailure(failure: RuntimeFailure): Promise<void>;
   reload(): void;
   reveal(): void;
@@ -311,15 +311,15 @@ class ElectronDesktopWindow implements DesktopWindow {
     await this.#window.loadURL(this.#loadingUrl);
   }
 
-  async showHarness(origin: string): Promise<void> {
-    const trustedOrigin = createTrustedHarnessOrigin(origin);
+  async showHarness(url: string): Promise<void> {
+    const trustedOrigin = createTrustedHarnessOrigin(url);
     const currentProductUrl = this.#harnessView.webContents.getURL();
     this.#trustedOrigin = trustedOrigin;
     this.#productBridge.setTrustedOrigin(trustedOrigin);
     this.#productReadiness.begin(trustedOrigin);
     this.#rendererRecovery.reset('harness');
     await loadProductDocument(
-      () => navigateProductDocument(this.#harnessView.webContents, trustedOrigin),
+      () => navigateProductDocument(this.#harnessView.webContents, url),
       PRODUCT_DOCUMENT_NAVIGATION_TIMEOUT_MS,
       () => resetProductDocument(this.#harnessView.webContents),
       currentProductUrl !== '' && currentProductUrl !== 'about:blank',

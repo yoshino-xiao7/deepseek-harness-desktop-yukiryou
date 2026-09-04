@@ -13,8 +13,8 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 
 const RUNTIME_UPGRADE = {
-  id: 'dsh-0.1.1-rc.2-storage-v1',
-  version: '0.1.1-rc.2',
+  id: 'dsh-0.1.2-rc.1-storage-v1',
+  version: '0.1.2-rc.1',
 } as const;
 
 export type RuntimeHomeUpgradeBackupResult =

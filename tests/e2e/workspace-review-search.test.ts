@@ -10,6 +10,7 @@ import { resolveE2eExecutablePath } from './executable-path.js';
 import { closeElectronTestApplication } from './electron-cleanup.js';
 
 const execFileAsync = promisify(execFile);
+const runtimeCookieHeaders = new Map<string, string>();
 
 function poll<T>(
   callback: () => T | Promise<T>,
@@ -68,7 +69,14 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
       .toBe('true');
     const harness = application.windows().find((page) => page.url().startsWith('http://127.0.0.1:'));
     if (harness === undefined) throw new Error('Harness page is missing');
-    const composer = harness.locator('textarea').last();
+    const composer = harness
+      .locator('textarea,[contenteditable="true"][role="textbox"]')
+      .last();
+    const readComposerText = () => composer.evaluate((element) => (
+      element instanceof HTMLTextAreaElement
+        ? element.value
+        : (element as HTMLElement).innerText
+    ).replace(/\n{2,}/gu, '\n\n'));
     await shell.evaluate(() => {
       document.documentElement.dataset.appearanceScheme = 'dark';
       document.documentElement.style.setProperty('--harness-foreground', 'rgb(244 246 251)');
@@ -79,7 +87,7 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await sourceDirectory.click({ button: 'right' });
     await shell.getByRole('menuitem', { name: '添加文件夹到对话' }).click();
     await poll(
-      () => composer.inputValue(),
+      readComposerText,
       { timeout: 10_000 },
     ).toBe('@src/');
     await sourceDirectory.click({ button: 'right' });
@@ -107,7 +115,7 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     ).toBe('rgb(244, 246, 251)');
     await shell.getByRole('menuitem', { name: '添加到对话' }).click();
     await poll(
-      () => composer.inputValue(),
+      readComposerText,
       { timeout: 10_000 },
     ).toBe('@src/\n\n@src/NeedlePanel.ts');
 
@@ -124,7 +132,7 @@ describe.skipIf(process.platform !== 'darwin')('Workspace Review search', () => 
     await previewCode.click({ button: 'right' });
     await shell.getByRole('menuitem', { name: '添加选中内容到对话' }).click();
     await poll(
-      () => composer.inputValue(),
+      readComposerText,
       { timeout: 10_000 },
     )
       .toBe('@src/\n\n@src/NeedlePanel.ts\n\n@src/NeedlePanel.ts 第 1 行\n\nexport const needle = true;');
@@ -214,15 +222,32 @@ async function waitForHarnessOrigin(application: ElectronApplication): Promise<s
     return origin;
   }, { timeout: 30_000 }).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   if (origin === undefined) throw new Error('Harness origin is missing');
+  const cookies = await application.evaluate(
+    ({ session }, url) => session.defaultSession.cookies.get({ url }),
+    origin,
+  );
+  runtimeCookieHeaders.set(
+    origin,
+    cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; '),
+  );
   return origin;
 }
 
 async function callHarnessApi(origin: string, method: string, payload: unknown): Promise<unknown> {
   const rpcId = crypto.randomUUID();
-  const response = await fetch(`${origin}/api/${method}`, {
+  const endpoint = method.replace('.', '/');
+  const response = await fetch(`${origin}/api/${endpoint}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
+    headers: {
+      'content-type': 'application/json',
+      cookie: runtimeCookieHeaders.get(origin) ?? '',
+    },
+    body: JSON.stringify({
+      type: 'client-request',
+      rpcId,
+      method: endpoint,
+      payload: { args: { request: payload } },
+    }),
   });
   const envelope = asRecord(await response.json());
   const result = asRecord(envelope.result);
@@ -240,7 +265,17 @@ async function selectSession(application: ElectronApplication, sessionId: string
     await harness.executeJavaScript(
       `localStorage.setItem('dsh.sessions.current', ${JSON.stringify(JSON.stringify({ sessionId: selectedSessionId }))})`,
     );
-    harness.reload();
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('Harness reload timed out after selecting the session')),
+        15_000,
+      );
+      harness.once('did-finish-load', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      harness.reload();
+    });
   }, sessionId);
 }
 

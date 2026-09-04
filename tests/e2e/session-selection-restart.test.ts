@@ -10,6 +10,7 @@ import { closeElectronTestApplication } from './electron-cleanup.js';
 import { resolveE2eExecutablePath } from './executable-path.js';
 
 const currentSessionStorageKey = 'dsh.sessions.current';
+const runtimeCookieHeaders = new Map<string, string>();
 
 describe('Harness session selection across desktop restarts', () => {
   let electronApp: ElectronApplication | undefined;
@@ -146,6 +147,14 @@ async function launchAndWait(
     }, { timeout: 30_000 })
     .toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   if (origin === undefined) throw new Error('Harness origin is missing');
+  const cookies = await application.evaluate(
+    ({ session }, url) => session.defaultSession.cookies.get({ url }),
+    origin,
+  );
+  runtimeCookieHeaders.set(
+    origin,
+    cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; '),
+  );
   return { application, origin };
 }
 
@@ -322,10 +331,22 @@ async function callHarnessApi(
   payload: unknown,
 ): Promise<unknown> {
   const rpcId = crypto.randomUUID();
-  const response = await fetch(`${origin}/api/${method}`, {
+  const endpoint = method.replace('.', '/');
+  const args = method === 'session.list'
+    ? { _request: payload }
+    : { request: payload };
+  const response = await fetch(`${origin}/api/${endpoint}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
+    headers: {
+      'content-type': 'application/json',
+      cookie: runtimeCookieHeaders.get(origin) ?? '',
+    },
+    body: JSON.stringify({
+      type: 'client-request',
+      rpcId,
+      method: endpoint,
+      payload: { args },
+    }),
   });
   if (!response.ok) {
     throw new Error(`${method} transport failed with HTTP ${String(response.status)}`);

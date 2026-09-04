@@ -109,13 +109,13 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
     await this.#showRecoveryLocation(this.#options.loadingUrl);
   }
 
-  async showHarness(origin: string): Promise<void> {
-    const trustedOrigin = createTrustedHarnessOrigin(origin);
+  async showHarness(url: string): Promise<void> {
+    const trustedOrigin = createTrustedHarnessOrigin(url);
     this.#readiness.begin(trustedOrigin);
     this.#productBridge.setTrustedOrigin(trustedOrigin);
     const ready = this.#waitForReadiness();
     try {
-      await this.#productWindow.loadURL(trustedOrigin);
+      await this.#productWindow.loadURL(url);
       this.#settleReadiness(this.#readiness.documentLoaded());
       await ready;
     } catch (error) {

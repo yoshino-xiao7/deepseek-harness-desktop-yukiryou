@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({
         'plugins.title': '插件管理',
         'plugins.description': '基于当前 Harness Loader 的真实快照，说明每个插件的来源、状态和为什么不能操作。',
         'plugins.readonlyTitle': '当前版本为只读清单',
-        'plugins.readonlyDescription': 'Harness 0.1.1-rc.2 只提供插件状态查询，没有安全的启用、停用或卸载接口。这里不会显示无效按钮；后续受管安装能力会在具备事务和恢复机制后开放。',
+        'plugins.readonlyDescription': 'Harness 0.1.2-rc.1 只提供插件状态查询，没有安全的启用、停用或卸载接口。这里不会显示无效按钮；后续受管安装能力会在具备事务和恢复机制后开放。',
         'plugins.securityNote': '插件与 Harness 运行在同一进程权限范围内；“系统”与“依赖”表示装配来源，不代表安全沙箱。',
         'plugins.loading': '正在读取插件…',
         'plugins.error': '暂时无法读取插件清单。',
@@ -80,7 +80,7 @@ window.__ModuleLoader__.load({
         'plugins.title': 'Plugin management',
         'plugins.description': 'A live Harness Loader snapshot that explains each plugin’s provenance, state, and available actions.',
         'plugins.readonlyTitle': 'This inventory is read-only',
-        'plugins.readonlyDescription': 'Harness 0.1.1-rc.2 exposes plugin status but no safe enable, disable, or uninstall API. Invalid controls are not shown; managed installation will remain closed until transactions and recovery are available.',
+        'plugins.readonlyDescription': 'Harness 0.1.2-rc.1 exposes plugin status but no safe enable, disable, or uninstall API. Invalid controls are not shown; managed installation will remain closed until transactions and recovery are available.',
         'plugins.securityNote': 'Plugins share process privileges with Harness. System and dependency labels describe deployment provenance, not a security sandbox.',
         'plugins.loading': 'Reading plugins…',
         'plugins.error': 'The plugin inventory is temporarily unavailable.',
@@ -929,7 +929,7 @@ window.__ModuleLoader__.load({
       const update = updatePresentation(state, t);
       const rows = [
         ['about.application', state.currentVersion],
-        ['about.harness', '0.1.1-rc.2'],
+        ['about.harness', '0.1.2-rc.1'],
         ['about.node', '24.19.0'],
         ['about.pnpm', '10.34.5'],
         ['about.architecture', t('about.architectureValue')],

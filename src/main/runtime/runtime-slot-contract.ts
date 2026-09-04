@@ -14,7 +14,7 @@ export interface RuntimeSlotContract {
 }
 
 /**
- * Contract verified against the dsh 0.1.1-rc.2 CLIENT_SLOT_API catalog.
+ * Contract verified against the dsh 0.1.2-rc.1 client slot catalog.
  * This checked-in copy keeps unit tests independent from the gitignored vendored
  * Runtime; runtime:verify remains responsible for proving the pinned Runtime.
  */

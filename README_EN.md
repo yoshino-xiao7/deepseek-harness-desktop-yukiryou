@@ -303,7 +303,7 @@ See the [release rules](docs/09-github-and-apple-release.md) and [changelog](CHA
 
 | Component | Current version | Policy |
 | --- | --- | --- |
-| DeepSeek Harness | <code>0.1.1-rc.2</code> | Pinned and verified with the app |
+| DeepSeek Harness | <code>0.1.2-rc.1</code> | Pinned and verified with the app |
 | Node.js | <code>24.19.0</code> | Bundled per <code>darwin-arm64</code> / <code>win32-x64</code> target |
 | pnpm | <code>10.34.5</code> | Used only by the bundled Harness |
 | Electron | <code>43.4.0</code> | Desktop shell runtime |

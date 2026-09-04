@@ -303,7 +303,7 @@ pnpm make:win
 
 | 组件 | 当前版本 | 策略 |
 | --- | --- | --- |
-| DeepSeek Harness | `0.1.1-rc.2` | 随应用固定并验证 |
+| DeepSeek Harness | `0.1.2-rc.1` | 随应用固定并验证 |
 | Node.js | `24.19.0` | 按 `darwin-arm64` / `win32-x64` 目标内置 |
 | pnpm | `10.34.5` | 仅供内置 Harness 使用 |
 | Electron | `43.4.0` | 桌面壳运行时 |

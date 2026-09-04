@@ -18,6 +18,16 @@ export interface RuntimeFailure {
   readonly exitCode?: number | null;
 }
 
+export type RuntimeFetch = (
+  input: string | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+
+export interface RuntimeAccess {
+  navigationUrl(): string;
+  fetch: RuntimeFetch;
+}
+
 export type RuntimeState =
   | { readonly kind: 'stopped' }
   | { readonly kind: 'starting'; readonly attempt: number }
@@ -25,6 +35,7 @@ export type RuntimeState =
       readonly kind: 'ready';
       readonly origin: string;
       readonly version: string;
+      readonly access: RuntimeAccess;
     }
   | { readonly kind: 'failed'; readonly failure: RuntimeFailure };
 
@@ -65,6 +76,7 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     | Promise<Extract<RuntimeState, { kind: 'ready' }>>
     | undefined;
   #stopping = false;
+  #revokeAccess: (() => void) | undefined;
 
   constructor(options: RuntimeSupervisorOptions) {
     this.#options = options;
@@ -107,6 +119,8 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
   async stop(reason: 'quit' | 'restart' | 'update'): Promise<void> {
     this.#stopping = true;
     try {
+      this.#revokeAccess?.();
+      this.#revokeAccess = undefined;
       const child = this.#child;
       if (child === undefined) {
         this.#setState({ kind: 'stopped' });
@@ -158,17 +172,34 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
     });
     child.stdout?.setEncoding('utf8');
     child.stderr?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) =>
-      this.#options.onOutput?.('stdout', chunk),
-    );
+    let launchUrl: URL | undefined;
+    let stdoutBuffer = '';
+    child.stdout?.on('data', (chunk: string) => {
+      stdoutBuffer += chunk;
+      let newline = stdoutBuffer.indexOf('\n');
+      while (newline >= 0) {
+        const line = stdoutBuffer.slice(0, newline + 1);
+        stdoutBuffer = stdoutBuffer.slice(newline + 1);
+        launchUrl ??= parseHarnessLaunchUrl(line, origin);
+        this.#options.onOutput?.('stdout', redactHarnessLaunchUrl(line));
+        newline = stdoutBuffer.indexOf('\n');
+      }
+    });
     child.stderr?.on('data', (chunk: string) =>
       this.#options.onOutput?.('stderr', chunk),
     );
     child.once('exit', (code) => {
+      if (stdoutBuffer !== '') {
+        launchUrl ??= parseHarnessLaunchUrl(stdoutBuffer, origin);
+        this.#options.onOutput?.('stdout', redactHarnessLaunchUrl(stdoutBuffer));
+        stdoutBuffer = '';
+      }
       if (this.#child === child) {
         this.#child = undefined;
       }
       if (!this.#stopping && this.#state.kind === 'ready') {
+        this.#revokeAccess?.();
+        this.#revokeAccess = undefined;
         this.#setState({
           kind: 'failed',
           failure: {
@@ -180,23 +211,26 @@ class OwnedRuntimeSupervisor implements RuntimeSupervisor {
       }
     });
 
-    const failure = await waitUntilReady(
+    const readiness = await waitUntilReady(
       child,
       origin,
       this.#options.startupTimeoutMs,
       () => spawnError,
+      () => launchUrl,
       companionToken,
     );
-    if (failure !== undefined) {
-      this.#setState({ kind: 'failed', failure });
+    if ('failure' in readiness) {
+      this.#setState({ kind: 'failed', failure: readiness.failure });
       await this.#terminateOwnedProcess(child);
-      throw new Error(failure.message);
+      throw new Error(readiness.failure.message);
     }
 
+    this.#revokeAccess = readiness.revoke;
     const ready: Extract<RuntimeState, { kind: 'ready' }> = {
       kind: 'ready',
       origin,
       version: this.#options.version,
+      access: readiness.access,
     };
     this.#setState(ready);
     return ready;
@@ -368,27 +402,46 @@ async function waitUntilReady(
   origin: string,
   timeoutMs: number,
   getSpawnError: () => Error | undefined,
+  getLaunchUrl: () => URL | undefined,
   companionToken: string | undefined,
-): Promise<RuntimeFailure | undefined> {
+): Promise<
+  | { readonly failure: RuntimeFailure }
+  | { readonly access: RuntimeAccess; readonly revoke: () => void }
+> {
   const deadline = Date.now() + timeoutMs;
   const healthNonce = randomBytes(32).toString('base64url');
+  let authenticatedAccess:
+    | { readonly access: RuntimeAccess; readonly revoke: () => void }
+    | undefined;
   while (Date.now() < deadline) {
     const spawnError = getSpawnError();
     if (spawnError !== undefined) {
-      return {
-        code: 'spawn-failed',
-        message: `Could not start Harness runtime: ${spawnError.message}`,
-      };
+      return { failure: {
+          code: 'spawn-failed',
+          message: `Could not start Harness runtime: ${spawnError.message}`,
+        } };
     }
     if (child.exitCode !== null) {
-      return {
-        code: 'exited-before-ready',
-        message: `Harness runtime exited before readiness with code ${String(child.exitCode)}`,
-        exitCode: child.exitCode,
-      };
+      return { failure: {
+          code: 'exited-before-ready',
+          message: `Harness runtime exited before readiness with code ${String(child.exitCode)}`,
+          exitCode: child.exitCode,
+        } };
     }
     try {
-      const response = await fetch(origin, {
+      const launchUrl = getLaunchUrl();
+      if (launchUrl !== undefined && authenticatedAccess === undefined) {
+        authenticatedAccess = await exchangeHarnessLaunchToken(
+          launchUrl,
+          origin,
+          timeoutMs,
+        );
+      }
+      if (authenticatedAccess === undefined) {
+        await delay(50);
+        continue;
+      }
+      const response = await authenticatedAccess.access.fetch(origin, {
         signal: AbortSignal.timeout(Math.min(500, timeoutMs)),
       });
       const rootReady = response.ok;
@@ -401,20 +454,22 @@ async function waitUntilReady(
             timeoutMs,
             companionToken,
             healthNonce,
+            authenticatedAccess.access.fetch,
           ))
       ) {
         await delay(0);
-        if (child.exitCode === null) return undefined;
+        if (child.exitCode === null) return authenticatedAccess;
       }
     } catch {
       // The runtime is still starting.
     }
     await delay(50);
   }
-  return {
-    code: 'startup-timeout',
-    message: `Harness runtime did not become ready within ${String(timeoutMs)}ms`,
-  };
+  authenticatedAccess?.revoke();
+  return { failure: {
+      code: 'startup-timeout',
+      message: `Harness runtime did not become ready within ${String(timeoutMs)}ms`,
+    } };
 }
 
 async function companionRouteReady(
@@ -422,8 +477,9 @@ async function companionRouteReady(
   timeoutMs: number,
   companionToken: string,
   nonce: string,
+  runtimeFetch: RuntimeFetch,
 ): Promise<boolean> {
-  const response = await fetch(new URL(COMPANION_RPC_ROUTE, origin), {
+  const response = await runtimeFetch(new URL(COMPANION_RPC_ROUTE, origin), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ kind: 'runtime.health', nonce }),
@@ -456,6 +512,81 @@ async function companionRouteReady(
     return false;
   }
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function parseHarnessLaunchUrl(line: string, expectedOrigin: string): URL | undefined {
+  const match = /^dsh web: (\S+)\s*$/u.exec(line.trim());
+  if (match === null) return undefined;
+  try {
+    const rawUrl = match[1];
+    if (rawUrl === undefined) return undefined;
+    const url = new URL(rawUrl);
+    if (
+      url.origin !== expectedOrigin ||
+      url.protocol !== 'http:' ||
+      url.hostname !== '127.0.0.1' ||
+      url.pathname !== '/' ||
+      url.hash !== '' ||
+      url.username !== '' ||
+      url.password !== '' ||
+      [...url.searchParams.keys()].some((key) => key !== 'token') ||
+      url.searchParams.getAll('token').length !== 1 ||
+      !/^[A-Za-z0-9_-]{43,128}$/u.test(url.searchParams.get('token') ?? '')
+    ) return undefined;
+    return url;
+  } catch {
+    return undefined;
+  }
+}
+
+function redactHarnessLaunchUrl(line: string): string {
+  return line.replace(/(dsh web: \S+\?token=)[A-Za-z0-9_-]+/gu, '$1[redacted]');
+}
+
+async function exchangeHarnessLaunchToken(
+  launchUrl: URL,
+  origin: string,
+  timeoutMs: number,
+): Promise<{ readonly access: RuntimeAccess; readonly revoke: () => void }> {
+  const response = await fetch(launchUrl, {
+    redirect: 'manual',
+    signal: AbortSignal.timeout(Math.min(1_000, timeoutMs)),
+  });
+  const setCookie = response.headers.get('set-cookie');
+  const cookie = setCookie?.split(';', 1)[0];
+  const attributes = setCookie?.toLowerCase() ?? '';
+  const validCookie =
+    response.status === 303 &&
+    response.headers.get('location') === '/' &&
+    cookie !== undefined &&
+    /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+=[^;\s]+$/u.test(cookie) &&
+    attributes.includes('; httponly') &&
+    attributes.includes('; samesite=strict') &&
+    attributes.includes('; path=/');
+  await response.body?.cancel();
+  if (!validCookie) throw new Error('Harness launch token exchange was rejected');
+
+  let active = true;
+  const runtimeFetch: RuntimeFetch = async (input, init = {}) => {
+    if (!active) throw new Error('Harness runtime access is no longer active');
+    const url = new URL(input.toString(), origin);
+    if (url.origin !== origin) {
+      throw new Error('Harness runtime credentials cannot be sent off-origin');
+    }
+    const headers = new Headers(init.headers);
+    headers.set('cookie', cookie);
+    return fetch(url, { ...init, redirect: 'manual', headers });
+  };
+  return {
+    access: Object.freeze({
+      navigationUrl: () => {
+        if (!active) throw new Error('Harness runtime access is no longer active');
+        return launchUrl.href;
+      },
+      fetch: runtimeFetch,
+    }),
+    revoke: () => { active = false; },
+  };
 }
 
 async function readBoundedJson(

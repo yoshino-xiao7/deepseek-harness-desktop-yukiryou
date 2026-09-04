@@ -29,10 +29,10 @@ describe('RuntimeSupervisor stress', () => {
 
       for (let cycle = 0; cycle < cycles; cycle += 1) {
         const ready = await supervisor.start();
-        await expect(fetch(ready.origin)).resolves.toMatchObject({ ok: true });
+        await expect(ready.access.fetch(ready.origin)).resolves.toMatchObject({ ok: true });
         await supervisor.stop('restart');
         expect(supervisor.getState()).toEqual({ kind: 'stopped' });
-        await expect(fetch(ready.origin)).rejects.toThrow();
+        await expect(ready.access.fetch(ready.origin)).rejects.toThrow();
       }
     },
     Math.max(10_000, cycles * 1_000),
