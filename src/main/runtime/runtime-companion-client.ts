@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path';
+import type { RuntimeFetch } from './runtime-supervisor.js';
 
 const ROUTE = '/plugins/@dsh-desktop/companion/rpc';
 const MAX_RESPONSE_BYTES = 32 * 1024;
@@ -17,7 +18,10 @@ export interface WorkspaceAuthority {
   readonly root: string;
 }
 
-export function createRuntimeCompanionClient(token: string): RuntimeCompanionClient {
+export function createRuntimeCompanionClient(
+  token: string,
+  runtimeFetch: RuntimeFetch = fetch,
+): RuntimeCompanionClient {
   return {
     async authorizeWorkspace(origin, input) {
       try {
@@ -25,7 +29,7 @@ export function createRuntimeCompanionClient(token: string): RuntimeCompanionCli
           kind: 'workspace.authorize',
           sessionId: input.sessionId,
           ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
-        }, WORKSPACE_AUTHORIZATION_TIMEOUT_MS);
+        }, WORKSPACE_AUTHORIZATION_TIMEOUT_MS, runtimeFetch);
         if (!isRecord(payload) || payload.status !== 'authorized') return undefined;
         if (
           typeof payload.workspaceId !== 'string' || payload.workspaceId.length > 128 ||
@@ -45,8 +49,9 @@ async function execute(
   token: string,
   request: unknown,
   timeoutMs = 5_000,
+  runtimeFetch: RuntimeFetch = fetch,
 ): Promise<unknown> {
-  const response = await fetch(new URL(ROUTE, origin), {
+  const response = await runtimeFetch(new URL(ROUTE, origin), {
     method: 'POST', redirect: 'error',
     headers: { accept: 'application/json', 'content-type': 'application/json', 'x-dsh-desktop-companion-token': token },
     body: JSON.stringify(request), signal: AbortSignal.timeout(timeoutMs),

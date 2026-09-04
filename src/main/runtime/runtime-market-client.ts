@@ -1,4 +1,5 @@
 import type { PluginProfileCandidate } from './plugin-profile-bootstrap.js';
+import type { RuntimeFetch } from './runtime-supervisor.js';
 
 const ROUTE = '/plugins/@dsh-desktop/market/managed-rpc';
 const MAX_RESPONSE_BYTES = 128 * 1024;
@@ -39,7 +40,10 @@ export interface RuntimeMarketClient {
   }>;
 }
 
-export function createRuntimeMarketClient(token: string): RuntimeMarketClient {
+export function createRuntimeMarketClient(
+  token: string,
+  runtimeFetch: RuntimeFetch = fetch,
+): RuntimeMarketClient {
   if (token.length < 32) throw new Error('Runtime market client requires a private token');
   return Object.freeze({
     async preview(
@@ -55,7 +59,7 @@ export function createRuntimeMarketClient(token: string): RuntimeMarketClient {
         sourceRecordId: identity.sourceRecordId,
         itemId: identity.itemId,
         versionPreference: identity.versionPreference,
-      });
+      }, runtimeFetch);
       const preview = validatedPreview(value);
       if (preview === undefined) throw new Error('Runtime returned an invalid managed preview');
       return preview;
@@ -76,7 +80,7 @@ export function createRuntimeMarketClient(token: string): RuntimeMarketClient {
         currentVersion: identity.currentVersion,
         repository: identity.repository,
         versionPreference: identity.versionPreference,
-      });
+      }, runtimeFetch);
       const preview = validatedPreview(value);
       if (preview === undefined) throw new Error('Runtime returned an invalid managed preview');
       return preview;
@@ -84,7 +88,12 @@ export function createRuntimeMarketClient(token: string): RuntimeMarketClient {
 
     async stage(origin: string, previewId: string) {
       if (!PREVIEW_PATTERN.test(previewId)) throw new Error('Invalid Runtime staging preview');
-      const value = await execute(origin, token, { kind: 'stage', previewId });
+      const value = await execute(
+        origin,
+        token,
+        { kind: 'stage', previewId },
+        runtimeFetch,
+      );
       if (!isRecord(value) || value.status !== 'staged' ||
         !GENERATION_PATTERN.test(stringValue(value.profileGeneration)) ||
         !validCandidate(value.candidate)) {
@@ -102,8 +111,13 @@ export function createRuntimeMarketClient(token: string): RuntimeMarketClient {
   });
 }
 
-async function execute(origin: string, token: string, payload: unknown): Promise<unknown> {
-  const response = await fetch(new URL(ROUTE, origin), {
+async function execute(
+  origin: string,
+  token: string,
+  payload: unknown,
+  runtimeFetch: RuntimeFetch,
+): Promise<unknown> {
+  const response = await runtimeFetch(new URL(ROUTE, origin), {
     method: 'POST',
     redirect: 'error',
     headers: {

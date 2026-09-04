@@ -6,6 +6,16 @@
 
 ## [未发布]
 
+## [1.0.8] - 2026-09-04
+
+### Runtime
+
+- 内置 DeepSeek Harness 升级至 `0.1.2-rc.1`；production lock 显式冻结拆分后的全部非可选 Peer、原生脚本 allowlist 与 npm 完整性，并把 Runtime Home 回退代际更新为 `runtime.pre-dsh-0.1.2-rc.1[.N]`。
+- 桌面端适配 rc.1 的浏览器鉴权：Supervisor 从受校验的启动 URL 交换 HttpOnly/SameSite Cookie，首页、Companion 与 Market RPC 全部通过仅限当前回环 origin 的私有 fetch 访问，跨域请求失败关闭；启动 token 和 Cookie 不进入状态日志。
+- Electron 首次导航保留受保护启动 URL，Harness 重定向后继续使用干净 origin；E2E 与升级门禁从 Electron Session 读取浏览器 Cookie，避免绕过真实鉴权模型。
+- Client 插件移除已拆分的 `dsh-client-runtime` 聚合依赖，改用 rc.1 的细粒度 Client providers；Desktop Companion 的逐轮变更读取迁移到持久化工具结果元数据。
+- 复核并继续保留模型输入能力、会话选择恢复与上下文容量 Tooltip 三个版本保护补丁；补丁目标已迁移到 rc.1 的实际 bundle。
+
 ## [1.0.7] - 2026-08-31
 
 ### 自动更新
@@ -347,6 +357,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[1.0.8]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.8
 [1.0.3]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.3
 [1.0.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.2
 [1.0.1]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.1

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { createHmac } from 'node:crypto';
 import { Buffer } from 'node:buffer';
+import { URL } from 'node:url';
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 2) {
@@ -11,14 +12,30 @@ const host = args.get('--host') ?? '127.0.0.1';
 const port = Number(args.get('--port'));
 const companionReadyDelayMs = Number(args.get('--companion-ready-delay-ms') ?? 0);
 const startedAt = Date.now();
+const launchToken = 'fake_runtime_launch_token_000000000000000000000';
+const browserCookie = 'dsh_browser_session=fake-browser-session';
 
 if (!Number.isInteger(port) || port <= 0) {
   throw new Error('A positive --port is required');
 }
 
 const server = createServer(async (request, response) => {
+  const requestUrl = new URL(request.url ?? '/', `http://${host}:${String(port)}`);
+  if (requestUrl.pathname === '/' && requestUrl.searchParams.get('token') === launchToken) {
+    response.writeHead(303, {
+      location: '/',
+      'set-cookie': `${browserCookie}; HttpOnly; SameSite=Strict; Path=/`,
+    });
+    response.end();
+    return;
+  }
+  if (!(request.headers.cookie ?? '').split(';').map((value) => value.trim()).includes(browserCookie)) {
+    response.writeHead(401);
+    response.end();
+    return;
+  }
   if (
-    request.url === '/plugins/@dsh-desktop/companion/rpc' &&
+    requestUrl.pathname === '/plugins/@dsh-desktop/companion/rpc' &&
     request.method === 'POST'
   ) {
     if (Date.now() - startedAt < companionReadyDelayMs) {
@@ -64,7 +81,11 @@ const server = createServer(async (request, response) => {
   );
 });
 
-server.listen(port, host);
+server.listen(port, host, () => {
+  process.stdout.write(
+    `dsh web: http://${host}:${String(port)}/?token=${launchToken}\n`,
+  );
+});
 
 function shutdown() {
   server.close(() => process.exit(0));

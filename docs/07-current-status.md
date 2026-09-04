@@ -1,23 +1,23 @@
 # 当前实现状态
 
-更新时间：2026-08-30。
+更新时间：2026-09-04。
 
 ## 已完成
 
 - Electron Forge + TypeScript + pnpm 可复现工程基线；主进程与 preload 使用显式 CommonJS 产物，避免 ESM/CJS 启动冲突。
-- 固定 Node.js 24.19.0、`@deepseek-ai/dsh` 0.1.1-rc.2、pnpm 10.34.5 及其校验值；原生依赖通过 arm64 装配和真实 PTY 往返验证。rc.2 带来 Vision Exp 模型、Files API 图片复用、确定性的图片缩放/格式转换，以及上游 Bubblewrap `/proc/<pid>/root` 逃逸修复。
-- rc.2 首次启动前会先确认全部需检查的旧版 ready 端口均已释放，再把非空 Runtime Home 复制到同级 `runtime.pre-dsh-0.1.1-rc.2[.N]` 回退目录，完成后才允许 Harness 打开 Runtime Home。新的原子事务标记不覆盖或复用 rc.8 的历史回退副本；标记损坏、目标非法或并发准备未完成时失败关闭。
-- 运行时基线测试会强制对齐 source manifest、production lock、DSH 完整性、rc.2 显式 peer 组合与全部 install-script allowlist；`runtime:verify` 会拒绝缺包或残留旧 Runtime，并验证 Node、node-pty、sharp 与 koffi。
+- 固定 Node.js 24.19.0、`@deepseek-ai/dsh` 0.1.2-rc.1、pnpm 10.34.5 及其校验值；rc.1 拆分后的全部非可选 Runtime Peer 已显式冻结，原生依赖通过 arm64 装配和真实 PTY 往返验证。
+- rc.1 首次启动前会先确认全部需检查的旧版 ready 端口均已释放，再把非空 Runtime Home 复制到同级 `runtime.pre-dsh-0.1.2-rc.1[.N]` 回退目录，完成后才允许 Harness 打开 Runtime Home。新的原子事务标记不覆盖或复用既有历史回退副本；标记损坏、目标非法或并发准备未完成时失败关闭。
+- 运行时基线测试会强制对齐 source manifest、production lock、DSH 完整性、rc.1 显式 Peer 组合与全部 install-script allowlist；`runtime:verify` 会拒绝缺包或残留旧 Runtime，并验证 Node、node-pty、sharp 与 koffi。
 - `runtime:vendor` 按架构装配运行时、校验 Node SHA-256、执行版本冒烟并原子替换资源目录。
 - Runtime Home 与用户全局 dsh 隔离；运行时 PATH 只显式加入内置 Node/pnpm。
-- `RuntimeSupervisor` 负责使用桌面壳选定的稳定回环端口、真实 HTTP 就绪探测、进程组终止和结构化失败。
+- `RuntimeSupervisor` 负责使用桌面壳选定的稳定回环端口、解析并校验 rc.1 启动 URL、以一次性 token 换取 HttpOnly/SameSite Cookie、执行同源鉴权就绪探测、进程组终止和结构化失败；启动 token 与 Cookie 不进入可序列化状态或日志。
 - 桌面应用首次选择回环端口后会持久化稳定 origin；旧日志迁移按轮转文件物理顺序采用最后一次 ready origin，同时要求保留日志中的全部不同历史 ready 端口先释放，回滚产生更晚旧版记录后也会安全更新。就绪探测使用每次启动 secret 的 HMAC 挑战验证响应者持有本次 secret；桌面父进程异常退出后 Runtime owner watchdog 主动退出，任一遗留端口持续占用都会在写 endpoint 状态、复制或打开 Runtime Home 前失败关闭，抢占者不能伪装成 Harness。
 - 主窗口启用 `nodeIntegration: false`、`contextIsolation: true`、`sandbox: true`、`webSecurity: true`；只允许当前 Harness origin，HTTPS 外链交给系统浏览器。
 - 单实例、Dock 恢复、关闭隐藏、显式退出、重启 Harness、刷新 UI 和打开日志。
 - 使用 `hiddenInset` 原生交通灯和 44px 本地一体化顶栏；顶栏提供原生拖动区域，官方 Harness 页面独立承载于下方 `WebContentsView`。顶栏背景分界通过隔离 preload 的 `ResizeObserver` 逐帧跟随侧栏展开、收起和拖拽宽度。
 - 启动页采用 YukiRyou 品牌图标、柔光呼吸轨道、三段式加载节奏和轮换状态文案；失败状态停止循环动画并保留重试与诊断入口，同时遵守系统“减少动态效果”偏好。
 - 设置弹窗只新增“关于”页面；浅色、深色和跟随系统统一使用 Harness 官方“通用设置 → 外观”，不再提供重复入口。Harness 已解析的主题仍通过受限外观桥同步到本地顶栏；后续整套 UI 风格将作为独立声明式插件交付，不继续堆入桌面设置插件。
-- 插件设置已通过官方 `settings.plugins.tab` 增加只读“管理说明”和“插件市场”：管理说明使用 rc.2 官方 inventory 区分系统、依赖和外部来源并解释停用原因；插件市场在同一入口内提供发现、可安装、已安装和来源四视图。Market Host 支持固定版本的完整分页扫描，当前真实索引为来源报告 10604 条、规范化 10603 条；搜索、分类和 UI 分页均基于完整本地索引，可安装与已安装视图也支持独立搜索。完整快照在受信任的 Runtime Home 下原子持久化，24 小时内重启直接恢复；读取时按白名单 schema 重建，损坏、错源、符号链接或超限缓存均被拒绝，来源不可用时才显式回退到已验证的过期快照。来源页支持添加、排序、停用和移除最多 20 个 HTTPS JSON v1 自定义目录；来源记录由 Host 原子持久化，内置来源不可修改，自定义目录经过逐跳 DNS/IP 与响应预算校验且只获得发现资格。内置“YukiRyou · 实机验证”来源从独立公开 JSON 仓库读取开发者已安装冒烟测试的精确版本，名单可独立更新，但仍不等同于代码审计或绝对安全保证，安装继续通过同一 Host 安全预检。远程图标由 Host 用不透明同源 ID 代理，逐跳拒绝私网目标、限制 MIME/体积/像素并重编码为 WebP，Client 不接触图片原始 URL。只能返回有限窗口的目录明确标为截断来源，不能产生可安装候选。目录不代表官方认可或安全审核；receipt 所有权约束下的受管安装、启用、停用、上一验证版本回滚和安全卸载均已开放，任意远程命令仍未开放。
+- 插件设置已通过官方 `settings.plugins.tab` 增加只读“管理说明”和“插件市场”：管理说明使用 rc.1 官方 inventory 区分系统、依赖和外部来源并解释停用原因；插件市场在同一入口内提供发现、可安装、已安装和来源四视图。Market Host 支持固定版本的完整分页扫描，当前真实索引为来源报告 10604 条、规范化 10603 条；搜索、分类和 UI 分页均基于完整本地索引，可安装与已安装视图也支持独立搜索。完整快照在受信任的 Runtime Home 下原子持久化，24 小时内重启直接恢复；读取时按白名单 schema 重建，损坏、错源、符号链接或超限缓存均被拒绝，来源不可用时才显式回退到已验证的过期快照。来源页支持添加、排序、停用和移除最多 20 个 HTTPS JSON v1 自定义目录；来源记录由 Host 原子持久化，内置来源不可修改，自定义目录经过逐跳 DNS/IP 与响应预算校验且只获得发现资格。内置“YukiRyou · 实机验证”来源从独立公开 JSON 仓库读取开发者已安装冒烟测试的精确版本，名单可独立更新，但仍不等同于代码审计或绝对安全保证，安装继续通过同一 Host 安全预检。远程图标由 Host 用不透明同源 ID 代理，逐跳拒绝私网目标、限制 MIME/体积/像素并重编码为 WebP，Client 不接触图片原始 URL。只能返回有限窗口的目录明确标为截断来源，不能产生可安装候选。目录不代表官方认可或安全审核；receipt 所有权约束下的受管安装、启用、停用、上一验证版本回滚和安全卸载均已开放，任意远程命令仍未开放。
 - 插件市场 Phase 5 已形成完整的受管安装链：安全预检覆盖传递依赖图、Runtime Peer 兼容性和真实 npm 包体；独立 `ArtifactVerifier`、`ArtifactCache`、`ManagedPluginInstaller` 与 `PluginProfileBootstrap` Module 分别负责失败关闭的包体核验、内容寻址缓存与引用保护、离线 generation 装配，以及启动前试运行/receipt/blocklist/自动恢复。Renderer 只能通过受限 preload 请求短期一次性预览，Electron main 持有精确原生确认 Interface，确认后再次校验预览期限与 Runtime 身份才执行事务，并在结果送达后安排应用重启。公开 Runtime inspection 的 `executionReady` 仍保持 `false`，不存在可被页面直接调用的安装路由；Bootstrap 的内部 `mutationReady` 已为 `true`。身份、入口和 GitHub 仓库回链均可验证的外部顶层包现在可按精确包名合并到 Runtime 行，并提供停用、卸载和受管接管；外部包无需先进入市场目录，Host 可按本机版本或 npm 最新稳定版生成同等级冻结预览。接管试运行前保留原覆盖状态并抑制旧入口，失败恢复，成功后才通过 Harness 官方命令清理原 profile 安装；中断状态会在下次启动依据 generation 与 receipt 自动协调。真实 `@bocha-ai/dsh-web-search-bocha@0.1.0` 已完成 4 个包体、55,378 压缩字节、217,992 解包字节和 47 个文件的全链验证；`dsh-vision-toolkit@0.1.34` 仍因当前 Runtime 缺少两个必需 Client UI Peer在下载前明确阻断。插件市场所有可见时间统一通过本地化分钟级 formatter 展示，不直接显示 ISO 字符串。
 - 内部受管事务已经进一步闭合：Runtime Host 的 `ManagedPreviewVault` 用最多 5 分钟、一次性的 opaque capability 私藏 frozen plan，并通过每次 Runtime 启动轮换、恒定时间比较的私有 token RPC 只接受 Electron main 调用；普通市场 UI 意图头无法访问。main 的 `RuntimeMarketClient` 严格限制响应大小和 schema，`ManagedInstallTransaction` 在任何写盘前消费自己的 token，并串行调用远程 staging 与本地 Bootstrap prepare；过期、重放、generation 不匹配、candidate 替换、并发 mutation 和失败后重试均失败关闭。安装图还会冻结 package 的真实 peer 声明、provider、精确版本和 Runtime snapshot hash；installer 只把 graph Peer 链接到对应 generation 包，把 Runtime Peer 链接到 bundled `node_modules` 中名称/版本均匹配且 realpath 未逃逸的包。Bootstrap 的 bundle 查找也已切换到 receipt 对应的 `generations/<generation>/node_modules`。受限产品 preload/IPC 开放预览、精确确认后的执行、只读受管 inventory，以及精确启停、回滚与卸载请求；Runtime token、URL、缓存路径和 frozen plan 均不会进入 Renderer。`ManagedPluginRemoval`、`ManagedPluginActivation` 与 `ManagedPluginRollback` 都只接受当前 receipt 的 package/version/generation，并与安装共用单 mutation 门。正常升级只保留一个上一已验证 generation；回滚无需重新下载或执行生命周期脚本，仍须原生确认和双健康试启动，成功后消费该回滚点，失败或中断则恢复当前版本。启停通过 receipt 中持久化的 `enabled` 状态和显式 `set-enabled` pending 生成包含或排除目标插件的试运行 launch plan；失败恢复原启用状态、profile 链接和配置，不删除 receipt/cache，也不把原健康插件加入 blocklist。显式重新安装、明确启用或回滚已被 blocklist 的 generation 会开启一次受控重试：试运行前临时解除阻断，失败恢复 blocklist，成功才永久清除。Legacy 产品导航另有 15 秒超时；新建空白产品视图直接首次加载，Runtime 重启时若视图仍承载旧文档，则在首次加载前 `stop()` 并复位到 `about:blank`，超时重试也重复复位，同时容忍 Electron 对被中止旧导航返回的预期 `ERR_ABORTED`。隐藏产品视图显式关闭 `backgroundThrottling`，避免冷启动时后台节流让已经就绪的 Runtime 被误报为 `spawn-failed`。包体和 generation 继续交给引用感知的缓存回收。开发版变更后只重启 Runtime，正式包重启应用。已安装页把官方 Runtime inventory 与 main 校验后的 receipt/blocklist 摘要合并，显示受管版本、格式化安装时间、Runtime 加载状态、上一可回滚版本和最近一次失败版本；只有 receipt 所有者显示“启用/停用”“回滚”和“卸载”。
 - 插件版本更新继续复用同一条受管安装事务，而不是新增旁路：预览会根据当前精确 receipt 区分首次安装、同版本重装和版本更新，并把旧 package/version/generation 一并冻结；确认后 receipt 漂移会拒绝落盘。更新成功才替换 receipt；失败只 blocklist 新 generation，并恢复、重新加载旧稳定 generation，不再因同包名误伤已经验证的旧版本。
@@ -37,32 +37,32 @@
 - 启动时校验 Harness `settings.yaml`；语法损坏或根节点类型错误时保留带时间戳的 `.corrupt-*` 原文件，创建权限为 `0600` 的空设置并提示用户，会话、凭据与工作区数据不受影响。
 - 本地顶栏与 Harness renderer 使用独立的 30 秒有界恢复预算；真实打包应用已分别强制崩溃并验证互不重启，顶栏恢复后会重放侧栏宽度和主题快照。
 - 正式签名的 Apple Silicon 版本启动 15 秒后自动检查更新，此后每 6 小时复查；关于页可随时手动检查并在下载完成后直接重启安装。仅在下载或等待安装时，Harness 侧栏右下角显示固定图标入口；侧栏结构不匹配、最新版、空闲和错误状态均失效关闭并移除。开发包明确禁用更新。
-- 当前公开版为 `v1.0.2`；`v1.0.3` 正在完成本地 lint、类型检查、单元测试、集成测试及固定 rc.2 Runtime 校验，macOS arm64 本机打包/启动与 Windows 11 x64 候选生命周期全部通过后才允许创建 Draft。
+- 当前公开版为 `v1.0.7`；`v1.0.8` 正在完成固定 rc.1 Runtime、本地门禁、macOS arm64 打包/启动与 Windows 11 x64 候选生命周期验证，全部通过后才允许创建 Draft。
 - 正式发布改为 GitHub Actions 多 runner 强制门禁：Forge 官方签名候选必须先在全新 runner 复制到 `/Applications` 并启动成功，才允许公证；最终 DMG/ZIP 还要在另一个全新 runner 重复安装、Gatekeeper、ticket 与启动验收，之后才创建 Draft。
 - 运行时生产依赖审计为 0 个已知漏洞；内置 pnpm 已从存在高危公告的 10.33.2 升级到 10.34.5。
 
 ## 自动验证现状
 
 ```text
-Unit:        457 passed（101 files）
-Integration: 40 passed（10 files；fake Harness、真实 rc.2 dsh、受管 generation fixture、内置 pnpm、发布/国内镜像与官网清单元数据契约、压力/soak 冒烟）
+Unit:        485 passed（102 files）
+Integration: 48 passed / 2 platform-skipped（12 files；fake Harness、真实 rc.1 dsh、受管 generation fixture、内置 pnpm、发布/国内镜像与官网清单元数据契约、压力/soak 冒烟）
 E2E arm64:   8 passed / 1 platform-skipped（稳定启动、完整 UI/显式退出、renderer 恢复、Session 选择恢复、Companion 宽度持久化、Workspace 搜索/筛选/预览历史与逐文件审阅、Integrated 单产品窗口/Frame 健康门）
 Upgrade:     3/3 consecutive runs passed（0.2.1-beta.2 → 0.2.2-beta.1；真实非空 Session、相同 origin/current selection/Session 集合、Runtime Home 回退副本）
 Prior stress baseline:    100/100 passed（启动、就绪、停止、端口回收）
 Prior companion baseline: 100/100 passed（审核、工作区切换、面板收起/展开状态循环）
 Prior memory baseline:    2500/2500 passed（总 working set 480.2 → 476.9 MiB，无线性增长）
 Prior app soak baseline:  60s passed（shell/Harness 每秒探测，5 个进程稳定）
-Local package: 1.0.3 arm64 `.app` 已生成并完成开发版界面验收；正式候选待 CI 签名验证
-Artifacts:   1.0.3 双平台最终产物待正式 Release 工作流生成和验收
+Local package: 1.0.8 arm64 `.app` 已生成；开发版 GUI 与正式签名候选验收待完成
+Artifacts:   1.0.8 双平台最终产物待正式 Release 工作流生成和验收
 ```
 
 `verify:release` 会检查桌面可执行文件、内置 Node、`pty.node`、`spawn-helper` 和运行时清单的架构一致性，并用包内 Node 实际运行 PTY、sharp 与 koffi 探针；正式发布模式还会逐项验证原生 PTY 签名，并强制验证 Developer ID 签名与 notarization ticket。全新 runner 安装候选和最终 DMG 后，会启动精确的 `/Applications` 产物并等待 Harness 就绪。
 
 ## 当前产物
 
-- 开发版装配的 `resources/runtime/dsh`（Node 24.19.0 + Harness 0.1.1-rc.2）
+- 开发版装配的 `resources/runtime/dsh`（Node 24.19.0 + Harness 0.1.2-rc.1）
 
-本地产物只适合开发验证，不应直接作为公开下载版本。当前公开版 `v1.0.2` 保持不变；`v1.0.3` 必须重新完成 macOS 签名、异机安装、30 分钟真实应用 soak、Apple 公证、最终 DMG/ZIP 复验，以及 Windows 真机 Setup/portable 生命周期验证。已发布标签不可覆盖。
+本地产物只适合开发验证，不应直接作为公开下载版本。当前公开版 `v1.0.7` 保持不变；`v1.0.8` 必须重新完成 macOS 签名、异机安装、真实应用 soak、Apple 公证、最终 DMG/ZIP 复验，以及 Windows 真机 Setup/portable 生命周期验证。已发布标签不可覆盖。
 
 ## 已完成的 CI 发布配置
 

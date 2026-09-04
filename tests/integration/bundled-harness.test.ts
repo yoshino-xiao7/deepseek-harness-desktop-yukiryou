@@ -18,6 +18,16 @@ import { createPluginProfileBootstrap } from '../../src/main/runtime/plugin-prof
 const projectRoot = process.cwd();
 const execFileAsync = promisify(execFile);
 
+function pluginBundlePath(html: string, pluginId: string): string {
+  const path = [...html.matchAll(/\b(?:src|href)="([^"]+)"/gu)]
+    .map((match) => match[1])
+    .find((source) => source?.includes(`${pluginId}/client.js`));
+  if (path === undefined) {
+    throw new Error(`Missing client bundle for ${pluginId}`);
+  }
+  return path.replaceAll('&amp;', '&');
+}
+
 describe('bundled Harness runtime', () => {
   let supervisor: RuntimeSupervisor | undefined;
 
@@ -25,7 +35,7 @@ describe('bundled Harness runtime', () => {
     await supervisor?.stop('quit');
   });
 
-  it('ships the rc.8-scoped per-model capability editor patch', async () => {
+  it('ships the rc.1-scoped per-model capability editor patch', async () => {
     const client = await readFile(
       join(
         projectRoot,
@@ -54,7 +64,7 @@ describe('bundled Harness runtime', () => {
     );
   });
 
-  it('ships the rc.8-scoped session selection startup patch', async () => {
+  it('ships the rc.1-scoped session selection startup patch', async () => {
     const client = await readFile(
       join(
         projectRoot,
@@ -63,7 +73,7 @@ describe('bundled Harness runtime', () => {
         'dsh',
         'node_modules',
         '@deepseek-ai',
-        'dsh-client-runtime',
+        'dsh-api-session-controller',
         'lib',
         'client.js',
       ),
@@ -105,7 +115,7 @@ describe('bundled Harness runtime', () => {
         ),
         '--version',
       ]);
-      expect(dshVersion.stdout.trim()).toBe('0.1.1-rc.2');
+      expect(dshVersion.stdout.trim()).toBe('0.1.2-rc.1');
       supervisor = createRuntimeSupervisor({
         command: runtimeCommand.command,
         args: runtimeCommand.args,
@@ -115,52 +125,57 @@ describe('bundled Harness runtime', () => {
           join(runtimeRoot, runtimeLayout.nodeBinDirectory),
         ],
         workspaceRoot,
-        version: '0.1.0-rc.8',
+        version: '0.1.2-rc.1',
         startupTimeoutMs: runtimeStartupTimeoutMs(),
         shutdownTimeoutMs: 5_000,
         createCompanionToken: () => 'integration-token-that-is-long-enough-123456789',
       });
 
       const ready = await supervisor.start();
-      const response = await fetch(ready.origin);
+      const response = await ready.access.fetch(ready.origin);
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('text/html');
       const html = await response.text();
       expect(html).toContain('@dsh-desktop/settings');
       expect(html).toContain('@dsh-desktop/companion');
-      const pluginResponse = await fetch(
-        `${ready.origin}/plugins/@dsh-desktop/settings/client.js`,
+      const settingsBundlePath = pluginBundlePath(
+        html,
+        '@dsh-desktop/settings',
+      );
+      const pluginResponse = await ready.access.fetch(
+        new URL(settingsBundlePath, ready.origin),
       );
       expect(pluginResponse.status).toBe(200);
       await expect(pluginResponse.text()).resolves.toContain(
         "id: '@dsh-desktop/settings'",
       );
-      const brandResponse = await fetch(
+      const brandResponse = await ready.access.fetch(
         `${ready.origin}/plugins/@dsh-desktop/settings/brand.png`,
       );
       expect(brandResponse.status).toBe(200);
       expect(brandResponse.headers.get('content-type')).toContain('image/png');
-      const companionClient = await fetch(
-        `${ready.origin}/plugins/@dsh-desktop/companion/client.js`,
-      );
+      const companionClient = await ready.access.fetch(new URL(
+        pluginBundlePath(html, '@dsh-desktop/companion'),
+        ready.origin,
+      ));
       expect(companionClient.status).toBe(200);
       const companionScript = await companionClient.text();
       expect(companionScript).toContain("conversation.chat.turnTail");
       expect(companionScript).toContain("desktop-turn-changes");
       expect(companionScript).toContain("deepSeekYukiRyouReview");
       expect(companionScript).not.toContain("dsh-balance");
-      const unauthorized = await fetch(
+      const unauthorized = await ready.access.fetch(
         `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
         { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"kind":"account.balance"}' },
       );
       expect(unauthorized.status).toBe(403);
-      const unauthorizedMarket = await fetch(
+      const unauthorizedMarket = await ready.access.fetch(
         `${ready.origin}/plugins/@dsh-desktop/market/managed-rpc`,
         { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"kind":"stage","previewId":"invalid"}' },
       );
       expect(unauthorizedMarket.status).toBe(403);
-      const authenticatedMarket = await fetch(
+      const authenticatedMarket = await ready.access.fetch(
         `${ready.origin}/plugins/@dsh-desktop/market/managed-rpc`,
         {
           method: 'POST',
@@ -172,7 +187,7 @@ describe('bundled Harness runtime', () => {
         },
       );
       expect(authenticatedMarket.status).toBe(400);
-      const legacyBalance = await fetch(
+      const legacyBalance = await ready.access.fetch(
         `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
         {
           method: 'POST',
@@ -245,7 +260,7 @@ describe('bundled Harness runtime', () => {
           join(runtimeRoot, runtimeLayout.nodeBinDirectory),
         ],
         workspaceRoot,
-        version: '0.1.0-rc.8',
+        version: '0.1.2-rc.1',
         startupTimeoutMs: 20_000,
         shutdownTimeoutMs: 5_000,
         createCompanionToken: () => 'fixture-token-that-is-long-enough-1234567890',
@@ -259,7 +274,7 @@ describe('bundled Harness runtime', () => {
       });
       expect(ready).toMatchObject({
         kind: 'ready',
-        version: '0.1.0-rc.8',
+        version: '0.1.2-rc.1',
       });
       await bootstrap.commit(staged.profileGeneration);
     },

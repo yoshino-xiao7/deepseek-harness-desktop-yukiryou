@@ -21,7 +21,7 @@ const REPOSITORY = 'https://github.com/yoshino-xiao7/deepseek-harness-desktop-yu
  */
 export function createDevelopmentFixture(options = {}) {
   if (options.enabled !== true) return undefined;
-  const runtimeSnapshotHash = `sha256:${createHash('sha256').update('dsh-0.1.1-rc.2-development-fixture').digest('hex')}`;
+  const runtimeSnapshotHash = `sha256:${createHash('sha256').update('dsh-0.1.2-rc.1-development-fixture').digest('hex')}`;
   const observedAt = new Date().toISOString();
   const source = Object.freeze({
     id: SOURCE_ID,

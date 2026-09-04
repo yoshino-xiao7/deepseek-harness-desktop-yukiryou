@@ -366,7 +366,7 @@ export class AppCoordinator {
         join(runtimeRoot, 'node', 'bin'),
       ],
       workspaceRoot: app.getPath('documents'),
-      version: '0.1.1-rc.2',
+      version: '0.1.2-rc.1',
       startupTimeoutMs: runtimeStartupTimeoutMs(),
       shutdownTimeoutMs: 5_000,
       port: runtimePort.port,
@@ -474,7 +474,10 @@ export class AppCoordinator {
       return;
     }
     const runtimeIdentity = { origin: state.origin, token: this.#companionToken };
-    const authority = await createRuntimeCompanionClient(runtimeIdentity.token).authorizeWorkspace(
+    const authority = await createRuntimeCompanionClient(
+      runtimeIdentity.token,
+      state.access.fetch,
+    ).authorizeWorkspace(
       state.origin,
       {
         sessionId: snapshot.sessionId,
@@ -609,7 +612,10 @@ export class AppCoordinator {
           reason: 'not-installable',
         };
       }
-      const client = createRuntimeMarketClient(this.#companionToken);
+      const client = createRuntimeMarketClient(
+        this.#companionToken,
+        state.access.fetch,
+      );
       const preview = expectedExternal === undefined
         ? await client.preview(state.origin, {
             sourceRecordId: request.sourceRecordId,
@@ -1077,7 +1083,7 @@ export class AppCoordinator {
       [
         `Application: ${app.name} ${app.getVersion()}`,
         `Electron: ${process.versions.electron}`,
-        `Harness: 0.1.1-rc.2`,
+        `Harness: 0.1.2-rc.1`,
         `Architecture: ${process.arch}`,
         `Failure: ${failure?.code ?? 'none'}`,
         `Details: ${redact(failure?.message ?? 'No failure recorded')}`,
@@ -1151,7 +1157,7 @@ export class AppCoordinator {
           application: app.name,
           applicationVersion: app.getVersion(),
           electronVersion: process.versions.electron,
-          harnessVersion: '0.1.1-rc.2',
+          harnessVersion: '0.1.2-rc.1',
           architecture: process.arch,
           operatingSystem: `${process.platform} ${release()}`,
           failureCode: failure?.code ?? 'none',
@@ -1457,7 +1463,9 @@ export class AppCoordinator {
       if (ready !== undefined) {
         const token = this.#companionToken;
         const bootstrap = this.#pluginProfileBootstrap;
-        const client = token === '' ? undefined : createRuntimeMarketClient(token);
+        const client = token === ''
+          ? undefined
+          : createRuntimeMarketClient(token, ready.access.fetch);
         const transaction =
           client === undefined || bootstrap === undefined
             ? undefined
@@ -1545,7 +1553,7 @@ export class AppCoordinator {
                 },
                 scheduleRestart: () => this.#schedulePluginProfileRestart(),
               });
-        await this.#window?.showHarness(ready.origin);
+        await this.#window?.showHarness(ready.access.navigationUrl());
         const generation = this.#pluginTrialGeneration;
         if (generation !== undefined) {
           await this.#pluginProfileBootstrap?.commit(generation);

@@ -31,7 +31,7 @@ describe('RuntimeSupervisor soak', () => {
         const ready = await supervisor.start();
         const deadline = Date.now() + durationMs;
         do {
-          await expect(fetch(ready.origin)).resolves.toMatchObject({ ok: true });
+          await expect(ready.access.fetch(ready.origin)).resolves.toMatchObject({ ok: true });
           await delay(Math.min(1_000, Math.max(10, durationMs / 10)));
         } while (Date.now() < deadline);
       } finally {

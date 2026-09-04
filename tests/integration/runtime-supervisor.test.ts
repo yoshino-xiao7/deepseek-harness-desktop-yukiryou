@@ -46,7 +46,8 @@ describe('RuntimeSupervisor', () => {
 
     expect(ready.kind).toBe('ready');
     expect(ready.version).toBe('fake-1.0.0');
-    const runtimeResponse = await fetch(ready.origin).then((response) =>
+    await expect(fetch(ready.origin)).resolves.toMatchObject({ status: 401 });
+    const runtimeResponse = await ready.access.fetch(ready.origin).then((response) =>
       response.json() as Promise<Record<string, unknown>>
     );
     expect(runtimeResponse).toMatchObject({
@@ -61,13 +62,20 @@ describe('RuntimeSupervisor', () => {
     await expect(realpath(String(runtimeResponse.workspace))).resolves.toBe(
       canonicalWorkspaceRoot,
     );
-    expect(JSON.stringify(supervisor.getState())).not.toContain(
-      'test-companion-token',
-    );
+    const serializedState = JSON.stringify(supervisor.getState());
+    expect(serializedState).not.toContain('test-companion-token');
+    expect(serializedState).not.toContain('fake_runtime_launch_token');
+    expect(serializedState).not.toContain('fake-browser-session');
+    expect(serializedState).toContain('"access":{}');
+    await expect(
+      ready.access.fetch('https://example.com/'),
+    ).rejects.toThrow('off-origin');
 
     await supervisor.stop('quit');
     expect(supervisor.getState()).toEqual({ kind: 'stopped' });
-    await expect(fetch(ready.origin)).rejects.toThrow();
+    await expect(ready.access.fetch(ready.origin)).rejects.toThrow(
+      'no longer active',
+    );
   });
 
   it('waits for the protected Companion route before reporting readiness', async () => {
@@ -86,7 +94,7 @@ describe('RuntimeSupervisor', () => {
     });
 
     const ready = await supervisor.start();
-    const response = await fetch(
+    const response = await ready.access.fetch(
       `${ready.origin}/plugins/@dsh-desktop/companion/rpc`,
       {
         method: 'POST',
@@ -112,7 +120,7 @@ describe('RuntimeSupervisor', () => {
     });
 
     const before = await supervisor.start();
-    await expect(fetch(before.origin).then((response) => response.json()))
+    await expect(before.access.fetch(before.origin).then((response) => response.json()))
       .resolves.toMatchObject({ launchMarker: 'before' });
     expect(() => supervisor?.configureLaunch(
       process.execPath,
@@ -125,7 +133,7 @@ describe('RuntimeSupervisor', () => {
       [fakeHarness, '--launch-marker', 'after'],
     );
     const after = await supervisor.start();
-    await expect(fetch(after.origin).then((response) => response.json()))
+    await expect(after.access.fetch(after.origin).then((response) => response.json()))
       .resolves.toMatchObject({ launchMarker: 'after' });
   });
 

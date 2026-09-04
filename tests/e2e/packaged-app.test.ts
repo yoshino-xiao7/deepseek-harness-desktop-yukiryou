@@ -134,13 +134,9 @@ describe('packaged desktop application', () => {
           return harness?.executeJavaScript(`
             new Promise(async (resolve) => {
               const readWidth = () => {
-                const frame = [...document.querySelectorAll(
-                  '[style*="grid-template-columns"]',
-                )].find((candidate) => {
-                  const bounds = candidate.getBoundingClientRect();
-                  return bounds.width >= innerWidth * 0.9
-                    && bounds.height >= innerHeight * 0.9;
-                });
+                const frame = document.querySelector(
+                  '[data-shell-overlay]',
+                )?.parentElement;
                 return frame instanceof HTMLElement
                   ? Number.parseFloat(
                       getComputedStyle(frame).gridTemplateColumns,
@@ -602,7 +598,7 @@ describe('packaged desktop application', () => {
         getSnapshot: 'function',
       });
       expect(settingsResult?.aboutText).toContain('DeepSeek YukiRyou');
-      expect(settingsResult?.aboutText).toContain('0.1.1-rc.2');
+      expect(settingsResult?.aboutText).toContain('0.1.2-rc.1');
       expect(settingsResult?.aboutText).toMatch(
         process.platform === 'win32'
           ? /Windows.*x64/

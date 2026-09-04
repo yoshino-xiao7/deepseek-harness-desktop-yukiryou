@@ -6,7 +6,6 @@ window.__ModuleLoader__.load({
     const module = { exports: {} };
     const exports = module.exports;
     const React = require('react');
-    const { isAppendSurfaceEvent } = require('@deepseek-ai/dsh-client-runtime/client');
     const { Button } = require('@deepseek-ai/dsh-client-ui-primitives');
 
     function lineCount(value) {
@@ -48,20 +47,17 @@ window.__ModuleLoader__.load({
       match: (event) => {
         if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' };
         if (event.type === 'tool/call') return { id: String(event.data.turn), role: 'update' };
-        if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) return { id: String(event.data.turn), role: 'update' };
+        if (event.type === 'tool/result' && event.surfaceOp === 'append') return { id: String(event.data.turn), role: 'update' };
         return null;
       },
-      start: (_context, match) => ({ turn: match.event.data.turn, calls: new Map(), changes: [] }),
+      start: (_context, match) => ({ turn: match.event.data.turn, changes: [] }),
       update: (context, match) => {
-        if (match.event.type === 'tool/call') {
-          const calls = new Map(context.state.calls);
-          calls.set(String(match.event.data.callId), match.view?.for === 'call' ? match.view.view : null);
-          return { ...context.state, calls };
-        }
+        if (match.event.type === 'tool/call') return context.state;
         if (match.event.type !== 'tool/result' || match.event.data.message.content[0].isError === true) return context.state;
-        const callId = String(match.event.data.message.source.callId);
-        const resultView = match.view?.for === 'result' ? match.view.view : null;
-        const view = changesFromView(resultView).length > 0 ? resultView : (context.state.calls.get(callId) ?? null);
+        const meta = match.event.data.meta;
+        const view = meta !== null && typeof meta === 'object' && !Array.isArray(meta)
+          ? { card: 'diff', diffs: meta.diffs }
+          : null;
         const additions = changesFromView(view).map((change) => ({ ...change, seq: match.event.seq }));
         return additions.length === 0 ? context.state : { ...context.state, changes: [...context.state.changes, ...additions] };
       },
@@ -312,10 +308,10 @@ window.__ModuleLoader__.load({
       return null;
     }
 
-    const inject = ['slots', 'sessions', 'workspaces', 'conversationEvents'];
+    const inject = ['slots', 'sessions', 'workspaces', 'uiConversation'];
     function apply(ctx) {
       installStyle();
-      ctx.conversationEvents.register(turnChangesDefinition);
+      ctx.uiConversation.events.register(turnChangesDefinition);
       ctx.effect(() => installContextPublisher(ctx), 'dsh-desktop: companion context publisher');
       ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register(
         {

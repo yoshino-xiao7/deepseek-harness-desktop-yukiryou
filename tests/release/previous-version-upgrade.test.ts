@@ -11,9 +11,10 @@ import { resolveE2eExecutablePath } from '../e2e/executable-path.js';
 const previousExecutable = process.env.DSH_PREVIOUS_EXECUTABLE_PATH?.trim();
 const expectedPreviousVersion =
   process.env.DSH_PREVIOUS_EXPECTED_VERSION?.trim() || '0.2.1-beta.2';
-const rc2BackupDirectoryName = 'runtime.pre-dsh-0.1.1-rc.2';
-const rc2UpgradeMarkerName = '.dsh-0.1.1-rc.2-storage-v1.json';
+const rc1BackupDirectoryName = 'runtime.pre-dsh-0.1.2-rc.1';
+const rc1UpgradeMarkerName = '.dsh-0.1.2-rc.1-storage-v1.json';
 const currentSessionStorageKey = 'dsh.sessions.current';
+const runtimeCookieHeaders = new Map<string, string>();
 
 describe('previous-version upgrade', () => {
   let electronApp: ElectronApplication | undefined;
@@ -30,7 +31,7 @@ describe('previous-version upgrade', () => {
     }
   });
 
-  it('preserves the active real session and prepares the rc.2 migration exactly once', async () => {
+  it('preserves the active real session and prepares the rc.1 migration exactly once', async () => {
     if (previousExecutable === undefined || previousExecutable === '') {
       throw new Error(
         `Set DSH_PREVIOUS_EXECUTABLE_PATH to an extracted ${expectedPreviousVersion} executable`,
@@ -104,11 +105,11 @@ describe('previous-version upgrade', () => {
     electronApp = undefined;
 
     const runtimeHome = join(userData, 'runtime');
-    const upgradeMarkerPath = join(userData, rc2UpgradeMarkerName);
+    const upgradeMarkerPath = join(userData, rc1UpgradeMarkerName);
     const markerBeforeCandidate = await readOptionalFile(upgradeMarkerPath);
     if (markerBeforeCandidate !== undefined) {
       expect(JSON.parse(markerBeforeCandidate)).toEqual({
-        upgrade: 'dsh-0.1.1-rc.2-storage-v1',
+        upgrade: 'dsh-0.1.2-rc.1-storage-v1',
         backupName: null,
       });
     }
@@ -151,7 +152,7 @@ describe('previous-version upgrade', () => {
       .split('\n')
       .map((line) => JSON.parse(line) as { event?: unknown; details?: unknown })
       .filter((record) => record.event === 'runtime.upgrade-backup-created');
-    const backupHome = join(userData, rc2BackupDirectoryName);
+    const backupHome = join(userData, rc1BackupDirectoryName);
     if (markerBeforeCandidate === undefined) {
       await expect(
         readFile(join(backupHome, 'upgrade-preserved', 'sentinel.txt')),
@@ -163,7 +164,7 @@ describe('previous-version upgrade', () => {
         {
           timestamp: expect.any(String),
           event: 'runtime.upgrade-backup-created',
-          details: `backup=${rc2BackupDirectoryName}`,
+          details: `backup=${rc1BackupDirectoryName}`,
         },
       ]);
     } else {
@@ -219,12 +220,23 @@ async function launchAndWait(
 async function readHarnessOrigin(
   application: ElectronApplication,
 ): Promise<string | undefined> {
-  return application.evaluate(({ webContents }) => {
+  const origin = await application.evaluate(({ webContents }) => {
     const harness = webContents
       .getAllWebContents()
       .find((contents) => contents.getURL().startsWith('http://127.0.0.1:'));
     return harness === undefined ? undefined : new URL(harness.getURL()).origin;
   });
+  if (origin !== undefined) {
+    const cookies = await application.evaluate(
+      ({ session }, url) => session.defaultSession.cookies.get({ url }),
+      origin,
+    );
+    runtimeCookieHeaders.set(
+      origin,
+      cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; '),
+    );
+  }
+  return origin;
 }
 
 async function readCurrentSessionId(
@@ -369,10 +381,46 @@ async function callHarnessApi(
   payload: unknown,
 ): Promise<unknown> {
   const rpcId = crypto.randomUUID();
-  const response = await fetch(`${origin}/api/${method}`, {
+  const browserCookie = runtimeCookieHeaders.get(origin) ?? '';
+  const modernTransport = browserCookie !== '';
+  const endpoint = !modernTransport
+    ? method
+    : method === 'session.history'
+      ? 'session/page'
+      : method.replace('.', '/');
+  const normalizedPayload = modernTransport && method === 'session.prompt'
+    ? { requestId: crypto.randomUUID(), ...asRecord(payload) }
+    : payload;
+  const args = !modernTransport
+    ? normalizedPayload
+    : method === 'settings.update'
+    ? asRecord(normalizedPayload)
+    : method === 'session.list'
+      ? { _request: normalizedPayload }
+      : method === 'session.history'
+        ? {
+            request: {
+              address: {
+                kind: 'session',
+                sessionId: readString(asRecord(payload), 'sessionId'),
+              },
+              throughSeq: Number.MAX_SAFE_INTEGER,
+              maxMessages: Number(asRecord(payload).maxMessages),
+            },
+          }
+        : { request: normalizedPayload };
+  const response = await fetch(`${origin}/api/${endpoint}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
+    headers: {
+      'content-type': 'application/json',
+      cookie: browserCookie,
+    },
+    body: JSON.stringify({
+      type: 'client-request',
+      rpcId,
+      method: endpoint,
+      payload: modernTransport ? { args } : args,
+    }),
   });
   if (!response.ok) {
     throw new Error(`${method} transport failed with HTTP ${String(response.status)}`);
@@ -381,7 +429,15 @@ async function callHarnessApi(
   if (envelope.rpcId !== rpcId) throw new Error(`${method} returned the wrong rpcId`);
   const result = asRecord(envelope.result);
   if (result.ok !== true) throw new Error(`${method} failed: ${JSON.stringify(result)}`);
-  return result.value;
+  if (!modernTransport || method !== 'session.history') return result.value;
+  const records = asRecord(result.value).records;
+  if (!Array.isArray(records)) throw new Error('session.page returned no records');
+  return {
+    events: records
+      .map(asRecord)
+      .filter((record) => record.type === 'event')
+      .map((record) => ({ event: record.event })),
+  };
 }
 
 function readNestedString(

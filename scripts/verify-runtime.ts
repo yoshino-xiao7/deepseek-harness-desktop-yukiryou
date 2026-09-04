@@ -158,11 +158,11 @@ const desktopMarketDevelopmentFixture = await readFile(
   join(runtimeNodeModules, '@dsh-desktop', 'market', 'development-fixture.js'),
   'utf8',
 );
-const clientRuntime = await readFile(
+const sessionControllerClient = await readFile(
   join(
     runtimeNodeModules,
     '@deepseek-ai',
-    'dsh-client-runtime',
+    'dsh-api-session-controller',
     'lib',
     'client.js',
   ),
@@ -237,7 +237,7 @@ expectValue(
 expectValue('pnpm version', manifest.pnpm.version, sourceManifest.pnpm.version);
 expectValue('desktop frame prototype version', desktopFrameManifest.version, '0.0.1');
 expectValue('desktop market version', desktopMarketManifest.version, '0.1.0');
-if (!clientRuntime.includes(SESSION_SELECTION_PATCH_MARKER)) {
+if (!sessionControllerClient.includes(SESSION_SELECTION_PATCH_MARKER)) {
   throw new Error('Harness session-selection startup patch is missing');
 }
 if (!conversationClient.includes(CONTEXT_METER_TOOLTIP_PATCH_MARKER)) {
@@ -248,7 +248,7 @@ if (
   !deepSeekAdapter.includes('inputModalities: ["text", "image"]') ||
   !deepSeekAdapter.includes('llm-deepseek", "files-v3.json')
 ) {
-  throw new Error('Harness rc.2 Vision catalog or Files API image pipeline is missing');
+  throw new Error('Harness rc.1 Vision catalog or Files API image pipeline is missing');
 }
 if (!desktopMarketCache.includes('createCatalogSnapshotStore')) {
   throw new Error('Desktop market persistent cache adapter is missing');

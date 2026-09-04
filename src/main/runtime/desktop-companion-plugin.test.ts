@@ -33,6 +33,11 @@ describe('desktop companion turn card', () => {
     );
     const registrations = new Map<string, (props: Record<string, unknown>) => unknown>();
     const effects: Array<() => unknown> = [];
+    let turnDefinition: {
+      start(context: unknown, match: { event: { data: { turn: number } } }): unknown;
+      update(context: { state: unknown }, match: unknown): unknown;
+      buildLocationData(context: { state: unknown }, scope: string): unknown;
+    } | undefined;
     let plugin: { apply(context: unknown): void } | undefined;
     const React = {
       Fragment: Symbol('fragment'),
@@ -65,7 +70,7 @@ describe('desktop companion turn card', () => {
           plugin = factory((id) => {
             if (id === 'react') return React;
             if (id === '@deepseek-ai/dsh-client-ui-primitives') return { Button };
-            return { isAppendSurfaceEvent: () => true };
+            throw new Error(`Unexpected module ${id}`);
           }) as typeof plugin;
         },
       },
@@ -79,7 +84,13 @@ describe('desktop companion turn card', () => {
     };
     vm.runInNewContext(source, { document, Map, Set, window });
     plugin?.apply({
-      conversationEvents: { register: vi.fn() },
+      uiConversation: {
+        events: {
+          register: (definition: typeof turnDefinition) => {
+            turnDefinition = definition;
+          },
+        },
+      },
       effect: vi.fn(),
       slots: {
         inject: (_name: string, register: () => void) => register(),
@@ -90,6 +101,36 @@ describe('desktop companion turn card', () => {
       },
     });
     expect(registrations.has('sidebar.footer.action')).toBe(false);
+    const initial = turnDefinition?.start({}, { event: { data: { turn: 3 } } });
+    const updated = turnDefinition?.update(
+      { state: initial },
+      {
+        event: {
+          type: 'tool/result',
+          seq: 7,
+          data: {
+            message: { content: [{ isError: false }] },
+            meta: {
+              diffs: [{ path: 'src/meta.ts', oldText: 'old\n', newText: 'new\n' }],
+            },
+          },
+        },
+      },
+    );
+    expect(turnDefinition?.buildLocationData({ state: updated }, 'turn')).toEqual({
+      kind: 'turn',
+      turn: 3,
+      key: 'desktop-turn-changes',
+      value: {
+        changes: [{
+          path: 'src/meta.ts',
+          additions: 1,
+          deletions: 1,
+          fragments: [{ oldText: 'old\n', newText: 'new\n' }],
+          seq: 7,
+        }],
+      },
+    });
 
     const Component = registrations.get('conversation.chat.turnTail');
     expect(Component).toBeDefined();
