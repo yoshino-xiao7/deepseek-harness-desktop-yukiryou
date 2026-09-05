@@ -346,16 +346,27 @@ async function readDurableSessionState(
   turnStarted: boolean;
   turnEnded: boolean;
 }> {
-  const [items, history] = await Promise.all([
-    readSessionItems(origin),
-    callHarnessApi(origin, 'session.history', { sessionId, maxMessages: 50 }),
-  ]);
+  const items = await readSessionItems(origin);
   const summary = items.find((item) => readString(item, 'sessionId') === sessionId);
   if (summary === undefined) throw new Error(`Session ${sessionId} is not listed`);
   const summaryRecord = asRecord(summary);
   if (typeof summaryRecord.blank !== 'boolean' || typeof summaryRecord.running !== 'boolean') {
     throw new Error('session.list returned invalid durability metadata');
   }
+  // rc.1 page requests must use an observed durable cursor. A synthetic
+  // MAX_SAFE_INTEGER was rejected by the previous 1.0.8 release before the
+  // candidate was even launched. List projections provide the exact cut.
+  const modernTransport = (runtimeCookieHeaders.get(origin) ?? '') !== '';
+  const throughSeq = modernTransport
+    ? asRecord(summaryRecord.projections).asOfSeq
+    : undefined;
+  if (modernTransport && (typeof throughSeq !== 'number' ||
+      !Number.isSafeInteger(throughSeq) || throughSeq < -1)) {
+    throw new Error('session.list returned no valid projection cursor');
+  }
+  const history = await callHarnessApi(origin, 'session.history', {
+    sessionId, maxMessages: 50, ...(modernTransport ? { throughSeq } : {}),
+  });
   const events = asRecord(history).events;
   if (!Array.isArray(events)) throw new Error('session.history returned no events');
   const eventTypes = events.map((entry) =>
@@ -404,7 +415,7 @@ async function callHarnessApi(
                 kind: 'session',
                 sessionId: readString(asRecord(payload), 'sessionId'),
               },
-              throughSeq: Number.MAX_SAFE_INTEGER,
+              throughSeq: asRecord(payload).throughSeq,
               maxMessages: Number(asRecord(payload).maxMessages),
             },
           }
