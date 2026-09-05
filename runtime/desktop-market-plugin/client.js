@@ -300,7 +300,8 @@ window.__ModuleLoader__.load({
               : 'disabled',
           receipt,
           externalControl,
-          recoverySkipped: managedSnapshot?.recoveryMode === 'safe' || managedSnapshot?.isolatedPackages?.includes(receipt?.packageName ?? externalControl?.packageName ?? entry.moduleName),
+          recoverySkipped: entry.enabled !== true && ((managedSnapshot?.recoveryMode === 'safe' && (receipt !== undefined || externalControl !== undefined)) ||
+            managedSnapshot?.isolatedPackages?.includes(receipt?.packageName ?? externalControl?.packageName ?? entry.moduleName) === true),
         };
       });
       for (const receipt of managed.values()) {

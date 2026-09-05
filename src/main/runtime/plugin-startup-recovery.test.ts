@@ -1,10 +1,23 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createPluginStartupRecovery, identifyStartupPluginFailures } from './plugin-startup-recovery.js';
+import { createPluginStartupRecovery, createSafeRuntimeCommand, identifyStartupPluginFailures } from './plugin-startup-recovery.js';
 
 describe('persistent plugin startup recovery', () => {
+  it('rebinds the safe module link after a portable upgrade without modifying its previous target', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-safe-move-'));
+    const before = join(home, 'old-app');
+    const after = join(home, 'new-app');
+    await mkdir(join(before, 'dsh', 'node_modules'), { recursive: true });
+    await mkdir(join(after, 'dsh', 'node_modules'), { recursive: true });
+    const sentinel = join(before, 'dsh', 'node_modules', 'sentinel');
+    await writeFile(sentinel, 'keep');
+    await createSafeRuntimeCommand(home, before);
+    await createSafeRuntimeCommand(home, after);
+    expect(await readlink(join(home, 'plugin-management', 'safe-start', 'node_modules'))).toBe(join(after, 'dsh', 'node_modules'));
+    expect(await readFile(sentinel, 'utf8')).toBe('keep');
+  });
   it('requires a loader entry and inventory identity rather than a package mention', () => {
     const plugin = { packageName: 'dsh-example', version: '1.0.0', entryIds: ['example'] };
     expect(identifyStartupPluginFailures(['plugin dsh-example failed'], [plugin])).toEqual([]);

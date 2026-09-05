@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readlink, rename, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readlink, rename, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { pathToFileURL } from 'node:url';
@@ -104,7 +104,14 @@ export async function createSafeRuntimeCommand(runtimeHome: string, runtimeRoot:
   const link = join(root, 'node_modules');
   try { await symlink(moduleRoot, link, process.platform === 'win32' ? 'junction' : 'dir'); }
   catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || await readlink(link) !== moduleRoot) throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    if (!(await lstat(link)).isSymbolicLink()) throw new Error('Safe startup module path is not a link');
+    if (await readlink(link) !== moduleRoot) {
+      // Portable upgrades can move the bundled Runtime. Replace only our link,
+      // never the previous target directory or any user plugin files.
+      await unlink(link);
+      await symlink(moduleRoot, link, process.platform === 'win32' ? 'junction' : 'dir');
+    }
   }
   const script = join(root, 'launch.mjs');
   const config = join(root, 'cordis.yml');
