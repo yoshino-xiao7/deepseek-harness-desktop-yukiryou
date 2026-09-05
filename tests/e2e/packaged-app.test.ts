@@ -663,6 +663,7 @@ describe('packaged desktop application', () => {
           status: 'downloading',
           currentVersion: '0.1.0',
           downloadPercent: 43,
+          releaseName: '0.2.0',
           checkedAt: new Date().toISOString(),
         });
       });
@@ -686,15 +687,15 @@ describe('packaged desktop application', () => {
               const sidebar = frame?.firstElementChild;
               const updateBounds = update?.getBoundingClientRect();
               const sidebarBounds = sidebar?.getBoundingClientRect();
+              const settings = update?.closest('.hHd-Xa_footArea')?.querySelector('.hHd-Xa_settingsArea .VOzbGW_trigger');
+              const settingsBounds = settings?.getBoundingClientRect();
               return {
                 header: update?.textContent?.trim(),
-                parentIsSidebar: update?.parentElement === sidebar,
-                rightGap: updateBounds && sidebarBounds
-                  ? Math.round(sidebarBounds.right - updateBounds.right)
-                  : undefined,
-                bottomGap: updateBounds && sidebarBounds
-                  ? Math.round(sidebarBounds.bottom - updateBounds.bottom)
-                  : undefined,
+                inFooterSlot: Boolean(update?.closest('.hHd-Xa_footerActions')),
+                separateHitRegions: Boolean(updateBounds && settingsBounds && settingsBounds.right <= updateBounds.left),
+                sameRow: Boolean(updateBounds && settingsBounds && Math.abs((settingsBounds.top + settingsBounds.bottom - updateBounds.top - updateBounds.bottom) / 2) <= 1),
+                insideSidebar: Boolean(updateBounds && sidebarBounds && updateBounds.left >= sidebarBounds.left && updateBounds.right <= sidebarBounds.right && updateBounds.bottom <= sidebarBounds.bottom),
+                reveal: update?.getAttribute('data-update-reveal'),
                 card: document.querySelector('.dsh-desktop-update-button')?.textContent?.trim(),
                 progress: document.querySelector('.dsh-desktop-update-progress')?.getAttribute('role'),
                 progressNow: document.querySelector('.dsh-desktop-update-progress')?.getAttribute('aria-valuenow'),
@@ -705,9 +706,11 @@ describe('packaged desktop application', () => {
         )
         .toMatchObject({
           header: '43%',
-          parentIsSidebar: true,
-          rightGap: 12,
-          bottomGap: 12,
+          inFooterSlot: true,
+          separateHitRegions: true,
+          sameRow: true,
+          insideSidebar: true,
+          reveal: 'settled',
           card: expect.stringMatching(/^(下载中…|Downloading…) 43%$/),
           progress: 'progressbar',
           progressNow: '43',
@@ -723,6 +726,7 @@ describe('packaged desktop application', () => {
         harness?.send('dsh-desktop:update-state', {
           status: 'manual',
           currentVersion: '0.1.0',
+          releaseName: '0.2.0',
           message: 'Code signature did not pass validation',
         });
       });
@@ -744,7 +748,7 @@ describe('packaged desktop application', () => {
         )
         .toMatchObject({
           header: '',
-          headerLabel: expect.stringMatching(/^(手动下载更新|Download update manually)$/),
+          headerLabel: expect.stringMatching(process.platform === 'win32' ? /^(下载 EXE|Download EXE)$/ : /^(下载 DMG|Download DMG)$/),
           card: expect.stringMatching(
             process.platform === 'win32'
               ? /^(下载 EXE|Download EXE)$/
@@ -782,7 +786,7 @@ describe('packaged desktop application', () => {
             `);
           }),
         )
-        .toMatch(/^(重启更新|Restart to update)$/);
+        .toMatch(/^(重启并更新|Restart and update)$/);
       await electronApp.evaluate(({ webContents }) => {
         const harness = webContents
           .getAllWebContents()
