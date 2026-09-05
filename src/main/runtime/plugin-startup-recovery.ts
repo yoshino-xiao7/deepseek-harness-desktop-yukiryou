@@ -105,7 +105,7 @@ export async function createSafeRuntimeCommand(runtimeHome: string, runtimeRoot:
   try { await symlink(moduleRoot, link, process.platform === 'win32' ? 'junction' : 'dir'); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    if (!(await lstat(link)).isSymbolicLink()) throw new Error('Safe startup module path is not a link');
+    if (!(await lstat(link)).isSymbolicLink()) throw new Error('Safe startup module path is not a link', { cause: error });
     if (await readlink(link) !== moduleRoot) {
       // Portable upgrades can move the bundled Runtime. Replace only our link,
       // never the previous target directory or any user plugin files.
