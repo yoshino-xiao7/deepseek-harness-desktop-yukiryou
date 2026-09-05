@@ -1,6 +1,9 @@
+import { parse as parseYaml } from 'yaml';
+import { collectOwnedEntryIds } from './runtime/external-plugin-control.js';
+import { createPluginStartupRecovery, createSafeRuntimeCommand, identifyStartupPluginFailures, type IsolatedPlugin, type PluginStartupRecovery } from './runtime/plugin-startup-recovery.js';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, screen, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile as readRecoveryFile } from 'node:fs/promises';
 import { release } from 'node:os';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -141,13 +144,22 @@ export class AppCoordinator {
   #runtime: RuntimeSupervisor | undefined;
   #log: AppLog | undefined;
   #updater: AppUpdater | undefined;
+  #startupRecovery: PluginStartupRecovery | undefined;
+  #runtimeHome = '';
+  #startingRuntime = false;
+  #safeRecoveryActive = false;
+  #startupStderr: string[] = [];
+  #isolationActive = false;
   #quitting = false;
   readonly #recovery = createRuntimeRecoveryPolicy([250, 1_000]);
   #recovering = false;
   #lastFailure: RuntimeFailure | undefined;
   #companionToken = '';
   readonly #runtimeStderr = createRuntimeStderrScrubber({
-    onLine: (line) => this.#log?.write('runtime.stderr', line),
+    onLine: (line) => {
+      this.#log?.write('runtime.stderr', line);
+      if (this.#startingRuntime) { this.#startupStderr.push(line); if (this.#startupStderr.length > 100) this.#startupStderr.shift(); }
+    },
   });
   #workspaceAuthorityRevision = 0;
   #latestHarnessContext: HarnessContextSnapshot | undefined;
@@ -157,13 +169,13 @@ export class AppCoordinator {
   #workspaceChangeMonitor: WorkspaceChangeMonitor | undefined;
   #pluginProfileBootstrap: PluginProfileBootstrap | undefined;
   #pluginTrialGeneration: string | undefined;
-  #pluginTrialRecoveryActive = false;
   #managedInstallConfirmation: ManagedInstallConfirmation | undefined;
   #managedPluginRemoval: ManagedPluginRemoval | undefined;
   #managedPluginActivation: ManagedPluginActivation | undefined;
   #managedPluginRollback: ManagedPluginRollback | undefined;
   #externalPluginControl: ExternalPluginControl | undefined;
   #pluginRestartScheduled = false;
+  #recoveryMutationPackage: string | undefined;
   #runtimeRoot = '';
   #carrierMode: ReturnType<typeof resolveDesktopCarrierMode> = 'legacy';
   #distributionRegion: DistributionRegion = 'global';
@@ -207,6 +219,7 @@ export class AppCoordinator {
       ? join(process.resourcesPath, 'runtime')
       : join(app.getAppPath(), 'resources', 'runtime');
     this.#runtimeRoot = runtimeRoot;
+    this.#runtimeHome = runtimeHome;
     this.#externalPluginControl = createExternalPluginControl({ runtimeHome, runtimeRoot });
     const logDirectory = join(userData, 'logs');
     await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
@@ -257,6 +270,7 @@ export class AppCoordinator {
       initialFeaturePreferences: this.#desktopFeaturePreferences,
       onWindowStateChange: (state) => this.#windowState?.update(state),
       onRetry: () => void this.#retryStartup(),
+      onSafeStart: () => void this.#startSafeRuntime(true),
       onOpenLogs: () => void shell.openPath(logDirectory),
       onCopyDiagnostics: () => this.#copyDiagnostics(),
       onExportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
@@ -285,6 +299,7 @@ export class AppCoordinator {
     let managedPluginPatches: readonly string[];
     let runtimePort: Awaited<ReturnType<typeof resolveStableRuntimePort>>;
     try {
+      this.#startupRecovery = await createPluginStartupRecovery(runtimeHome, app.getVersion());
       // Resolve endpoint ownership before copying or opening Runtime Home. An
       // orphaned rc.7 process may still be writing the incompatible storage.
       runtimePort = await resolveStableRuntimePort(userData);
@@ -297,9 +312,12 @@ export class AppCoordinator {
       }
       recoveredPreferences = await this.#recoverPreferences(runtimeHome);
       this.#pluginProfileBootstrap = createPluginProfileBootstrap(runtimeHome);
-      const launchPlan = await this.#pluginProfileBootstrap.prepareRuntimeLaunch();
-      const managedInventory = await this.#pluginProfileBootstrap.inventory();
-      const adoptionStatus = await this.#externalPluginControl.reconcileAdoption({
+      const launchPlan = this.#startupRecovery?.snapshot().mode === 'safe'
+        ? { patchPaths: [], trialGeneration: null, recoveredGeneration: null, currentGeneration: null }
+        : await this.#pluginProfileBootstrap.prepareRuntimeLaunch();
+      const managedInventory = this.#startupRecovery?.snapshot().mode === 'safe'
+        ? { entries: [] } : await this.#pluginProfileBootstrap.inventory();
+      const adoptionStatus = this.#startupRecovery?.snapshot().mode === 'safe' ? 'none' : await this.#externalPluginControl.reconcileAdoption({
         trialGeneration: launchPlan.trialGeneration,
         managedPackageNames: new Set(managedInventory.entries.map((entry) => entry.packageName)),
       });
@@ -307,6 +325,7 @@ export class AppCoordinator {
         this.#log.write('plugin-profile.external-adoption-reconciled', adoptionStatus);
       }
       if (launchPlan.recoveredGeneration !== null) {
+        await this.#startupRecovery?.reserveTrialRecovery();
         this.#log.write('plugin-profile.recovered', `generation=${launchPlan.recoveredGeneration}`);
       }
       this.#pluginTrialGeneration = launchPlan.trialGeneration ?? undefined;
@@ -350,13 +369,23 @@ export class AppCoordinator {
       this.#notifyPreferenceRecovery(recoveredPreferences);
     }
 
-    await ensureBundledRuntimeExtensions(runtimeHome, runtimeRoot);
-    const externalPluginPatches = await this.#externalPluginControl.patchPaths();
-    const runtimeCommand = createHarnessRuntimeCommand(
-      runtimeRoot,
-      carrierMode,
-      [...managedPluginPatches, ...externalPluginPatches],
-    );
+    let runtimeCommand: ReturnType<typeof createHarnessRuntimeCommand>;
+    try {
+      if (this.#startupRecovery?.snapshot().mode === 'safe') {
+        runtimeCommand = await createSafeRuntimeCommand(runtimeHome, runtimeRoot);
+      } else {
+        await ensureBundledRuntimeExtensions(runtimeHome, runtimeRoot);
+        const externalPluginPatches = await this.#externalPluginControl.patchPaths();
+        runtimeCommand = createHarnessRuntimeCommand(runtimeRoot, carrierMode,
+          [...managedPluginPatches, ...externalPluginPatches, ...(await this.#startupRecovery?.isolationPatches() ?? [])]);
+      }
+    } catch (error) {
+      const failure: RuntimeFailure = { code: this.#startupRecovery?.snapshot().mode === 'safe' ? 'safe-start-failed' : 'upgrade-preparation-failed',
+        message: startupPreparationFailureLogDetails(error) };
+      this.#lastFailure = failure;
+      await this.#window.showFailure(failure);
+      return;
+    }
     this.#runtime = createRuntimeSupervisor({
       command: runtimeCommand.command,
       args: runtimeCommand.args,
@@ -405,13 +434,13 @@ export class AppCoordinator {
       this.#log?.write('runtime.state', JSON.stringify(state));
       if (state.kind === 'failed') {
         this.#lastFailure = state.failure;
-        if (state.failure.code === 'unexpected-exit') {
+        if (state.failure.code === 'unexpected-exit' && !this.#startingRuntime && !this.#safeRecoveryActive) {
           if (this.#pluginTrialGeneration !== undefined) {
             void this.#recoverPluginTrial(state.failure);
           } else {
             void this.#recoverRuntime(state.failure);
           }
-        } else {
+        } else if (!this.#startingRuntime && !this.#safeRecoveryActive) {
           void this.#window?.showFailure(state.failure);
         }
       }
@@ -605,7 +634,7 @@ export class AppCoordinator {
               entry.version === request.externalIdentity.version &&
               entry.entryIds.includes(request.externalIdentity.entryId),
           );
-      if (request.externalIdentity !== undefined && expectedExternal === undefined) {
+      if (request.externalIdentity !== undefined && (expectedExternal === undefined || expectedExternal.updateUnavailableReason !== undefined)) {
         return {
           requestId: request.requestId,
           status: 'unavailable',
@@ -723,7 +752,11 @@ export class AppCoordinator {
     try {
       const snapshot = await bootstrap.inventory();
       const externalEntries = await this.#externalPluginControl?.inventory() ?? [];
-      return { requestId: request.requestId, status: 'ready', ...snapshot, externalEntries };
+      return { requestId: request.requestId, status: 'ready', ...snapshot, externalEntries,
+        ...(this.#startupRecovery?.snapshot().mode === 'safe' ? { recoveryMode: 'safe' as const }
+          : this.#startupRecovery?.snapshot().isolated?.length ? { recoveryMode: 'isolated' as const } : {}),
+        isolatedPackages: this.#startupRecovery?.snapshot().isolated?.map(item => item.packageName) ?? [],
+      };
     } catch (error) {
       this.#log?.write(
         'plugin-profile.inventory-failed',
@@ -861,6 +894,7 @@ export class AppCoordinator {
       cancelId: 0,
       noLink: true,
     });
+    if (response.response === 1) this.#recoveryMutationPackage = request.packageName;
     return response.response === 1;
   }
 
@@ -889,6 +923,8 @@ export class AppCoordinator {
   ): Promise<boolean> {
     const chinese = app.getLocale().toLowerCase().startsWith('zh');
     const artifactSize = `${formatBytes(summary.artifact.verifiedCompressedBytes)} / ${formatBytes(summary.artifact.verifiedUnpackedBytes)}`;
+    const recoveryNote = this.#startupRecovery?.snapshot().mode === 'safe' || this.#startupRecovery?.snapshot().isolated?.length
+      ? (chinese ? '\n当前处于恢复模式；确认操作后将试运行正常插件配置，失败则再次恢复。' : '\nRecovery mode is active. This operation trials the normal plugin profile and recovers again on failure.') : '';
     const detail = chinese
       ? [
           `已验证包体：${summary.artifact.verifiedArtifacts} 个`,
@@ -940,16 +976,17 @@ export class AppCoordinator {
           ? `将 ${summary.packageName} 从 ${operation.currentVersion} 更新到 ${summary.version}？`
           : `Update ${summary.packageName} from ${operation.currentVersion} to ${summary.version}?`
         : `${action} ${summary.packageName}@${summary.version}?`,
-      detail: adopting
+      detail: recoveryNote + (adopting
         ? `${detail}\n\n${chinese
           ? '接管时会先停用原外部入口并试运行受管版本；失败会恢复原配置，成功后才移除原 profile 安装。'
           : 'Adoption suppresses the external entry while the managed version is trialed. Failure restores the old profile; success removes the old profile installation.'}`
-        : detail,
+        : detail),
       buttons: chinese ? ['取消', `${action}并重启`] : ['Cancel', `${action} and restart`],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
     });
+    if (response.response === 1) this.#recoveryMutationPackage = summary.packageName;
     return response.response === 1;
   }
 
@@ -973,6 +1010,7 @@ export class AppCoordinator {
       cancelId: 0,
       noLink: true,
     });
+    if (response.response === 1) this.#recoveryMutationPackage = summary.packageName;
     return response.response === 1;
   }
 
@@ -997,6 +1035,7 @@ export class AppCoordinator {
       cancelId: 0,
       noLink: true,
     });
+    if (response.response === 1) this.#recoveryMutationPackage = summary.packageName;
     return response.response === 1;
   }
 
@@ -1020,6 +1059,7 @@ export class AppCoordinator {
       cancelId: 0,
       noLink: true,
     });
+    if (response.response === 1) this.#recoveryMutationPackage = summary.packageName;
     return response.response === 1;
   }
 
@@ -1029,6 +1069,14 @@ export class AppCoordinator {
     this.#log?.write('plugin-profile.restart-scheduled');
     setTimeout(() => {
       if (this.#quitting) return;
+      if (this.#startupRecovery?.snapshot().mode === 'safe' || this.#startupRecovery?.snapshot().isolated?.length) {
+        const recovery = this.#startupRecovery;
+        const prepare = recovery.snapshot().mode === 'safe' ? recovery.tryNormal()
+          : this.#recoveryMutationPackage === undefined ? Promise.resolve() : recovery.tryPlugin(this.#recoveryMutationPackage);
+        this.#recoveryMutationPackage = undefined;
+        void prepare.then(() => this.#restartPluginProfileRuntime()).catch((error: unknown) => this.#log?.write('runtime.recovery-restart-failed', startupPreparationFailureLogDetails(error)));
+        return;
+      }
       if (pluginProfileRestartKind(app.isPackaged) === 'application') {
         app.relaunch();
         void this.quit();
@@ -1042,6 +1090,12 @@ export class AppCoordinator {
     try {
       await this.#window?.showLoading();
       await this.#runtime?.stop('restart');
+      if (this.#startupRecovery?.snapshot().mode === 'safe') {
+        const command = await createSafeRuntimeCommand(this.#runtimeHome, this.#runtimeRoot);
+        this.#runtime?.configureLaunch(command.command, command.args);
+        await this.#startRuntime();
+        return;
+      }
       const launchPlan = await this.#pluginProfileBootstrap?.prepareRuntimeLaunch();
       if (launchPlan === undefined || this.#runtime === undefined) {
         throw new Error('Plugin profile Runtime restart is unavailable');
@@ -1060,6 +1114,7 @@ export class AppCoordinator {
         [
           ...launchPlan.patchPaths,
           ...(await this.#externalPluginControl?.patchPaths() ?? []),
+          ...(await this.#startupRecovery?.isolationPatches() ?? []),
         ],
       );
       this.#runtime.configureLaunch(command.command, command.args);
@@ -1328,34 +1383,98 @@ export class AppCoordinator {
   }
 
   async #recoverRuntime(failure: RuntimeFailure): Promise<void> {
-    if (this.#recovering || this.#quitting) {
-      return;
-    }
-    const delayMs = this.#recovery.nextDelay();
-    if (delayMs === undefined) {
-      await this.#window?.showFailure(failure);
-      return;
-    }
+    if (this.#recovering || this.#quitting) return;
+    if (!(await this.#startSafeRuntime(false))) await this.#window?.showFailure(failure);
+  }
 
-    this.#recovering = true;
-    this.#log?.write('runtime.recovering', `delayMs=${String(delayMs)}`);
-    await this.#window?.showLoading();
-    await delay(delayMs);
+  async #isolateStartupFailure(): Promise<boolean> {
+    if (this.#isolationActive || this.#safeRecoveryActive || this.#pluginTrialGeneration !== undefined) return false;
+    const candidates: IsolatedPlugin[] = [...await this.#externalPluginControl?.inventory().catch(() => []) ?? []];
+    const managed = await this.#pluginProfileBootstrap?.inventory().catch(() => undefined);
+    for (const item of managed?.entries ?? []) {
+      try {
+        const packageRoot = join(this.#runtimeHome, 'user-plugins', 'generations', item.generation, 'node_modules', ...item.packageName.split('/'));
+        const manifest = JSON.parse(await readRecoveryFile(join(packageRoot, 'package.json'), 'utf8')) as { dsh?: { bundle?: { patch?: string } } };
+        const patch = manifest.dsh?.bundle?.patch;
+        if (typeof patch !== 'string' || patch.includes('..') || patch.startsWith('/') || patch.includes('\\')) continue;
+        const entryIds = collectOwnedEntryIds(parseYaml(await readRecoveryFile(join(packageRoot, patch), 'utf8')), item.packageName);
+        if (entryIds.length) candidates.push({ packageName: item.packageName, version: item.version, entryIds });
+      } catch { /* Unknown identity falls back to safe startup, never guessed. */ }
+    }
+    const failures = identifyStartupPluginFailures(this.#startupStderr, candidates);
+    if (!(await this.#startupRecovery?.isolate(failures))) return false;
+    this.#isolationActive = true;
     try {
-      await this.#startRuntime();
-    } finally {
-      this.#recovering = false;
+      await this.#restartPluginProfileRuntime();
+      return true;
+    } finally { this.#isolationActive = false; }
+  }
+
+  async #startSafeRuntime(manual: boolean): Promise<boolean> {
+    if (this.#safeRecoveryActive || this.#quitting) return false;
+    const recovery = this.#startupRecovery;
+    if (recovery === undefined) return false;
+    this.#safeRecoveryActive = true;
+    try {
+      if (!(await recovery.enterSafeMode(this.#lastFailure?.code ?? 'unknown', manual))) return false;
+      if (this.#runtime === undefined) {
+        app.relaunch();
+        await this.quit();
+        return true;
+      }
+      await this.#runtime.stop('restart');
+      const generation = this.#pluginTrialGeneration;
+      if (generation !== undefined) {
+        await this.#pluginProfileBootstrap?.recover(generation, 'runtime-unhealthy');
+        await this.#externalPluginControl?.recoverAdoption(generation);
+        this.#pluginTrialGeneration = undefined;
+      }
+      this.#log?.write('runtime.safe-start', 'User bundles and user patches are skipped; cause unconfirmed');
+      await this.#restartPluginProfileRuntime();
+      return true;
+    } catch (error) {
+      this.#log?.write('runtime.safe-start-failed', startupPreparationFailureLogDetails(error));
+      await this.#window?.showFailure({ code: 'safe-start-failed', message: 'Safe startup could not be prepared. Automatic retries stopped.' });
+      return true;
+    } finally { this.#safeRecoveryActive = false; }
+  }
+
+  async #manageStartupRecovery(): Promise<void> {
+    if (this.#startupRecovery?.snapshot().mode !== 'safe' && !this.#startupRecovery?.snapshot().isolated?.length) {
+      await this.#startSafeRuntime(true);
+      return;
+    }
+    const chinese = !app.getLocale().startsWith('en');
+    const external = await this.#externalPluginControl?.inventory().catch(() => []) ?? [];
+    const managed = await this.#pluginProfileBootstrap?.inventory().catch(() => undefined);
+    const isolated = this.#startupRecovery.snapshot().isolated ?? [];
+    const safe = this.#startupRecovery.snapshot().mode === 'safe';
+    const names = [...new Set([...external.map(item => item.packageName), ...(managed?.entries.map(item => item.packageName) ?? [])])];
+    const result = await dialog.showMessageBox({ type: 'warning',
+      title: chinese ? '安全启动' : 'Safe startup',
+      message: !safe ? (chinese ? '已隔离加载失败的插件，其他插件按原配置启动。' : 'Plugins that failed to load are isolated; other plugins keep their configuration.') : chinese ? '用户插件和自定义补丁已临时跳过，尚未确定具体故障原因。' : 'User plugins and custom patches are skipped. The cause has not been identified.',
+      detail: (chinese ? '会话和凭据保留在原数据目录。依赖第三方模型的对话可能不可用。\n已识别的用户插件（可能不完整）：\n' : 'Sessions and credentials remain in their original data home. Third-party models may be unavailable.\nIdentified user plugins (may be incomplete):\n') + (safe ? names : isolated.map(item => `${item.packageName}@${item.version}`)).join('\n'),
+      buttons: chinese ? ['保持当前模式', '尝试正常启动', ...(!safe ? isolated.map(item => `尝试启用 ${item.packageName}`) : [])] : ['Keep current mode', 'Try normal startup', ...(!safe ? isolated.map(item => `Try ${item.packageName}`) : [])], defaultId: 0, cancelId: 0, noLink: true,
+    });
+    if (result.response >= 1) {
+      if (result.response === 1) await this.#startupRecovery.tryNormal();
+      else {
+        const item = isolated[result.response - 2];
+        if (item === undefined) return;
+        await this.#startupRecovery.tryPlugin(item.packageName);
+      }
+      await this.#restartPluginProfileRuntime();
     }
   }
 
   async #recoverPluginTrial(failure: RuntimeFailure): Promise<boolean> {
     const generation = this.#pluginTrialGeneration;
-    if (generation === undefined) return this.#pluginTrialRecoveryActive;
+    if (generation === undefined) return false;
     if (this.#recovering || this.#quitting) return true;
     this.#recovering = true;
-    this.#pluginTrialRecoveryActive = true;
     this.#pluginTrialGeneration = undefined;
     try {
+      await this.#startupRecovery?.reserveTrialRecovery();
       await this.#pluginProfileBootstrap?.recover(generation, 'runtime-unhealthy');
       await this.#externalPluginControl?.recoverAdoption(generation);
       this.#log?.write(
@@ -1398,7 +1517,6 @@ export class AppCoordinator {
     } finally {
       if (!this.#quitting) {
         this.#recovering = false;
-        this.#pluginTrialRecoveryActive = false;
       }
     }
   }
@@ -1458,7 +1576,10 @@ export class AppCoordinator {
   }
 
   async #startRuntime(): Promise<void> {
+    this.#startingRuntime = true;
+    this.#startupStderr = [];
     try {
+      await this.#startupRecovery?.begin();
       const ready = await this.#runtime?.start();
       if (ready !== undefined) {
         const token = this.#companionToken;
@@ -1567,15 +1688,25 @@ export class AppCoordinator {
           this.#pluginTrialGeneration = undefined;
           this.#log?.write('plugin-profile.trial-committed', `generation=${generation}`);
         }
+        await this.#startupRecovery?.healthy();
+        if (this.#startupRecovery?.snapshot().mode === 'safe' || this.#startupRecovery?.snapshot().isolated?.length) {
+          void this.#manageStartupRecovery().catch((error: unknown) => this.#log?.write('runtime.recovery-notification-failed', startupPreparationFailureLogDetails(error)));
+        }
+
       }
     } catch (error) {
       this.#runtimeStderr.flush();
       const state = this.#runtime?.getState();
       const failure = state?.kind === 'failed' ? state.failure : failureFrom(error);
+      this.#lastFailure = failure;
       this.#log?.write('runtime.start-failed', failure.message);
-      if (!(await this.#recoverPluginTrial(failure))) {
-        await this.#window?.showFailure(failure);
+      await this.#startupRecovery?.failed();
+      if (!(await this.#recoverPluginTrial(failure)) && !(await this.#isolateStartupFailure()) && !(await this.#startSafeRuntime(false))) {
+        await this.#window?.showFailure(this.#startupRecovery?.snapshot().mode === 'safe'
+          ? { ...failure, code: 'safe-start-failed', message: 'Safe startup failed. Automatic retries stopped; the cause is unconfirmed.' } : failure);
       }
+    } finally {
+      this.#startingRuntime = false;
     }
   }
 
@@ -1590,6 +1721,7 @@ export class AppCoordinator {
         openLogs: () => void shell.openPath(logDirectory),
         exportDiagnostics: () => void this.#exportDiagnostics(logDirectory),
         checkForUpdates: () => void this.#checkForUpdates(),
+        manageStartupRecovery: () => void this.#manageStartupRecovery().catch((error: unknown) => this.#log?.write('runtime.recovery-action-failed', startupPreparationFailureLogDetails(error))),
       },
     }));
     Menu.setApplicationMenu(menu);

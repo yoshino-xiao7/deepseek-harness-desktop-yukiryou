@@ -33,6 +33,9 @@ window.__ModuleLoader__.load({
         installedScope: '安装来源', installedUser: '自行安装', installedSystem: '系统与依赖', installedAll: '全部（含系统）',
         installedVersion: '已安装版本', installedOwnership: '安装类型', installedState: '运行状态',
         installedMetadataUnavailable: '当前来源中没有找到该插件的远程简介；以下仍会显示本机安装信息。',
+        recoverySkipped: '恢复模式中已跳过',
+        externalUpdateUnsupported: '此安装缺少可验证的更新身份，或使用本地/开发来源，暂不支持市场自动更新。',
+        externalUpdateAdoption: '更新后由桌面应用管理，无需先卸载。失败会恢复旧安装；已停用的插件保持停用。',
         system: '系统', dependency: '依赖', managed: '受管安装', external: '外部', readonlyState: '只读状态',
         runtimeUnavailable: 'Runtime 未加载', installedAt: '安装于 {time}', blockedAttempt: '已自动恢复失败版本 {version}', externalState: '外部可管理',
         uninstall: '卸载', uninstalling: '正在卸载…', uninstallUnavailable: '卸载状态已变化，请刷新后重试。',
@@ -95,6 +98,9 @@ window.__ModuleLoader__.load({
         installedScope: 'Install source', installedUser: 'User installed', installedSystem: 'System and dependencies', installedAll: 'All (including system)',
         installedVersion: 'Installed version', installedOwnership: 'Install type', installedState: 'Runtime state',
         installedMetadataUnavailable: 'No remote description was found in the recorded source. Local installation details are still shown below.',
+        recoverySkipped: 'Skipped during recovery',
+        externalUpdateUnsupported: 'This installation lacks a verifiable update identity or uses a local/development source. Market updates are unavailable.',
+        externalUpdateAdoption: 'The desktop will manage updates after adoption; no uninstall is needed. Failure restores the old installation. Disabled plugins stay disabled.',
         system: 'System', dependency: 'Dependency', managed: 'Managed install', external: 'External', readonlyState: 'Read-only state',
         runtimeUnavailable: 'Not loaded by Runtime', installedAt: 'Installed {time}', blockedAttempt: 'Recovered failed version {version}', externalState: 'Controllable external',
         uninstall: 'Uninstall', uninstalling: 'Uninstalling…', uninstallUnavailable: 'Plugin state changed. Refresh and try again.',
@@ -294,6 +300,8 @@ window.__ModuleLoader__.load({
               : 'disabled',
           receipt,
           externalControl,
+          recoverySkipped: entry.enabled !== true && ((managedSnapshot?.recoveryMode === 'safe' && (receipt !== undefined || externalControl !== undefined)) ||
+            managedSnapshot?.isolatedPackages?.includes(receipt?.packageName ?? externalControl?.packageName ?? entry.moduleName) === true),
         };
       });
       for (const receipt of managed.values()) {
@@ -305,7 +313,13 @@ window.__ModuleLoader__.load({
           ownership: 'managed',
           runtimeState: receipt.enabled ? 'runtimeUnavailable' : 'disabled',
           receipt,
+          recoverySkipped: managedSnapshot?.recoveryMode === 'safe' || managedSnapshot?.isolatedPackages?.includes(receipt.packageName),
         });
+      }
+      for (const externalControl of externalByPackage.values()) {
+        if (entries.some(entry => entry.externalControl?.packageName === externalControl.packageName)) continue;
+        entries.push({ entryId: externalControl.entryIds[0], moduleName: externalControl.packageName,
+          enabled: false, ownership: 'external', runtimeState: externalControl.enabled ? 'runtimeUnavailable' : 'disabled', externalControl, recoverySkipped: managedSnapshot?.recoveryMode === 'safe' || managedSnapshot?.isolatedPackages?.includes(externalControl.packageName) });
       }
       return entries;
     }
@@ -512,6 +526,9 @@ window.__ModuleLoader__.load({
         setSelectedSource(catalog.snapshot?.source ?? null);
       };
       const openInstalledDetails = async (entry) => {
+        setInspection({ status: 'idle', value: null });
+        setManagedInstall({ status: 'idle', value: null });
+        setVersionPreference('latest');
         const recordedSourceId = entry.receipt?.sourceId;
         const external = entry.externalControl;
         const fallback = {
@@ -526,7 +543,9 @@ window.__ModuleLoader__.load({
           ...(external === undefined ? { installability: { state: 'installed' } } : {
             repository: external.repository,
             package: { name: external.packageName, version: external.version },
-            installability: { state: 'candidate', reason: 'verified-external-installation' },
+            installability: external.updateUnavailableReason === undefined
+              ? { state: 'candidate', reason: 'verified-external-installation' }
+              : { state: 'unavailable', reason: external.updateUnavailableReason },
           }),
         };
         setSelected(fallback);
@@ -534,7 +553,7 @@ window.__ModuleLoader__.load({
         setSelectedSource(recordedSourceId === undefined
           ? { id: external === undefined ? 'local-runtime' : 'external-installed', displayName: t(external === undefined ? 'readonlyState' : 'externalState') }
           : { id: recordedSourceId, displayName: recordedSourceId });
-        if (entry.receipt !== undefined || entry.externalControl !== undefined) {
+        if (entry.receipt !== undefined || (entry.externalControl !== undefined && entry.externalControl.updateUnavailableReason === undefined)) {
           const packageName = entry.receipt?.packageName ?? entry.externalControl.packageName;
           const installedVersion = entry.receipt?.version ?? entry.externalControl.version;
           setUpdateCheck({ status: 'loading', packageName, value: null });
@@ -552,7 +571,7 @@ window.__ModuleLoader__.load({
             ? await readCatalog(false, recordedSourceId)
             : catalog.snapshot;
           const item = findInstalledCatalogItem(entry, snapshot?.items ?? []);
-          if (item !== undefined) {
+          if (item !== undefined && external === undefined) {
             setSelected(item);
             setSelectedSource(snapshot.source);
           }
@@ -718,7 +737,8 @@ window.__ModuleLoader__.load({
           if (selectedInstalled?.externalControl !== undefined) {
             return React.createElement('button', {
               type: 'button', className: 'dsh-market-button dsh-market-primary', onClick: prepareManagedInstall,
-            }, t('prepareAdopt'));
+            }, updateCheck.status === 'ready' && updateCheck.value.updateAvailable
+              ? format(t, 'updateFound', { version: updateCheck.value.latestVersion }) : t('prepareAdopt'));
           }
           const receipt = inventory.entries.find((entry) => entry.receipt?.packageName === selected?.package?.name)?.receipt;
           const candidateVersion = inspection.value?.identity?.version ?? selected?.package?.version;
@@ -887,6 +907,7 @@ window.__ModuleLoader__.load({
                         ),
                         React.createElement('span', { className: 'dsh-market-installed-status' },
                           React.createElement('span', null, t(entry.ownership)),
+                          entry.recoverySkipped && React.createElement('span', { role: 'status' }, t('recoverySkipped')),
                           React.createElement('span', null, `${t(entry.runtimeState)} · ${t(entry.receipt ? 'managedState' : entry.externalControl ? 'externalState' : 'readonlyState')}`),
                         ),
                         React.createElement('span', { className: 'dsh-market-installed-actions' },
@@ -1045,7 +1066,7 @@ window.__ModuleLoader__.load({
                 React.createElement('dd', null, formatDateTime(selected.developerVerification.testedAt)),
               ),
             ),
-            selectedInstalled?.receipt && React.createElement('div', { className: 'dsh-market-inspection' },
+            (selectedInstalled?.receipt || selectedInstalled?.externalControl) && React.createElement('div', { className: 'dsh-market-inspection' },
               React.createElement('p', {
                 className: 'dsh-market-inspection-summary',
                 role: updateCheck.status === 'error' ? 'alert' : 'status',
@@ -1061,6 +1082,8 @@ window.__ModuleLoader__.load({
               selectedInstalled?.externalControl === undefined && updateCheck.status === 'ready' && updateCheck.value.updateAvailable &&
                 React.createElement('p', { className: 'dsh-market-source-notice' }, t('updateCatalogRequired')),
             ),
+            selectedInstalled && !selectedInstalled.receipt && (!selectedInstalled.externalControl || selectedInstalled.externalControl.updateUnavailableReason) && React.createElement('p', { className: 'dsh-market-source-notice' }, t('externalUpdateUnsupported')),
+            selectedInstalled?.externalControl && !selectedInstalled.externalControl.updateUnavailableReason && React.createElement('p', { className: 'dsh-market-source-notice' }, t('externalUpdateAdoption')),
             React.createElement('div', { className: 'dsh-market-trust' }, React.createElement('strong', null, t('trustTitle')), t(developmentFixtureSelected ? 'developmentTrust' : curatedSelected ? 'curatedTrust' : 'trust')),
             selected.installability?.state === 'candidate' && (!selectedInstalled || selectedInstalled.receipt || selectedInstalled.externalControl) && React.createElement('div', { className: 'dsh-market-inspection' },
               React.createElement('h4', null, t('inspectionTitle')),

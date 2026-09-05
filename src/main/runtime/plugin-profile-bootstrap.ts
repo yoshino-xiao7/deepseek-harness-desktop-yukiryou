@@ -43,6 +43,7 @@ interface PendingMutationBase {
 }
 
 interface PendingInstall extends PendingMutationBase {
+  readonly enabled?: boolean;
   readonly kind: 'install';
   readonly candidate: PluginProfileCandidate;
   readonly cacheDigests: readonly string[];
@@ -140,6 +141,7 @@ export interface PluginProfileBootstrap {
       readonly version: string;
       readonly generation: string;
     },
+    initialEnabled?: boolean,
   ): Promise<void>;
   prepareRemoval(input: {
     readonly packageName: string;
@@ -295,7 +297,7 @@ export function createPluginProfileBootstrap(
       };
     },
 
-    async prepare(generation, candidate, cacheDigests = [], expectedReceipt) {
+    async prepare(generation, candidate, cacheDigests = [], expectedReceipt, initialEnabled) {
       assertGeneration(generation);
       assertCandidate(candidate);
       const normalizedCacheDigests = parseCacheDigests(cacheDigests);
@@ -337,6 +339,7 @@ export function createPluginProfileBootstrap(
         currentGeneration: state.loadState.currentGeneration,
         pending: {
           kind: 'install',
+          enabled: state.receipts.receipts.find((receipt) => receipt.packageName === candidate.packageName)?.enabled ?? initialEnabled ?? true,
           generation,
           candidate,
           cacheDigests: normalizedCacheDigests,
@@ -544,12 +547,12 @@ export function createPluginProfileBootstrap(
             generation: pending.generation,
             installedAt: pending.preparedAt,
             cacheDigests: pending.cacheDigests,
-            enabled: true,
+            enabled: pending.enabled ?? state.receipts.receipts.find(receipt => receipt.packageName === pending.candidate.packageName)?.enabled ?? true,
             rollbackTarget: null,
           };
           active = [
             ...active.filter((receipt) => receipt.packageName !== trialReceipt.packageName),
-            trialReceipt,
+            ...(trialReceipt.enabled ? [trialReceipt] : []),
           ];
         } else if (pending.kind === 'remove') {
           if (
@@ -937,6 +940,7 @@ function parseLoadState(value: unknown): LoadState {
               kind: 'install',
               ...common,
               candidate: parseCandidate(pendingRecord.candidate),
+              ...(pendingRecord.enabled === undefined ? {} : { enabled: requiredBoolean(pendingRecord.enabled) }),
               cacheDigests: parseCacheDigests(pendingRecord.cacheDigests ?? []),
               ...(pendingRecord.receiptsHash === undefined
                 ? {}
@@ -1173,7 +1177,7 @@ function receiptStateAfterCommit(
     generation: pending.generation,
     installedAt: pending.preparedAt,
     cacheDigests: pending.cacheDigests,
-    enabled: true,
+    enabled: pending.enabled ?? previous?.enabled ?? true,
     rollbackTarget:
       previous === undefined
         ? null

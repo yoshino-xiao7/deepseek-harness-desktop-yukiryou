@@ -49,6 +49,7 @@ export interface ExternalPluginInventoryEntry {
   readonly enabled: boolean;
   readonly allowedActions: readonly ('enable' | 'disable' | 'uninstall')[];
   readonly repository: string;
+  readonly updateUnavailableReason?: 'local-or-unverified-source';
 }
 
 export interface ExternalPluginControlRequest {
@@ -106,6 +107,8 @@ export type ManagedPluginInventoryResult =
       readonly currentGeneration: string | null;
       readonly entries: readonly ManagedPluginInventoryEntry[];
       readonly externalEntries: readonly ExternalPluginInventoryEntry[];
+      readonly recoveryMode?: 'safe' | 'isolated';
+      readonly isolatedPackages?: readonly string[];
     }
   | {
       readonly requestId: string;
@@ -202,6 +205,8 @@ export function validatedManagedPluginInventoryResult(
     currentGeneration: value.currentGeneration,
     entries,
     externalEntries,
+    ...(value.recoveryMode === 'safe' || value.recoveryMode === 'isolated' ? { recoveryMode: value.recoveryMode } : {}),
+    ...(Array.isArray(value.isolatedPackages) && value.isolatedPackages.every(item => boundedString(item, 214)) && value.isolatedPackages.length <= 100 ? { isolatedPackages: value.isolatedPackages as string[] } : {}),
   };
 }
 
@@ -256,6 +261,7 @@ function validatedExternalEntry(value: unknown): ExternalPluginInventoryEntry | 
     enabled: value.enabled,
     allowedActions: value.allowedActions,
     repository: value.repository,
+    ...(value.updateUnavailableReason === 'local-or-unverified-source' ? { updateUnavailableReason: value.updateUnavailableReason } : {}),
   };
 }
 

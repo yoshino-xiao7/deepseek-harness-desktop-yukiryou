@@ -562,6 +562,17 @@ describe('desktop community plugin catalog', () => {
       id: 'desktop-community',
       order: 30,
     }), expect.any(Function));
+    expect(plugin?.mergeInstalledInventory([], { entries: [], externalEntries: [{
+      packageName: 'external-example', version: '1.0.0', enabled: false, entryIds: ['external-entry'],
+    }] })).toEqual([expect.objectContaining({ moduleName: 'external-example', runtimeState: 'disabled', externalControl: expect.any(Object) })]);
+    expect(plugin?.mergeInstalledInventory([
+      { entryId: 'webserver', moduleName: '@deepseek-ai/dsh-host-webserver', enabled: true },
+    ], { recoveryMode: 'safe', entries: [], externalEntries: [
+      { packageName: 'external-example', version: '1.0.0', enabled: true, entryIds: ['external-entry'] },
+    ] })).toEqual([
+      expect.objectContaining({ moduleName: '@deepseek-ai/dsh-host-webserver', recoverySkipped: false }),
+      expect.objectContaining({ moduleName: 'external-example', recoverySkipped: true }),
+    ]);
     expect(source).not.toContain('onInstall');
     expect(source).toContain("['discover', 'discover', allItems.length]");
     expect(source).toContain("['installable', 'installable', installable.length]");
@@ -604,7 +615,7 @@ describe('desktop community plugin catalog', () => {
     expect(source).toContain('entry.externalControl.enabled');
     expect(source).toContain("controlExternalPlugin(entry, 'uninstall')");
     expect(source).toContain('entryId: capability.entryIds[0]');
-    expect(source).toContain("installability: { state: 'candidate', reason: 'verified-external-installation' }");
+    expect(source).toContain("{ state: 'candidate', reason: 'verified-external-installation' }");
     expect(source).toContain("operation === 'adopt' ? 'adoptPreviewTitle'");
     expect(source).toContain("t(external === undefined ? 'readonlyState' : 'externalState')");
     expect(source).toContain("ownership: receipt === undefined ? inferredOwnership(entry.moduleName) : 'managed'");

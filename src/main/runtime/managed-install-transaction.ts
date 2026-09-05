@@ -64,7 +64,7 @@ interface ManagedInstallTransactionOptions {
   readonly installer: ManagedInstaller;
   readonly bootstrap: Pick<PluginProfileBootstrap, 'prepare'>;
   readonly externalAdoption?: {
-    prepareAdoption(identity: Exclude<ManagedInstallExpectedExternal, null>, generation: string): Promise<void>;
+    prepareAdoption(identity: Exclude<ManagedInstallExpectedExternal, null>, generation: string): Promise<{ readonly enabled: boolean } | void>;
     recoverAdoption(generation: string): Promise<void>;
   };
   readonly now?: () => number;
@@ -160,6 +160,7 @@ export function createManagedInstallTransaction(
       previews.delete(previewId);
       mutationActive = true;
       let adoptionPrepared = false;
+      let initialEnabled: boolean | undefined;
       try {
         const staged = await options.installer.stage({
           generation: entry.generation,
@@ -176,7 +177,8 @@ export function createManagedInstallTransaction(
           if (options.externalAdoption === undefined) {
             throw transactionError('execute-failed', 'External plugin adoption is unavailable');
           }
-          await options.externalAdoption.prepareAdoption(entry.expectedExternal, entry.generation);
+          const adoption = await options.externalAdoption.prepareAdoption(entry.expectedExternal, entry.generation);
+          initialEnabled = adoption?.enabled;
           adoptionPrepared = true;
         }
         await options.bootstrap.prepare(
@@ -184,6 +186,7 @@ export function createManagedInstallTransaction(
           staged.candidate,
           staged.cacheDigests,
           entry.expectedReceipt,
+          initialEnabled,
         );
         return Object.freeze({
           status: 'prepared' as const,

@@ -57,13 +57,13 @@ describe('desktop update bridge', () => {
     ).toBe(false);
     expect(
       shouldShowHeaderUpdate({ status: 'idle', currentVersion: '0.1.0' }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldShowHeaderUpdate({ status: 'checking', currentVersion: '0.1.0' }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldShowHeaderUpdate({ status: 'error', currentVersion: '0.1.0' }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldShowHeaderUpdate({ status: 'downloading', currentVersion: '0.1.0' }),
     ).toBe(true);

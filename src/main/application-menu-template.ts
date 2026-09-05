@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions } from 'electron';
 import type { DesktopLocale } from '../shared/locale-sync.js';
 
 export interface ApplicationMenuActions {
+  readonly manageStartupRecovery?: () => void;
   readonly restartHarness: () => void;
   readonly reloadHarness: () => void;
   readonly openLogs: () => void;
@@ -26,6 +27,7 @@ export function createApplicationMenuTemplate(
     { role: 'about', label: text.about },
     { type: 'separator' },
     { label: text.restart, click: options.actions.restartHarness },
+    { label: chinese ? '安全启动与恢复…' : 'Safe startup and recovery…', click: options.actions.manageStartupRecovery ?? (() => undefined), enabled: options.actions.manageStartupRecovery !== undefined },
     {
       label: text.reload,
       accelerator: 'CmdOrCtrl+R',

@@ -34,3 +34,7 @@ rc.1 源码和实际 bundle 复核确认该竞态尚未由上游解决，因此�
 - 范围：仅停用该按钮的 JS Tooltip，保留原按钮、点击详情、`aria-label` 与原生 `title`；不修改上下文容量计算或会话状态。
 
 rc.1 实际 conversation bundle 复核确认定位结构仍未改变，因此继续保留可逆补丁。上游改为 portal 或修正 containing block 后，应删除补丁及其 vendor/verify 契约。
+
+## rc.1 侧栏底部布局兼容样式（1.0.9 开发中）
+
+更新按钮使用正式 `sidebar.footer.action`，不再通过 preload 固定定位。rc.1 的该槽位位于设置上方，因此 `desktop-settings-plugin/client.js` 对精确的 `hHd-Xa_footArea` / `settingsArea` / `footerActions` 与 `VOzbGW_trigger` 添加同排布局及设置交互样式。选择器失配时不命中其他按钮，槽位仍保持上游默认布局；`footer-update-interaction` 集成测试验证固定 Runtime 选择器和交互。上游提供设置旁内联布局和 trigger 动效契约后删除这些兼容样式。

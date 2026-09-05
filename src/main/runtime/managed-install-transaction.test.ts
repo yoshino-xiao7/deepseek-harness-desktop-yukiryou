@@ -52,7 +52,7 @@ describe('ManagedInstallTransaction', () => {
       generation,
       previewId: stagingPreviewId,
     });
-    expect(prepare).toHaveBeenCalledWith(generation, candidate, cacheDigests, null);
+    expect(prepare).toHaveBeenCalledWith(generation, candidate, cacheDigests, null, undefined);
   });
 
   it('expires previews without touching the installer', async () => {
@@ -211,7 +211,7 @@ describe('ManagedInstallTransaction', () => {
   });
 
   it('suppresses an exact external plugin before preparing its managed replacement', async () => {
-    const prepareAdoption = vi.fn(async () => undefined);
+    const prepareAdoption = vi.fn(async () => ({ enabled: false }));
     const recoverAdoption = vi.fn(async () => undefined);
     const prepare = vi.fn(async () => undefined);
     const transaction = createManagedInstallTransaction({
@@ -240,7 +240,7 @@ describe('ManagedInstallTransaction', () => {
     await transaction.execute(preview.previewId);
 
     expect(prepareAdoption).toHaveBeenCalledWith(externalIdentity, generation);
-    expect(prepare).toHaveBeenCalledWith(generation, candidate, cacheDigests, null);
+    expect(prepare).toHaveBeenCalledWith(generation, candidate, cacheDigests, null, false);
     expect(recoverAdoption).not.toHaveBeenCalled();
   });
 });

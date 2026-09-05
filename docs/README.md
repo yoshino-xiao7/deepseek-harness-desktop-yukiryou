@@ -15,6 +15,8 @@
 11. [Desktop Companion 完整实现方案](10-desktop-companion-plan.md)
 12. [一体化桌面框架与插件市场改造方案](11-integrated-desktop-shell-and-plugin-market.md)
 13. [开发者实机验证插件来源](13-developer-curated-plugin-source.md)
+14. [更新体验、外部插件更新与启动恢复实施计划](14-update-experience-and-plugin-recovery-plan.md)
+15. [1.0.9 实施与验证记录](15-v1.0.9-implementation-status.md)
 
 关键且难以逆转的决策记录在 [`adr/`](adr/)；领域术语以仓库根目录的 [`CONTEXT.md`](../CONTEXT.md) 为准。
 

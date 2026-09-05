@@ -138,7 +138,7 @@ jobs:
       - name: Start and restart the exact installed candidate
         env:
           DSH_E2E_EXECUTABLE_PATH: /Applications/DeepSeek YukiRyou.app/Contents/MacOS/DeepSeek YukiRyou
-        run: pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts --no-file-parallelism
+        run: pnpm exec vitest run tests/e2e/packaged-startup.test.ts tests/e2e/session-selection-restart.test.ts tests/e2e/plugin-startup-recovery.test.ts --no-file-parallelism
       - name: Download and extract the previous public release
         env:
           GH_TOKEN: ${{ github.token }}

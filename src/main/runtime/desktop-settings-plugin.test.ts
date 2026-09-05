@@ -18,6 +18,73 @@ function elements(value: unknown): ElementNode[] {
 }
 
 describe('desktop plugin management tab', () => {
+  it('keeps the footer download status focusable without sending duplicate commands', async () => {
+    const source = await readFile(new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url), 'utf8');
+    const registrations = new Map<string, (props: unknown) => ElementNode>();
+    const command = vi.fn();
+    let plugin: { apply(context: unknown): void } | undefined;
+    const window = {
+      deepSeekYukiRyouUpdates: { getSnapshot: () => ({ status: 'downloading', currentVersion: '1.0.9', downloadPercent: 27 }), subscribe: vi.fn(), command },
+      __ModuleLoader__: { load: ({ factory }: { factory(require: () => unknown): unknown }) => {
+        plugin = factory(() => ({
+          createElement: (type: unknown, props: unknown, ...children: unknown[]) => typeof type === 'function' ? type(props) : ({ type, props: props ?? {}, children }),
+          useState: (initial: () => unknown) => [initial(), vi.fn()], useEffect: vi.fn(),
+        })) as typeof plugin;
+      } },
+    };
+    vm.runInNewContext(source, { window, document: { querySelector: () => ({}) } });
+    plugin?.apply({ effect: vi.fn(), locale: { bind: () => (key: string) => key }, remote: {},
+      slots: { inject: (_: string, cb: () => void) => cb(), register: (meta: { id: string }, component: (props: unknown) => ElementNode) => registrations.set(meta.id, component) } });
+    const component = registrations.get('desktop-update');
+    expect(component).toBeTypeOf('function');
+    const node = component!({ wide: true, t: (key: string) => key });
+    const button = elements(node).find((item) => item.type === 'button')!;
+    expect(button.props.disabled).not.toBe(true);
+    expect(button.props['aria-disabled']).toBe(true);
+    expect(button.props.title).toContain('27%');
+    (button.props.onClick as () => void)();
+    expect(command).not.toHaveBeenCalled();
+  });
+
+  it('only reveals confirmed updates and remembers each target across progress and remounts', async () => {
+    const source = await readFile(new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url), 'utf8');
+    const registrations = new Map<string, (props: unknown) => ElementNode | null>();
+    let state: { status: string; currentVersion: string; releaseName?: string; downloadPercent?: number } = { status: 'idle', currentVersion: '1.0.9' };
+    const saved = new Map<string, string>();
+    const load = () => {
+      let plugin: { apply(context: unknown): void } | undefined;
+      const window = {
+        localStorage: { getItem: (key: string) => saved.get(key), setItem: (key: string, value: string) => saved.set(key, value) },
+        deepSeekYukiRyouUpdates: { getSnapshot: () => state, subscribe: vi.fn() },
+        __ModuleLoader__: { load: ({ factory }: { factory(require: () => unknown): unknown }) => {
+          plugin = factory(() => ({
+            createElement: (type: unknown, props: unknown, ...children: unknown[]) => typeof type === 'function' ? type(props) : ({ type, props: props ?? {}, children }),
+            useState: (initial: () => unknown) => [initial(), vi.fn()], useEffect: (effect: () => void) => effect(),
+          })) as typeof plugin;
+        } },
+      };
+      vm.runInNewContext(source, { window, document: { querySelector: () => ({}) } });
+      plugin?.apply({ effect: vi.fn(), locale: { bind: () => (key: string) => key }, remote: {},
+        slots: { inject: (_: string, cb: () => void) => cb(), register: (meta: { id: string }, component: (props: unknown) => ElementNode | null) => registrations.set(meta.id, component) } });
+    };
+    const render = () => registrations.get('desktop-update')!({ wide: true, t: (key: string) => key });
+    load();
+    for (const status of ['idle', 'checking', 'latest', 'disabled', 'error']) {
+      state = { status, currentVersion: '1.0.9' };
+      expect(render()).toBeNull();
+    }
+    state = { status: 'downloading', currentVersion: '1.0.9', releaseName: '1.0.10', downloadPercent: 0 };
+    expect(render()?.props['data-update-reveal']).toBe('entering');
+    state = { ...state, downloadPercent: 27 };
+    expect(render()?.props['data-update-reveal']).toBe('settled');
+    state = { ...state, status: 'downloaded' };
+    expect(render()?.props['data-update-reveal']).toBe('settled');
+    load(); // A fresh module instance must also respect the saved reveal record.
+    expect(render()?.props['data-update-reveal']).toBe('settled');
+    state = { ...state, releaseName: '1.0.11' };
+    expect(render()?.props['data-update-reveal']).toBe('entering');
+  });
+
   it('registers Windows-specific About and manual update copy', async () => {
     const source = await readFile(
       new URL('../../../runtime/desktop-settings-plugin/client.js', import.meta.url),

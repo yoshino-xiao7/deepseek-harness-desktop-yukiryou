@@ -32,6 +32,7 @@ import {
   type UpdateCommand,
 } from '../../shared/update-bridge.js';
 import { createDesktopWindowOptions } from './desktop-window-options.js';
+import { restoreWindowBounds } from './restore-window-bounds.js';
 import {
   animatedReservedWidth,
   companionLayout,
@@ -127,6 +128,7 @@ export interface DesktopWindowOptions {
   readonly initialFeaturePreferences?: DesktopFeaturePreferences | undefined;
   readonly onWindowStateChange?: (state: DesktopWindowState) => void;
   readonly onRetry: () => void;
+  readonly onSafeStart?: () => void;
   readonly onOpenLogs: () => void;
   readonly onCopyDiagnostics: () => void;
   readonly onExportDiagnostics: () => void;
@@ -211,6 +213,9 @@ class ElectronDesktopWindow implements DesktopWindow {
         options.initialWindowState,
       ),
     );
+    if (options.initialWindowState !== undefined) {
+      restoreWindowBounds(this.#window, options.initialWindowState.bounds);
+    }
     if (options.initialWindowState?.maximized === true) {
       this.#window.maximize();
     }
@@ -708,9 +713,10 @@ class ElectronDesktopWindow implements DesktopWindow {
   }
 
   #performLocalAction(
-    action: 'retry' | 'open-logs' | 'copy-diagnostics' | 'export-diagnostics',
+    action: 'safe-start' | 'retry' | 'open-logs' | 'copy-diagnostics' | 'export-diagnostics',
   ): void {
     const callbacks = {
+      'safe-start': this.#options.onSafeStart ?? (() => undefined),
       retry: this.#options.onRetry,
       'open-logs': this.#options.onOpenLogs,
       'copy-diagnostics': this.#options.onCopyDiagnostics,

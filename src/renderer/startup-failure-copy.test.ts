@@ -11,6 +11,11 @@ describe('startup failure copy', () => {
     expect(copy).toContain('不会自动连接或结束未知进程');
   });
 
+  it('explains when safe startup has exhausted automatic recovery', () => {
+    expect(startupFailureCopy('safe-start-failed')).toContain('已停止自动重试');
+    expect(startupFailureCopy('safe-start-failed')).toContain('无法确认是插件问题');
+  });
+
   it('keeps generic failures concise and diagnostic', () => {
     expect(startupFailureCopy('startup-timeout')).toBe(
       '错误类型：startup-timeout。你可以重试，或导出诊断信息。',

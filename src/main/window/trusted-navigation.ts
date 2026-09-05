@@ -6,6 +6,7 @@ export type TrustedHarnessOrigin = string & {
 
 export type NavigationDecision = 'allow' | 'open-external' | 'deny';
 export type LocalAction =
+  | 'safe-start'
   | 'retry'
   | 'open-logs'
   | 'copy-diagnostics'
@@ -23,7 +24,7 @@ export function classifyLocalAction(target: string): LocalAction | undefined {
       return undefined;
     }
     const action = parsed.pathname.slice(1);
-    return action === 'retry' ||
+    return action === 'safe-start' || action === 'retry' ||
       action === 'open-logs' ||
       action === 'copy-diagnostics' ||
       action === 'export-diagnostics'

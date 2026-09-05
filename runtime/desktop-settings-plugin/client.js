@@ -161,7 +161,49 @@ window.__ModuleLoader__.load({
       });
     }
 
+    // Temporary rc.1-only chrome geometry; exact selectors fail closed on mismatch.
+    // Remove when sidebar.footer.action provides inline layout alongside Settings.
     const css = `
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) { flex-direction: row; align-items: center; gap: 8px; }
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_settingsArea { order: 0; flex: 1; width: auto; }
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_footerActions { order: 1; width: auto; }
+      .hHd-Xa_collapsed .hHd-Xa_footArea:has(.dsh-desktop-footer-update) { flex-direction: column; gap: 0; }
+      .hHd-Xa_settingsArea .VOzbGW_trigger { transition: background-color 140ms ease, transform 140ms ease; }
+      .hHd-Xa_settingsArea .VOzbGW_trigger:hover { transform: translateY(-1px); background: var(--dsw-alias-interactive-bg-hover); }
+      .hHd-Xa_settingsArea .VOzbGW_trigger:active { transform: scale(.98); }
+      .hHd-Xa_settingsArea .VOzbGW_trigger:focus-visible { outline: 2px solid var(--dsw-static-deepseek-500, #4d6bfe); outline-offset: 2px; }
+      @media (prefers-reduced-motion: reduce) {
+        .hHd-Xa_settingsArea .VOzbGW_trigger { transition: none; transform: none !important; }
+      }
+
+      .dsh-desktop-footer-update {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        min-width: 34px; height: 34px; padding: 0 8px; flex: none; box-sizing: border-box;
+        border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
+        color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1);
+        cursor: pointer; transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+      }
+      .hHd-Xa_footArea:has([data-update-reveal="entering"]) { animation: dsh-update-gap 420ms ease both; }
+      .hHd-Xa_footerActions:has([data-update-reveal="entering"]) { overflow: hidden; animation: dsh-update-reserve 420ms ease both; }
+      .dsh-desktop-footer-update[data-update-reveal="entering"] { animation: dsh-update-emerge 420ms ease both; }
+      .hHd-Xa_collapsed .hHd-Xa_footArea:has([data-update-reveal="entering"]), .hHd-Xa_collapsed .hHd-Xa_footerActions:has([data-update-reveal="entering"]) { animation: none; }
+      @keyframes dsh-update-gap { from { gap: 0; } 55%, to { gap: 8px; } }
+      @keyframes dsh-update-reserve { from { width: 0; } 55%, to { width: 80px; } }
+      @keyframes dsh-update-emerge { from, 55% { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: translateX(0); } }
+      .dsh-desktop-footer-update[data-wide="true"] { width: 80px; }
+      .dsh-desktop-footer-update svg { width: 18px; height: 18px; flex: none; }
+      .dsh-desktop-footer-update span { min-width: 4ch; font-variant-numeric: tabular-nums; }
+      .dsh-desktop-footer-update:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+      .dsh-desktop-footer-update[aria-disabled="false"]:hover { transform: translateY(-1px); }
+      .dsh-desktop-footer-update[aria-disabled="false"]:active { transform: scale(.97); }
+      .dsh-desktop-footer-update[aria-disabled="true"] { cursor: default; }
+      .dsh-desktop-footer-update:focus-visible { outline: 2px solid var(--dsw-static-deepseek-500, #4d6bfe); outline-offset: 2px; }
+      .dsh-desktop-footer-update[data-update-status="downloaded"] { color: var(--dsw-static-deepseek-500, #4d6bfe); border-color: currentColor; }
+      @media (prefers-reduced-motion: reduce) {
+        .dsh-desktop-footer-update { transition: none; transform: none !important; animation: none !important; }
+        .hHd-Xa_footArea:has([data-update-reveal="entering"]), .hHd-Xa_footerActions:has([data-update-reveal="entering"]) { animation: none !important; }
+      }
+
       :root {
         --dsh-desktop-chrome-sidebar-background: var(--dsw-specific-sidebar-fill);
         --dsh-desktop-chrome-content-background: var(--dsw-alias-bg-base);
@@ -1077,6 +1119,60 @@ window.__ModuleLoader__.load({
       );
     }
 
+    const revealedUpdates = new Set();
+    function updateRevealKey(state) {
+      return `dsh-desktop:update-reveal:${state.currentVersion}:${state.releaseName ?? 'available'}`;
+    }
+    function hasRevealedUpdate(key) {
+      try { return revealedUpdates.has(key) || window.localStorage?.getItem(key) === '1'; }
+      catch { return revealedUpdates.has(key); }
+    }
+    function markUpdateRevealed(key) {
+      revealedUpdates.add(key);
+      try { window.localStorage?.setItem(key, '1'); } catch { /* memory fallback */ }
+    }
+    function footerUpdateVisible(state) {
+      return ['downloading', 'downloaded', 'manual'].includes(state.status) ||
+        (state.status === 'error' && typeof state.releaseName === 'string');
+    }
+    function FooterUpdate({ wide, t }) {
+      const state = useUpdateState();
+      if (!footerUpdateVisible(state)) return null;
+      return React.createElement(AvailableFooterUpdate, { key: updateRevealKey(state), state, wide, t });
+    }
+    function AvailableFooterUpdate({ state, wide, t }) {
+      const key = updateRevealKey(state);
+      const [reveal, setReveal] = React.useState(() => !hasRevealedUpdate(key));
+      React.useEffect(() => {
+        markUpdateRevealed(key);
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) setReveal(false);
+      }, [key]);
+      const busy = state.status === 'checking' || state.status === 'downloading';
+      const percent = state.status === 'downloading' && state.downloadPercent !== undefined
+        ? `${Math.round(state.downloadPercent)}%` : null;
+      const label = state.status === 'downloaded' ? t('about.install')
+        : state.status === 'manual' ? t('about.manualDownload')
+        : state.status === 'downloading' ? t('about.downloading')
+        : state.status === 'checking' ? t('about.checking')
+        : state.status === 'error' ? t('about.updateError') : t('about.check');
+      const title = `${label}${percent === null ? '' : ` ${percent}`}`;
+      return React.createElement('button', {
+        type: 'button', className: 'dsh-desktop-footer-update',
+        'data-dsh-desktop-update-button': '', 'data-update-status': state.status,
+        'data-update-reveal': reveal ? 'entering' : 'settled', 'data-wide': wide ? 'true' : 'false',
+        onAnimationEnd: (event) => { if (event.animationName === 'dsh-update-emerge') setReveal(false); },
+        'aria-label': title, title, 'aria-disabled': busy, 'aria-busy': busy,
+        onClick: () => {
+          if (busy) return;
+          if (state.status === 'downloaded') updateApi()?.install();
+          else if (state.status === 'manual') updateApi()?.download();
+          else updateApi()?.check();
+        },
+      }, React.createElement('svg', { 'aria-hidden': true, viewBox: '0 0 20 20', fill: 'none' },
+        React.createElement('path', { d: 'M10 3.5v9.2m0 0 3.6-3.6M10 12.7 6.4 9.1M4 16.5h12', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' })),
+      wide && React.createElement('span', { 'aria-hidden': true }, percent ?? (busy ? '…' : '')));
+    }
+
     const inject = ['slots', 'locale', 'remote', 'remote.pluginInventory'];
     function apply(ctx) {
       ctx.effect(
@@ -1089,6 +1185,9 @@ window.__ModuleLoader__.load({
         if (!result.ok) throw new Error('pluginInventory.list failed');
         return result.value;
       };
+      ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+        name: 'sidebar.footer.action', id: 'desktop-update', order: 100, locale: namespace,
+      }, FooterUpdate));
       ctx.slots.inject('settings.plugins.tab', () =>
         ctx.slots.register(
           {
@@ -1127,6 +1226,7 @@ window.__ModuleLoader__.load({
       );
     }
 
+    exports.footerUpdateVisible = footerUpdateVisible;
     exports.inject = inject;
     exports.apply = apply;
     return module.exports;
