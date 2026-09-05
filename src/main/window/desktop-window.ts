@@ -32,6 +32,7 @@ import {
   type UpdateCommand,
 } from '../../shared/update-bridge.js';
 import { createDesktopWindowOptions } from './desktop-window-options.js';
+import { restoreWindowBounds } from './restore-window-bounds.js';
 import {
   animatedReservedWidth,
   companionLayout,
@@ -212,6 +213,9 @@ class ElectronDesktopWindow implements DesktopWindow {
         options.initialWindowState,
       ),
     );
+    if (options.initialWindowState !== undefined) {
+      restoreWindowBounds(this.#window, options.initialWindowState.bounds);
+    }
     if (options.initialWindowState?.maximized === true) {
       this.#window.maximize();
     }

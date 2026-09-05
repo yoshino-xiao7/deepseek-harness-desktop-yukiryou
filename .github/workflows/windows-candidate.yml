@@ -79,8 +79,6 @@ jobs:
           corepack enable
           corepack prepare pnpm@${env:PNPM_VERSION} --activate
       - run: pnpm install --frozen-lockfile
-      - name: Diagnose native window bounds
-        run: pnpm exec electron scripts/debug/window-bounds.cjs
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
