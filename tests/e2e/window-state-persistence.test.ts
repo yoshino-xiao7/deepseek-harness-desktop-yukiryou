@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { closeElectronTestApplication } from './electron-cleanup.js';
 import { resolveE2eExecutablePath } from './executable-path.js';
+import { runtimeStartupTimeoutMs } from '../../src/main/runtime/runtime-startup-policy.js';
 
 describe('desktop window state persistence', () => {
   let application: ElectronApplication | undefined;
@@ -51,7 +52,7 @@ describe('desktop window state persistence', () => {
 
     application = await launch(userData);
     await expect.poll(() => readBounds(application!)).toEqual(expected);
-  }, 75_000);
+  }, runtimeStartupTimeoutMs() * 2 + 30000);
 });
 
 async function launch(userData: string): Promise<ElectronApplication> {
@@ -65,6 +66,16 @@ async function launch(userData: string): Promise<ElectronApplication> {
     () => application.windows().some((page) => page.url().startsWith('file:')),
     { timeout: 20_000 },
   ).toBe(true);
+  // A file: shell exists before ready-to-show and showHarness/reveal finish.
+  // Setting native bounds at that point races the initial Windows show. The
+  // host healthy marker is written only after Harness navigation completes.
+  await expect.poll(async () => {
+    try {
+      const state = JSON.parse(await readFile(join(userData, 'runtime', 'plugin-management', 'startup-recovery.json'), 'utf8')) as { phase: string };
+      const visible = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible());
+      return state.phase === 'healthy' && visible === true;
+    } catch { return false; }
+  }, { timeout: runtimeStartupTimeoutMs() + 10000 }).toBe(true);
   return application;
 }
 
