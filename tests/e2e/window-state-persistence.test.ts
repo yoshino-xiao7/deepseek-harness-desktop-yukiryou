@@ -28,7 +28,7 @@ describe('desktop window state persistence', () => {
     await expect.poll(() => application!.evaluate(
       ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMaximized(),
     )).toBe(false);
-    const expected = await application.evaluate(({ BrowserWindow, screen }) => {
+    const requested = await application.evaluate(({ BrowserWindow, screen }) => {
       const area = screen.getPrimaryDisplay().workArea;
       const bounds = {
         x: area.x + 80,
@@ -40,7 +40,29 @@ describe('desktop window state persistence', () => {
       window?.setBounds(bounds);
       return bounds;
     });
-    await expect.poll(() => readBounds(application!)).toEqual(expected);
+    // This Windows runner reports a 1–2 DIP initial frame difference. The app's
+    // persistence contract is to restore the actual accepted rectangle, not
+    // to make Electron's setBounds request mathematically exact.
+    const initialSizeTolerance = process.platform === 'win32' ? 2 : 0;
+    await expect.poll(async () => {
+      const bounds = await readBounds(application!);
+      return bounds !== undefined && bounds.x === requested.x && bounds.y === requested.y &&
+        Math.abs(bounds.width - requested.width) <= initialSizeTolerance &&
+        Math.abs(bounds.height - requested.height) <= initialSizeTolerance;
+    }).toBe(true);
+    let expected = await readBounds(application);
+    await expect.poll(async () => {
+      const actual = await readBounds(application!);
+      const persisted = JSON.parse(await readFile(join(userData!, 'window-state.json'), 'utf8')) as { bounds: typeof actual };
+      if (actual === undefined || persisted.bounds === undefined) return false;
+      if (['x', 'y', 'width', 'height'].some(key => actual[key as keyof typeof actual] !== persisted.bounds![key as keyof typeof actual])) return false;
+      expected = actual;
+      return true;
+    }).toBe(true);
+    expect(expected).toMatchObject({ x: requested.x, y: requested.y });
+    expect(Math.abs((expected?.width ?? Infinity) - requested.width)).toBeLessThanOrEqual(initialSizeTolerance);
+    expect(Math.abs((expected?.height ?? Infinity) - requested.height)).toBeLessThanOrEqual(initialSizeTolerance);
+    // Keep disk persistence and the post-restart comparison exact.
     await expect.poll(async () => JSON.parse(
       await readFile(join(userData!, 'window-state.json'), 'utf8'),
     )).toMatchObject({ bounds: expected, maximized: false });
