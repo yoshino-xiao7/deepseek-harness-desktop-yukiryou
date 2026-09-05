@@ -6,6 +6,9 @@ import { createSafeRuntimeCommand, createPluginStartupRecovery, identifyStartupP
 import { createHarnessRuntimeCommand } from '../../src/main/runtime/runtime-command.js';
 import { ensureBundledRuntimeExtensions } from '../../src/main/runtime/runtime-extension.js';
 import { createRuntimeSupervisor } from '../../src/main/runtime/runtime-supervisor.js';
+import { runtimeStartupTimeoutMs } from '../../src/main/runtime/runtime-startup-policy.js';
+
+const startupTimeoutMs = runtimeStartupTimeoutMs();
 
 describe('bundled recovery boot', () => {
   it('isolates a loader-identified crashing plugin before its next import', async () => {
@@ -24,7 +27,7 @@ describe('bundled recovery boot', () => {
     await ensureBundledRuntimeExtensions(home, root);
     const errors: string[] = [];
     const runtime = createRuntimeSupervisor({ ...createHarnessRuntimeCommand(root), runtimeHome: home, workspaceRoot: home,
-      version: '0.1.2-rc.1', startupTimeoutMs: 20000, shutdownTimeoutMs: 5000,
+      version: '0.1.2-rc.1', startupTimeoutMs, shutdownTimeoutMs: 5000,
       createCompanionToken: () => 'b'.repeat(64), onOutput: (stream, chunk) => { if (stream === 'stderr') errors.push(chunk); },
     });
     try {
@@ -42,7 +45,7 @@ describe('bundled recovery boot', () => {
       expect(errors.join('')).not.toContain('FIXTURE_IMPORT_FAILED');
       expect(await readFile(join(plugin, 'index.js'), 'utf8')).toContain('FIXTURE_IMPORT_FAILED');
     } finally { await runtime.stop('quit'); }
-  }, 45000);
+  }, startupTimeoutMs * 2 + 15000);
 
   it('opens the same data home without evaluating broken user bundles or home patches', async () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-safe-'));
@@ -54,7 +57,7 @@ describe('bundled recovery boot', () => {
     const command = await createSafeRuntimeCommand(home, resolve('resources/runtime'));
     const errors: string[] = [];
     const runtime = createRuntimeSupervisor({ ...command, runtimeHome: home, workspaceRoot: home,
-      version: '0.1.2-rc.1', startupTimeoutMs: 20000, shutdownTimeoutMs: 5000,
+      version: '0.1.2-rc.1', startupTimeoutMs, shutdownTimeoutMs: 5000,
       createCompanionToken: () => 'a'.repeat(64),
       onOutput: (stream, chunk) => { if (stream === 'stderr') errors.push(chunk); },
     });
@@ -66,5 +69,5 @@ describe('bundled recovery boot', () => {
     } catch (error) {
       throw new Error(`${String(error)}\n${errors.join('').slice(-4000)}`, { cause: error });
     } finally { await runtime.stop('quit'); }
-  }, 30000);
+  }, startupTimeoutMs + 15000);
 });
