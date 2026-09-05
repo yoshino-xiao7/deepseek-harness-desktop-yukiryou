@@ -23,7 +23,6 @@ import {
   UPDATE_STATE_CHANNEL,
   type DesktopUpdateState,
   type UpdateCommand,
-  shouldShowHeaderUpdate,
   validatedUpdateState,
 } from '../shared/update-bridge.js';
 import {
@@ -439,7 +438,6 @@ ipcRenderer.on(UPDATE_STATE_CHANNEL, (_event, value: unknown) => {
   if (nextState === undefined) return;
   updateState = nextState;
   for (const listener of updateListeners) listener(nextState);
-  reconcileHarnessUpdateButton();
 });
 
 contextBridge.exposeInMainWorld('deepSeekYukiRyouUpdates', {
@@ -642,202 +640,8 @@ function installHarnessLocaleObserver(): void {
   report();
 }
 
-function reconcileHarnessUpdateButton(): void {
-  const existing = document.querySelector<HTMLElement>(
-    '[data-dsh-desktop-update-button]',
-  );
-  if (!shouldShowHeaderUpdate(updateState)) {
-    existing?.remove();
-    return;
-  }
-  const sidebar = findHarnessSidebar();
-  if (sidebar === undefined) {
-    existing?.remove();
-    return;
-  }
-  const button =
-    existing instanceof HTMLButtonElement
-      ? existing
-      : document.createElement('button');
-  button.dataset.dshDesktopUpdateButton = '';
-  button.type = 'button';
-  button.className = 'dsh-desktop-header-update';
-  button.dataset.updateStatus = updateState.status;
-  const downloaded = updateState.status === 'downloaded';
-  const manual = updateState.status === 'manual';
-  const checking = updateState.status === 'checking';
-  const downloading = updateState.status === 'downloading';
-  const downloadPercent = downloading && updateState.downloadPercent !== undefined
-    ? Math.round(updateState.downloadPercent)
-    : undefined;
-  const language = document.documentElement.lang.toLowerCase();
-  const english = language.startsWith('en');
-  const accessibleLabel = (() => {
-    switch (updateState.status) {
-      case 'checking': return english ? 'Checking for updates' : '正在检查更新';
-      case 'latest': return english ? 'Up to date. Check again' : '已是最新版本，点击重新检查';
-      case 'downloading': return downloadPercent === undefined
-        ? (english ? 'Downloading update' : '正在下载更新')
-        : (english ? `Downloading update ${String(downloadPercent)}%` : `正在下载更新 ${String(downloadPercent)}%`);
-      case 'downloaded': return english ? 'Restart to update' : '重启更新';
-      case 'manual': return english ? 'Download update manually' : '手动下载更新';
-      case 'error': return english ? 'Update check failed. Try again' : '检查失败，点击重试';
-      default: return english ? 'Check for updates' : '检查更新';
-    }
-  })();
-  const progressLabel = downloadPercent === undefined
-    ? []
-    : [createUpdateProgressLabel(downloadPercent)];
-  button.replaceChildren(createUpdateIcon(), ...progressLabel);
-  button.title = accessibleLabel;
-  button.setAttribute('aria-label', accessibleLabel);
-  button.disabled = checking || downloading;
-  button.onclick = downloaded
-    ? () => sendUpdateCommand('install')
-    : manual
-      ? () => sendUpdateCommand('download')
-      : () => sendUpdateCommand('check');
-  if (button.parentElement !== sidebar) {
-    sidebar.append(button);
-  }
-  positionHarnessUpdateButton(button, sidebar);
-}
-
-function positionHarnessUpdateButton(
-  button: HTMLButtonElement,
-  sidebar: HTMLElement,
-): void {
-  const bounds = sidebar.getBoundingClientRect();
-  const buttonBounds = button.getBoundingClientRect();
-  button.style.left = `${String(Math.round(bounds.right - buttonBounds.width - 12))}px`;
-  button.style.top = `${String(Math.round(bounds.bottom - buttonBounds.height - 12))}px`;
-}
-
-function createUpdateIcon(): SVGElement {
-  const namespace = 'http://www.w3.org/2000/svg';
-  const icon = document.createElementNS(namespace, 'svg');
-  icon.setAttribute('aria-hidden', 'true');
-  icon.setAttribute('viewBox', '0 0 20 20');
-  icon.setAttribute('fill', 'none');
-  const path = document.createElementNS(namespace, 'path');
-  path.setAttribute(
-    'd',
-    'M10 3.5v9.2m0 0 3.6-3.6M10 12.7 6.4 9.1M4 16.5h12',
-  );
-  path.setAttribute('stroke', 'currentColor');
-  path.setAttribute('stroke-linecap', 'round');
-  path.setAttribute('stroke-linejoin', 'round');
-  path.setAttribute('stroke-width', '1.7');
-  icon.append(path);
-  return icon;
-}
-
-function createUpdateProgressLabel(percent: number): HTMLSpanElement {
-  const label = document.createElement('span');
-  label.className = 'dsh-desktop-header-update-progress';
-  label.textContent = `${String(percent)}%`;
-  label.setAttribute('aria-hidden', 'true');
-  return label;
-}
-
-function installHarnessUpdateButton(): void {
-  if (!document.querySelector('style[data-dsh-desktop-update-style]')) {
-    const style = document.createElement('style');
-    style.dataset.dshDesktopUpdateStyle = '';
-    style.textContent = `
-      .dsh-desktop-header-update {
-        position: fixed;
-        z-index: 20;
-        box-sizing: border-box;
-        display: flex;
-        width: max-content;
-        min-width: 34px;
-        max-width: calc(100% - 24px);
-        height: 34px;
-        padding: 0 11px;
-        border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 16%));
-        border-radius: 10px;
-        align-items: center;
-        justify-content: center;
-        gap: 7px;
-        color: var(--dsw-alias-label-secondary, #667085);
-        background: var(--dsw-alias-bg-layer-1, #fff);
-        box-shadow: 0 4px 12px rgb(18 24 40 / 10%);
-        cursor: pointer;
-        flex: none;
-        transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
-      }
-      .dsh-desktop-header-update svg { width: 18px; height: 18px; flex: none; }
-      .dsh-desktop-header-update-progress {
-        min-width: 3ch;
-        font-size: 12px;
-        font-variant-numeric: tabular-nums;
-        line-height: 1;
-        text-align: right;
-      }
-      .dsh-desktop-header-update:hover:not(:disabled) {
-        color: var(--dsw-alias-label-primary, #252b37);
-        background: var(--dsw-alias-interactive-bg-hover, rgb(127 127 127 / 8%));
-        transform: translateY(-1px);
-      }
-      .dsh-desktop-header-update:disabled {
-        cursor: default;
-      }
-      .dsh-desktop-header-update:focus-visible {
-        outline: 2px solid color-mix(in srgb, var(--dsw-static-deepseek-500, #4d6bfe) 38%, transparent);
-        outline-offset: 2px;
-      }
-      .dsh-desktop-header-update[data-update-status="downloaded"],
-      .dsh-desktop-header-update[data-update-status="manual"] {
-        border-color: var(--dsw-static-deepseek-500, #4d6bfe);
-        color: #fff;
-        background: var(--dsw-static-deepseek-500, #4d6bfe);
-        box-shadow: 0 4px 12px rgb(38 70 180 / 22%);
-      }
-      .dsh-desktop-header-update[data-update-status="error"] {
-        color: var(--dsw-alias-status-error, #d92d20);
-      }
-      .dsh-desktop-header-update[data-update-status="checking"],
-      .dsh-desktop-header-update[data-update-status="downloading"] {
-        animation: dsh-desktop-header-update-pulse 1.1s ease-in-out infinite;
-      }
-      @keyframes dsh-desktop-header-update-pulse {
-        0%, 100% { opacity: .5; }
-        50% { opacity: 1; }
-      }
-    `;
-    document.head.append(style);
-  }
-  let scheduled = false;
-  let observedSidebar: HTMLElement | undefined;
-  const resizeObserver = new ResizeObserver(() => schedule());
-  const bindSidebar = (): void => {
-    const sidebar = findHarnessSidebar();
-    if (sidebar === observedSidebar) return;
-    resizeObserver.disconnect();
-    observedSidebar = sidebar;
-    if (sidebar !== undefined) resizeObserver.observe(sidebar);
-  };
-  const schedule = (): void => {
-    if (scheduled) return;
-    scheduled = true;
-    window.requestAnimationFrame(() => {
-      scheduled = false;
-      bindSidebar();
-      reconcileHarnessUpdateButton();
-    });
-  };
-  new MutationObserver(schedule).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
-  window.addEventListener('resize', schedule);
-  schedule();
-}
-
 runWhenDocumentReady(document, () => {
   installHarnessAppearanceObserver();
   installHarnessLocaleObserver();
   installHarnessSidebarObserver();
-  installHarnessUpdateButton();
 });

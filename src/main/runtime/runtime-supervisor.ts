@@ -10,6 +10,7 @@ export type RuntimeFailureCode =
   | 'startup-timeout'
   | 'renderer-crashed'
   | 'runtime-endpoint-occupied'
+  | 'safe-start-failed'
   | 'upgrade-preparation-failed';
 
 export interface RuntimeFailure {

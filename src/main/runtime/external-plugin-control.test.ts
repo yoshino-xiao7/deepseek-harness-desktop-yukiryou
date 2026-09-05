@@ -30,6 +30,16 @@ async function fixture(): Promise<{ runtimeHome: string; packageRoot: string }> 
 }
 
 describe('external plugin control', () => {
+  it('keeps local plugin controls without authorizing a same-name registry update', async () => {
+    const { runtimeHome } = await fixture();
+    const path = join(runtimeHome, 'profiles', 'web', 'package.json');
+    const manifest = JSON.parse(await readFile(path, 'utf8'));
+    manifest.dependencies['dsh-grok-provider'] = 'file:/tmp/local-plugin';
+    await writeFile(path, JSON.stringify(manifest));
+    const control = createExternalPluginControl({ runtimeHome, runtimeRoot: '/runtime' });
+    expect((await control.inventory())[0]).toMatchObject({ allowedActions: ['disable', 'uninstall'], updateUnavailableReason: 'local-or-unverified-source' });
+  });
+
   it('only grants controls to a direct profile bundle and never to a nested runtime entry', async () => {
     const { runtimeHome } = await fixture();
     const control = createExternalPluginControl({ runtimeHome, runtimeRoot: '/runtime' });

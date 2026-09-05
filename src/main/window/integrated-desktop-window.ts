@@ -231,6 +231,7 @@ class IntegratedElectronDesktopWindow implements DesktopWindow {
       if (action !== undefined) {
         event.preventDefault();
         const callbacks = {
+          'safe-start': this.#options.onSafeStart ?? (() => undefined),
           retry: this.#options.onRetry,
           'open-logs': this.#options.onOpenLogs,
           'copy-diagnostics': this.#options.onCopyDiagnostics,

@@ -20,6 +20,24 @@ const candidate = {
 };
 
 describe('PluginProfileBootstrap', () => {
+  it('keeps an updated disabled plugin out of the trial and committed launch', async () => {
+    const runtimeHome = await mkdtemp(join(tmpdir(), 'plugin-profile-disabled-'));
+    const bootstrap = createPluginProfileBootstrap(runtimeHome);
+    const generation = generationForCandidate(candidate);
+    await installCandidateBundle(runtimeHome);
+    await bootstrap.prepare(generation, candidate);
+    await bootstrap.prepareRuntimeLaunch();
+    await bootstrap.commit(generation);
+    const change = await bootstrap.prepareEnabled({ packageName: candidate.packageName, version: candidate.version, generation, enabled: false });
+    await bootstrap.prepareRuntimeLaunch();
+    await bootstrap.commit(change.generation);
+    await bootstrap.prepare(generation, candidate);
+    const trial = await bootstrap.prepareRuntimeLaunch();
+    expect(trial.patchPaths).toEqual([]);
+    await bootstrap.commit(generation);
+    expect((await bootstrap.inventory()).entries[0]?.enabled).toBe(false);
+  });
+
   it('starts fail-closed without creating profile state', async () => {
     const runtimeHome = await mkdtemp(join(tmpdir(), 'plugin-profile-'));
     const bootstrap = createPluginProfileBootstrap(runtimeHome);

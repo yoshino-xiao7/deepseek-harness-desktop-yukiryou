@@ -19,6 +19,7 @@ export interface ExternalPluginInventoryEntry {
   readonly enabled: boolean;
   readonly allowedActions: readonly ('enable' | 'disable' | 'uninstall')[];
   readonly repository: string;
+  readonly updateUnavailableReason?: 'local-or-unverified-source';
 }
 
 export interface ExternalPluginIdentity {
@@ -33,7 +34,7 @@ export interface ExternalPluginControl {
   patchPaths(): Promise<readonly string[]>;
   setEnabled(identity: ExternalPluginIdentity & { readonly enabled: boolean }): Promise<{ status: 'prepared' }>;
   remove(identity: ExternalPluginIdentity): Promise<{ status: 'prepared' }>;
-  prepareAdoption(identity: ExternalPluginIdentity, generation: string): Promise<void>;
+  prepareAdoption(identity: ExternalPluginIdentity, generation: string): Promise<{ readonly enabled: boolean }>;
   recoverAdoption(generation: string): Promise<void>;
   commitAdoption(generation: string): Promise<'cleaned' | 'pending'>;
   reconcileAdoption(input: {
@@ -136,6 +137,7 @@ export function createExternalPluginControl(
         enabled,
         allowedActions: enabled ? ['disable', 'uninstall'] : ['enable', 'uninstall'],
         repository,
+        ...(!registryDependency(profile.dependencies?.[packageName]) ? { updateUnavailableReason: 'local-or-unverified-source' as const } : {}),
       });
     }
     return entries.sort((left, right) => left.packageName.localeCompare(right.packageName));
@@ -278,6 +280,7 @@ export function createExternalPluginControl(
         await restoreAdoption(state).catch(() => undefined);
         throw error;
       }
+      return { enabled: candidate.enabled };
     },
     async recoverAdoption(generation) {
       assertGeneration(generation);
@@ -342,7 +345,7 @@ async function writeDisabledOverlay(path: string, entryIds: readonly string[]): 
   await rename(temporary, path);
 }
 
-function collectOwnedEntryIds(value: unknown, packageName: string): readonly string[] {
+export function collectOwnedEntryIds(value: unknown, packageName: string): readonly string[] {
   const entries = new Set<string>();
   const visit = (item: unknown): void => {
     if (Array.isArray(item)) {
@@ -420,4 +423,8 @@ async function atomicWriteJson(path: string, value: unknown): Promise<void> {
   const temporary = `${path}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, path);
+}
+
+function registryDependency(value: unknown): boolean {
+  return typeof value === 'string' && /^(?:[~^]?\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?|latest)$/.test(value);
 }

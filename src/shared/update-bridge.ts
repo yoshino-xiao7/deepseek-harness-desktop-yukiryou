@@ -32,7 +32,8 @@ export function validatedUpdateCommand(value: unknown): UpdateCommand | undefine
 }
 
 export function shouldShowHeaderUpdate(state: DesktopUpdateState): boolean {
-  return state.status !== 'disabled' && state.status !== 'latest';
+  return state.status === 'downloading' || state.status === 'downloaded' || state.status === 'manual' ||
+    (state.status === 'error' && state.releaseName !== undefined);
 }
 
 export function validatedUpdateState(

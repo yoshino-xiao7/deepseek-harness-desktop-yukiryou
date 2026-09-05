@@ -1,6 +1,7 @@
 const OCCUPIED_RUNTIME_ENDPOINT = 'runtime-endpoint-occupied';
 
 export function startupFailureCopy(code: string): string {
+  if (code === 'safe-start-failed') return '安全启动仍然失败，已停止自动重试。当前无法确认是插件问题；请打开日志或导出诊断信息。';
   if (code === OCCUPIED_RUNTIME_ENDPOINT) {
     return [
       '检测到上次的 Harness 端口仍被占用。',
