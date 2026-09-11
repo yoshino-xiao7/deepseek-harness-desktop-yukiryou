@@ -140,9 +140,10 @@ interface AppUpdater {
 ├── logs/                  # 轮转且脱敏的桌面壳/运行时日志
 ├── diagnostics/           # 用户显式导出的诊断包
 ├── runtime-endpoint.json  # 稳定 loopback host/port 与选择时间
-├── .dsh-0.1.2-rc.1-storage-v1.json # rc.1 回退副本事务意图
-├── runtime.pre-dsh-0.1.2-rc.1[.N]/ # 本次升级前 Runtime Home 回退副本
-└── runtime.pre-dsh-0.1.0-rc.8[.N]/ # 保留的历史回退副本（若存在）
+├── .dsh-0.1.5-rc.2-storage-v1.json # 0.1.5-rc.2 回退副本事务意图
+├── runtime.pre-dsh-0.1.5-rc.2[.N]/ # 本次升级前 Runtime Home 回退副本
+├── runtime.pre-dsh-0.1.2-rc.1[.N]/ # 保留的历史回退副本（若存在）
+└── runtime.pre-dsh-0.1.0-rc.8[.N]/ # 保留的更早历史回退副本（若存在）
 ```
 
 缓存放入 `~/Library/Caches/<BundleId>/`，不与持久数据混放。应用升级不删除 `runtime/`；卸载说明必须明确数据不会随 `.app` 删除。

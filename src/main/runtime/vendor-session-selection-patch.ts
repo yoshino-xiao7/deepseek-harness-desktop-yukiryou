@@ -1,12 +1,12 @@
 /**
- * Temporary downstream patch for DeepSeek Harness 0.1.2-rc.1.
+ * Temporary downstream patch for DeepSeek Harness 0.1.5-rc.2.
  *
- * The Session Controller can still project an empty, pending list during startup. rc.1
- * treats that transient snapshot as proof that the restored session is gone
- * and clears `dsh.sessions.current` before the first list pull can validate it.
+ * The Session Controller can still project an empty, pending list during startup.
+ * Upstream still treats that transient snapshot as proof that the restored session
+ * is gone and clears `dsh.sessions.current` before the first list pull can validate it.
  * Defer that destructive fallback until the first successful list arrives.
  */
-export const SESSION_SELECTION_PATCH_DSH_VERSION = '0.1.2-rc.1';
+export const SESSION_SELECTION_PATCH_DSH_VERSION = '0.1.5-rc.2';
 export const SESSION_SELECTION_PATCH_MARKER =
   'deepseek-yukiryou:session-selection-patch:v1';
 

@@ -1,4 +1,4 @@
-export type RuntimeSlotKind = 'single' | 'list' | 'chain';
+export type RuntimeSlotKind = 'single' | 'list' | 'chain' | 'keyed';
 export type RuntimeSlotScope = 'root' | 'session-maybe' | 'session';
 
 export interface RuntimeSlotContract {
@@ -14,7 +14,7 @@ export interface RuntimeSlotContract {
 }
 
 /**
- * Contract verified against the dsh 0.1.2-rc.1 client slot catalog.
+ * Contract verified against the dsh 0.1.5-rc.2 client slot catalog.
  * This checked-in copy keeps unit tests independent from the gitignored vendored
  * Runtime; runtime:verify remains responsible for proving the pinned Runtime.
  */
@@ -28,7 +28,7 @@ export const RUNTIME_DESKTOP_SLOT_CONTRACT = [
     occupant: ['client-ui-layout AppFrame'],
     declaredBy: 'runtime',
     replaceRisk: 'shadows-shipped-ui',
-    childSlots: ['sidebar', 'conversation', 'details', 'shell.overlay'],
+    childSlots: ['sidebar', 'main', 'rightbar', 'shell.overlay'],
   },
   {
     key: 'sidebar',
@@ -42,19 +42,31 @@ export const RUNTIME_DESKTOP_SLOT_CONTRACT = [
     childSlots: [
       'sidebar.brand.mark',
       'sidebar.brand.name',
+      'sidebar.panellist',
       'sidebar.workspaces',
       'sidebar.settings',
       'sidebar.footer.action',
     ],
   },
   {
-    key: 'conversation',
-    purpose: 'The whole center column across no-session and live-session states.',
+    key: 'main',
+    purpose: 'The keyed center column. The shipped conversation surface is the conversation key.',
+    kind: 'keyed',
+    scope: 'root',
+    ownerProps: [],
+    occupant: ['client-ui-layout MainPanel'],
+    declaredBy: 'root',
+    replaceRisk: 'shadows-shipped-ui',
+    childSlots: ['main.conversation'],
+  },
+  {
+    key: 'main.conversation',
+    purpose: 'The conversation surface inside the main column across no-session and live-session states.',
     kind: 'single',
     scope: 'session-maybe',
     ownerProps: [],
     occupant: ['client-ui-conversation ConversationRoot'],
-    declaredBy: 'root',
+    declaredBy: 'main',
     replaceRisk: 'shadows-shipped-ui',
     childSlots: [
       'conversation.session',
@@ -72,15 +84,15 @@ export const RUNTIME_DESKTOP_SLOT_CONTRACT = [
     ],
   },
   {
-    key: 'details',
-    purpose: 'The right details column shown when layout opens it.',
+    key: 'rightbar',
+    purpose: 'The official right Sidebar track for document, file, and session panes.',
     kind: 'single',
-    scope: 'session',
+    scope: 'root',
     ownerProps: [],
-    occupant: ['client-ui-conversation DetailsPanel'],
+    occupant: ['client-ui-sidebar-right'],
     declaredBy: 'root',
     replaceRisk: 'shadows-shipped-ui',
-    childSlots: ['conversation.details.tool'],
+    childSlots: ['rightbar.session'],
   },
   {
     key: 'shell.overlay',
@@ -91,17 +103,6 @@ export const RUNTIME_DESKTOP_SLOT_CONTRACT = [
     occupant: [],
     declaredBy: 'root',
     replaceRisk: 'none',
-    childSlots: [],
-  },
-  {
-    key: 'conversation.details.tool',
-    purpose: 'The complete tool-output body inside the official details panel.',
-    kind: 'single',
-    scope: 'session',
-    ownerProps: ['block', 'cwd'],
-    occupant: ['client-ui-tool ToolDetails'],
-    declaredBy: 'details',
-    replaceRisk: 'shadows-shipped-ui',
     childSlots: [],
   },
   {

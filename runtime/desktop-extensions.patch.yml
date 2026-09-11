@@ -6,7 +6,7 @@
     - id: desktop-market
       name: '@dsh-desktop/market'
 
-# The rc.1 turn-tail is a first-match chain. The Companion entry reuses the
-# exported official ProducedFiles component and appends its read-only card.
+# The turn-tail is a first-match chain. Companion still disables the official
+# deliverables occupant so it can render produced files plus the review card.
 - id: ui-deliverables
   disabled: true

@@ -14,7 +14,8 @@ const upstreamFixture = [
   '\t\t\t\t\t\t\t\t\t}',
   '\t\t\t\t\t\t\t\t})]',
   '\t\t\t\t\t\t\t})]',
-  '\t\t\tconst addable = state.rows.filter((row) => !row.configured && row.entry.settingsNs !== "");',
+  '\t\t\tconst configurable = state.rows.filter((row) => state.namespaces.has(row.entry.settingsNs));',
+  '\t\t\tconst addable = configurable.filter((row) => !row.configured);',
   '});',
 ].join('\n');
 

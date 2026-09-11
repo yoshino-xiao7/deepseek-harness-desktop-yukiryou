@@ -55,7 +55,7 @@
 pnpm test:stress # 100 次启动、就绪、停止与端口回收
 pnpm test:soak   # 连续 8 小时健康探测，发布候选冻结后执行
 pnpm test:memory # 打包应用 2500 次侧栏/标签变化与 working-set 门禁
-pnpm test:upgrade # 真实上一公开版非空 Session + 稳定 origin + rc.2 Runtime Home 回退副本门禁
+pnpm test:upgrade # 真实上一公开版非空 Session + 稳定 origin + 0.1.5-rc.2 Runtime Home 回退副本门禁
 pnpm test:soak:app # 打包应用 60 秒 shell/Harness/进程/内存资格测试
 pnpm test:soak:app:release # 正式候选 30 分钟打包应用 soak
 pnpm test:soak:app:extended # 独立工作流 5 小时扩展 soak
@@ -91,7 +91,7 @@ Windows 候选 CI 会同时生成并验证未签名的向导式 NSIS `Setup.exe`
 ### Release tag
 
 1. 第一台 Apple Silicon runner 使用 Electron Forge 官方 `osxSign` 生成签名候选。
-2. 第二台全新 runner 下载候选与上一公开版、复制候选到 `/Applications`，执行签名/证书链/架构、包内原生模块验证；随后用同一临时用户目录在上一版创建并完成真实非空 Session、持久化 `dsh.sessions.current`，再启动候选，验证相同 origin、当前 Session ID、精确 Session 集合与 rc.2 回退副本，不得新增空白 Session；最后真实启动精确候选直到 Harness 就绪并产生绑定 SHA-256 与 commit 的回执。
+2. 第二台全新 runner 下载候选与上一公开版、复制候选到 `/Applications`，执行签名/证书链/架构、包内原生模块验证；随后用同一临时用户目录在上一版创建并完成真实非空 Session、持久化 `dsh.sessions.current`，再启动候选，验证相同 origin、当前 Session ID、精确 Session 集合与 0.1.5-rc.2 回退副本，不得新增空白 Session；最后真实启动精确候选直到 Harness 就绪并产生绑定 SHA-256 与 commit 的回执。
 3. 只有回执与候选完全匹配，第三台 runner 才提交 Apple 一次；Accepted 后检查公证日志、staple 并生成最终 DMG/ZIP。
 4. 第四台全新 runner 分别安装最终 DMG/ZIP，执行 `codesign`、`spctl`、ticket、架构、校验和，并再次启动精确的最终应用直到 Harness 就绪。
 5. 同一提交还必须在 Windows x64 runner 通过 Runtime/ConPTY、向导式 NSIS 安装 EXE、便携 ZIP、会话恢复和安装/修复/卸载生命周期门禁；公开资产仍只有版本化 EXE、便携 ZIP 与 Windows SHA-256 清单。
@@ -115,7 +115,7 @@ Windows 候选 CI 会同时生成并验证未签名的向导式 NSIS `Setup.exe`
 - 不自动降级 Harness 数据格式。若新版 dsh 写入不可逆格式，发布前必须提供备份/恢复策略，否则不升级该运行时。
 - 用户回滚应用时不得自动删除 Runtime Home。
 
-rc.2 首次启动时，桌面壳先完成 Runtime endpoint 所有权检查；只有轮转日志中保留的全部不同旧版 ready 端口均已释放，才在同级 `.dsh-0.1.1-rc.2-storage-v1.json` 原子记录本次回退事务选择的目标，并把非空 Runtime Home 完整复制为 `runtime.pre-dsh-0.1.1-rc.2[.N]`；只有目标副本完整发布后才启动 Harness。若复制中断，下次启动复用同一目标继续，不会连续创建副本耗尽磁盘。rc.8 的历史 marker 与回退目录保持不动；回滚 rc.2 时也不得删除任一历史副本，直到恢复验证完成。
+0.1.5-rc.2 首次启动时，桌面壳先完成 Runtime endpoint 所有权检查；只有轮转日志中保留的全部不同旧版 ready 端口均已释放，才在同级 `.dsh-0.1.5-rc.2-storage-v1.json` 原子记录本次回退事务选择的目标，并把非空 Runtime Home 完整复制为 `runtime.pre-dsh-0.1.5-rc.2[.N]`；只有目标副本完整发布后才启动 Harness。若复制中断，下次启动复用同一目标继续，不会连续创建副本耗尽磁盘。既有 `0.1.2-rc.1` 等历史 marker 与回退目录保持不动；回滚本次升级时也不得删除任一历史副本，直到恢复验证完成。
 
 规范支持的 `v0.2.1-beta.2 → rc.8` 路径要求先从应用菜单完整退出旧版。若旧版被强制退出、main 崩溃或 ready 日志被清理，必须先重启 macOS 再升级：beta.2 的 detached Runtime 没有 owner watchdog，且在日志也丢失时候选版无法安全识别它的端口。重启保证不存在两个 Runtime 并发写同一 Home；若最后 ready 记录已丢失，一次性 origin 迁移无法恢复原 localStorage，用户可能需要从 Harness 侧栏手动重新选择原会话。发布门禁覆盖保留日志的正常退出升级；强杀且日志丢失属于这条显式人工恢复合同，不宣称自动修复。
 

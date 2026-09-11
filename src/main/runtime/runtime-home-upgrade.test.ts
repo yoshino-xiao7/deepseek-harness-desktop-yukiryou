@@ -64,7 +64,7 @@ describe('Runtime Home upgrade backup', () => {
     });
     if (process.platform !== 'win32') {
       expect(
-        (await lstat(join(userData, '.dsh-0.1.2-rc.1-storage-v1.json'))).mode &
+        (await lstat(join(userData, '.dsh-0.1.5-rc.2-storage-v1.json'))).mode &
           0o777,
       ).toBe(0o600);
     }
@@ -85,9 +85,9 @@ describe('Runtime Home upgrade backup', () => {
       'empty',
     ]);
     await expect(
-      readFile(join(userData, '.dsh-0.1.2-rc.1-storage-v1.json'), 'utf8'),
+      readFile(join(userData, '.dsh-0.1.5-rc.2-storage-v1.json'), 'utf8'),
     ).resolves.toBe(`${JSON.stringify({
-      upgrade: 'dsh-0.1.2-rc.1-storage-v1',
+      upgrade: 'dsh-0.1.5-rc.2-storage-v1',
       backupName: null,
     }, null, 2)}\n`);
   });
@@ -95,7 +95,7 @@ describe('Runtime Home upgrade backup', () => {
   it('retries safely when an interrupted attempt left a partial temp file', async () => {
     const userData = await createTemporaryDirectory();
     const runtimeHome = join(userData, 'runtime');
-    const markerPath = join(userData, '.dsh-0.1.2-rc.1-storage-v1.json');
+    const markerPath = join(userData, '.dsh-0.1.5-rc.2-storage-v1.json');
     const abandonedTempPath = `${markerPath}.abandoned.tmp`;
     await mkdir(runtimeHome);
     await writeFile(abandonedTempPath, '{"upgrade":');
@@ -134,20 +134,20 @@ describe('Runtime Home upgrade backup', () => {
     }
 
     await expect(
-      lstat(join(userData, '.dsh-0.1.2-rc.1-storage-v1.json')),
+      lstat(join(userData, '.dsh-0.1.5-rc.2-storage-v1.json')),
     ).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await readdir(userData)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
   });
 
   it.each([
     ['zero-length', ''],
-    ['truncated JSON', '{"upgrade":"dsh-0.1.2-rc.1-storage-v1"'],
-    ['missing backup intent', '{"upgrade":"dsh-0.1.2-rc.1-storage-v1"}\n'],
+    ['truncated JSON', '{"upgrade":"dsh-0.1.5-rc.2-storage-v1"'],
+    ['missing backup intent', '{"upgrade":"dsh-0.1.5-rc.2-storage-v1"}\n'],
   ])('fails closed for a %s formal marker', async (_name, marker) => {
     const userData = await createTemporaryDirectory();
     const runtimeHome = join(userData, 'runtime');
-    const markerPath = join(userData, '.dsh-0.1.2-rc.1-storage-v1.json');
-    const backupPath = join(userData, 'runtime.pre-dsh-0.1.2-rc.1');
+    const markerPath = join(userData, '.dsh-0.1.5-rc.2-storage-v1.json');
+    const backupPath = join(userData, 'runtime.pre-dsh-0.1.5-rc.2');
     await mkdir(runtimeHome);
     await writeFile(join(runtimeHome, 'generation.txt'), 'must-be-preserved');
     await writeFile(markerPath, marker);
@@ -171,7 +171,7 @@ describe('Runtime Home upgrade backup', () => {
 
     const first = await ensureRuntimeHomeUpgradeBackup(runtimeHome);
     expect(first.status).toBe('created');
-    await rm(join(userData, '.dsh-0.1.2-rc.1-storage-v1.json'));
+    await rm(join(userData, '.dsh-0.1.5-rc.2-storage-v1.json'));
     await writeFile(join(runtimeHome, 'generation.txt'), 'restored-rc2-new-data');
 
     const retry = await ensureRuntimeHomeUpgradeBackup(runtimeHome);
@@ -194,10 +194,10 @@ describe('Runtime Home upgrade backup', () => {
     await mkdir(runtimeHome);
     await writeFile(join(runtimeHome, 'generation.txt'), 'interrupted-copy');
     await writeFile(
-      join(userData, '.dsh-0.1.2-rc.1-storage-v1.json'),
+      join(userData, '.dsh-0.1.5-rc.2-storage-v1.json'),
       `${JSON.stringify({
-        upgrade: 'dsh-0.1.2-rc.1-storage-v1',
-        backupName: 'runtime.pre-dsh-0.1.2-rc.1',
+        upgrade: 'dsh-0.1.5-rc.2-storage-v1',
+        backupName: 'runtime.pre-dsh-0.1.5-rc.2',
       })}\n`,
     );
 
@@ -205,13 +205,13 @@ describe('Runtime Home upgrade backup', () => {
 
     expect(resumed).toEqual({
       status: 'created',
-      backupPath: join(userData, 'runtime.pre-dsh-0.1.2-rc.1'),
+      backupPath: join(userData, 'runtime.pre-dsh-0.1.5-rc.2'),
     });
     await expect(
-      readFile(join(userData, 'runtime.pre-dsh-0.1.2-rc.1', 'generation.txt'), 'utf8'),
+      readFile(join(userData, 'runtime.pre-dsh-0.1.5-rc.2', 'generation.txt'), 'utf8'),
     ).resolves.toBe('interrupted-copy');
     await expect(
-      lstat(join(userData, 'runtime.pre-dsh-0.1.2-rc.1.1')),
+      lstat(join(userData, 'runtime.pre-dsh-0.1.5-rc.2.1')),
     ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

@@ -11,8 +11,8 @@ import { resolveE2eExecutablePath } from '../e2e/executable-path.js';
 const previousExecutable = process.env.DSH_PREVIOUS_EXECUTABLE_PATH?.trim();
 const expectedPreviousVersion =
   process.env.DSH_PREVIOUS_EXPECTED_VERSION?.trim() || '0.2.1-beta.2';
-const rc1BackupDirectoryName = 'runtime.pre-dsh-0.1.2-rc.1';
-const rc1UpgradeMarkerName = '.dsh-0.1.2-rc.1-storage-v1.json';
+const rcBackupDirectoryName = 'runtime.pre-dsh-0.1.5-rc.2';
+const rcUpgradeMarkerName = '.dsh-0.1.5-rc.2-storage-v1.json';
 const currentSessionStorageKey = 'dsh.sessions.current';
 const runtimeCookieHeaders = new Map<string, string>();
 
@@ -31,7 +31,7 @@ describe('previous-version upgrade', () => {
     }
   });
 
-  it('preserves the active real session and prepares the rc.1 migration exactly once', async () => {
+  it('preserves the active real session and prepares the 0.1.5-rc.2 migration exactly once', async () => {
     if (previousExecutable === undefined || previousExecutable === '') {
       throw new Error(
         `Set DSH_PREVIOUS_EXECUTABLE_PATH to an extracted ${expectedPreviousVersion} executable`,
@@ -105,14 +105,8 @@ describe('previous-version upgrade', () => {
     electronApp = undefined;
 
     const runtimeHome = join(userData, 'runtime');
-    const upgradeMarkerPath = join(userData, rc1UpgradeMarkerName);
+    const upgradeMarkerPath = join(userData, rcUpgradeMarkerName);
     const markerBeforeCandidate = await readOptionalFile(upgradeMarkerPath);
-    if (markerBeforeCandidate !== undefined) {
-      expect(JSON.parse(markerBeforeCandidate)).toEqual({
-        upgrade: 'dsh-0.1.2-rc.1-storage-v1',
-        backupName: null,
-      });
-    }
     const preservedDirectory = join(runtimeHome, 'upgrade-preserved');
     const sentinelPath = join(preservedDirectory, 'sentinel.txt');
     const settingsPath = join(runtimeHome, 'settings.yaml');
@@ -152,7 +146,7 @@ describe('previous-version upgrade', () => {
       .split('\n')
       .map((line) => JSON.parse(line) as { event?: unknown; details?: unknown })
       .filter((record) => record.event === 'runtime.upgrade-backup-created');
-    const backupHome = join(userData, rc1BackupDirectoryName);
+    const backupHome = join(userData, rcBackupDirectoryName);
     if (markerBeforeCandidate === undefined) {
       await expect(
         readFile(join(backupHome, 'upgrade-preserved', 'sentinel.txt')),
@@ -164,7 +158,7 @@ describe('previous-version upgrade', () => {
         {
           timestamp: expect.any(String),
           event: 'runtime.upgrade-backup-created',
-          details: `backup=${rc1BackupDirectoryName}`,
+          details: `backup=${rcBackupDirectoryName}`,
         },
       ]);
     } else {

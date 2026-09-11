@@ -248,7 +248,7 @@ if (
   !deepSeekAdapter.includes('inputModalities: ["text", "image"]') ||
   !deepSeekAdapter.includes('llm-deepseek", "files-v3.json')
 ) {
-  throw new Error('Harness rc.1 Vision catalog or Files API image pipeline is missing');
+  throw new Error('Harness Vision catalog or Files API image pipeline is missing');
 }
 if (!desktopMarketCache.includes('createCatalogSnapshotStore')) {
   throw new Error('Desktop market persistent cache adapter is missing');

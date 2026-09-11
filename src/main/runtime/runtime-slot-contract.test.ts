@@ -16,20 +16,20 @@ describe('Runtime desktop slot contract', () => {
     });
     expect(root.childSlots).toEqual([
       'sidebar',
-      'conversation',
-      'details',
+      'main',
+      'rightbar',
       'shell.overlay',
     ]);
   });
 
   it.each([
-    'sidebar',
-    'conversation',
-    'details',
-    'conversation.details.tool',
-  ])('%s is a destructive replacement seam', (key) => {
+    ['sidebar', 'single'],
+    ['main', 'keyed'],
+    ['main.conversation', 'single'],
+    ['rightbar', 'single'],
+  ] as const)('%s is a destructive replacement seam', (key, kind) => {
     expect(runtimeSlotContract(key)).toMatchObject({
-      kind: 'single',
+      kind,
       replaceRisk: 'shadows-shipped-ui',
     });
   });
@@ -54,10 +54,10 @@ describe('Runtime desktop slot contract', () => {
       new Set([
         'root',
         'sidebar',
-        'conversation',
-        'details',
+        'main',
+        'main.conversation',
+        'rightbar',
         'shell.overlay',
-        'conversation.details.tool',
         'settings.section',
         'settings.general.item',
         'settings.plugins.tab',
