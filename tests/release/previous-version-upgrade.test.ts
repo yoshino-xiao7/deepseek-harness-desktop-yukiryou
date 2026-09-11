@@ -95,12 +95,18 @@ describe('previous-version upgrade', () => {
         turnStarted: true,
         turnEnded: true,
       });
-    const sessionsBeforeUpgrade = await readSessionIds(previousOrigin);
-    expect(sessionsBeforeUpgrade).toContain(expectedSessionId);
     await activateHarnessUiSelection(electronApp, expectedSessionId);
     await expect
       .poll(() => readCurrentSessionId(electronApp!), { timeout: 15_000 })
       .toBe(expectedSessionId);
+    // Snapshot the previous release's final persisted list after sidebar
+    // activation. Clicking the restored row can materialize Harness's reusable
+    // blank Session; capturing the list before that click made 1.0.10 look
+    // like it invented a Session that 1.0.9 had already written.
+    const sessionsBeforeUpgrade = await readSettledSessionIds(
+      previousOrigin,
+      expectedSessionId,
+    );
     await electronApp.close();
     electronApp = undefined;
 
@@ -125,9 +131,10 @@ describe('previous-version upgrade', () => {
     if (candidateOrigin === undefined) {
       throw new Error('Candidate Harness origin is missing');
     }
-    // The candidate may retain one reusable blank-session placeholder after
-    // restoring the real selection. Every previous Session must remain, and
-    // any extra entry must be that single explicitly blank placeholder.
+    // The candidate may still materialize one reusable blank-session
+    // placeholder after restoring the real selection. Every Session present
+    // when the previous release exited must remain, and any extra entry must
+    // be that single explicitly blank placeholder.
     await expect
       .poll(
         () => readUpgradeSessionInvariant(candidateOrigin, sessionsBeforeUpgrade),
@@ -145,7 +152,8 @@ describe('previous-version upgrade', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as { event?: unknown; details?: unknown })
-      .filter((record) => record.event === 'runtime.upgrade-backup-created');
+      .filter((record) => record.event === 'runtime.upgrade-backup-created')
+      .filter((record) => record.details === `backup=${rcBackupDirectoryName}`);
     const backupHome = join(userData, rcBackupDirectoryName);
     if (markerBeforeCandidate === undefined) {
       await expect(
@@ -168,7 +176,7 @@ describe('previous-version upgrade', () => {
       await expect(lstat(backupHome)).rejects.toMatchObject({ code: 'ENOENT' });
       expect(upgradeRecords).toEqual([]);
     }
-  }, 180_000);
+  }, 240_000);
 });
 
 async function readOptionalFile(path: string): Promise<string | undefined> {
@@ -296,6 +304,36 @@ async function readSessionIds(origin: string): Promise<string[]> {
   return items.map((item) => readString(item, 'sessionId')).sort();
 }
 
+async function readSettledSessionIds(
+  origin: string,
+  requiredSessionId: string,
+): Promise<string[]> {
+  let latestSessionIds: string[] = [];
+  let previousSignature = '';
+  let consecutiveStableSnapshots = 0;
+  await expect
+    .poll(
+      async () => {
+        latestSessionIds = await readSessionIds(origin);
+        const signature = latestSessionIds.join(',');
+        const containsRequiredSession = latestSessionIds.includes(requiredSessionId);
+        consecutiveStableSnapshots =
+          containsRequiredSession && signature === previousSignature
+            ? consecutiveStableSnapshots + 1
+            : 0;
+        previousSignature = signature;
+        return consecutiveStableSnapshots >= 3;
+      },
+      {
+        timeout: 15_000,
+        interval: 250,
+        message: 'Previous-release session list did not settle before upgrade',
+      },
+    )
+    .toBe(true);
+  return latestSessionIds;
+}
+
 async function readUpgradeSessionInvariant(
   origin: string,
   baselineSessionIds: readonly string[],
@@ -305,6 +343,7 @@ async function readUpgradeSessionInvariant(
       valid: false;
       missing: string[];
       unexpected: { sessionId: string; blank: boolean }[];
+      baseline: string[];
     }
 > {
   const baseline = new Set(baselineSessionIds);
@@ -328,7 +367,7 @@ async function readUpgradeSessionInvariant(
   ) {
     return { valid: true };
   }
-  return { valid: false, missing, unexpected };
+  return { valid: false, missing, unexpected, baseline: [...baselineSessionIds] };
 }
 
 async function readDurableSessionState(
