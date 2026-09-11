@@ -591,8 +591,9 @@ describe('macOS release workflow contract', () => {
     expect(source).not.toContain('window.localStorage.setItem(');
     expect(source).toContain('unexpected.length <= 1');
     expect(source).toContain('unexpected.every((session) => session.blank)');
+    expect(source).toContain('readSettledSessionIds(');
     expect(source).toMatch(
-      /activateHarnessUiSelection\([\s\S]+?readCurrentSessionId\(electronApp!\)[\s\S]+?electronApp\.close\(\)/,
+      /activateHarnessUiSelection\([\s\S]+?readCurrentSessionId\(electronApp!\)[\s\S]+?readSettledSessionIds\([\s\S]+?electronApp\.close\(\)/,
     );
     expect(source).not.toContain('async function writeHarnessStorage(');
   });
