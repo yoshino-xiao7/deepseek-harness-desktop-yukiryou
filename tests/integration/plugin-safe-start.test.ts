@@ -27,7 +27,7 @@ describe('bundled recovery boot', () => {
     await ensureBundledRuntimeExtensions(home, root);
     const errors: string[] = [];
     const runtime = createRuntimeSupervisor({ ...createHarnessRuntimeCommand(root), runtimeHome: home, workspaceRoot: home,
-      version: '0.1.2-rc.1', startupTimeoutMs, shutdownTimeoutMs: 5000,
+      version: '0.1.5-rc.2', startupTimeoutMs, shutdownTimeoutMs: 5000,
       createCompanionToken: () => 'b'.repeat(64), onOutput: (stream, chunk) => { if (stream === 'stderr') errors.push(chunk); },
     });
     try {
@@ -57,7 +57,7 @@ describe('bundled recovery boot', () => {
     const command = await createSafeRuntimeCommand(home, resolve('resources/runtime'));
     const errors: string[] = [];
     const runtime = createRuntimeSupervisor({ ...command, runtimeHome: home, workspaceRoot: home,
-      version: '0.1.2-rc.1', startupTimeoutMs, shutdownTimeoutMs: 5000,
+      version: '0.1.5-rc.2', startupTimeoutMs, shutdownTimeoutMs: 5000,
       createCompanionToken: () => 'a'.repeat(64),
       onOutput: (stream, chunk) => { if (stream === 'stderr') errors.push(chunk); },
     });

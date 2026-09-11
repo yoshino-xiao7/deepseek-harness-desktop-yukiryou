@@ -35,7 +35,7 @@ describe('bundled Harness runtime', () => {
     await supervisor?.stop('quit');
   });
 
-  it('ships the rc.1-scoped per-model capability editor patch', async () => {
+  it('ships the 0.1.5-rc.2-scoped per-model capability editor patch', async () => {
     const client = await readFile(
       join(
         projectRoot,
@@ -64,7 +64,7 @@ describe('bundled Harness runtime', () => {
     );
   });
 
-  it('ships the rc.1-scoped session selection startup patch', async () => {
+  it('ships the 0.1.5-rc.2-scoped session selection startup patch', async () => {
     const client = await readFile(
       join(
         projectRoot,
@@ -115,7 +115,7 @@ describe('bundled Harness runtime', () => {
         ),
         '--version',
       ]);
-      expect(dshVersion.stdout.trim()).toBe('0.1.2-rc.1');
+      expect(dshVersion.stdout.trim()).toBe('0.1.5-rc.2');
       supervisor = createRuntimeSupervisor({
         command: runtimeCommand.command,
         args: runtimeCommand.args,
@@ -125,7 +125,7 @@ describe('bundled Harness runtime', () => {
           join(runtimeRoot, runtimeLayout.nodeBinDirectory),
         ],
         workspaceRoot,
-        version: '0.1.2-rc.1',
+        version: '0.1.5-rc.2',
         startupTimeoutMs: runtimeStartupTimeoutMs(),
         shutdownTimeoutMs: 5_000,
         createCompanionToken: () => 'integration-token-that-is-long-enough-123456789',
@@ -260,7 +260,7 @@ describe('bundled Harness runtime', () => {
           join(runtimeRoot, runtimeLayout.nodeBinDirectory),
         ],
         workspaceRoot,
-        version: '0.1.2-rc.1',
+        version: '0.1.5-rc.2',
         startupTimeoutMs: 20_000,
         shutdownTimeoutMs: 5_000,
         createCompanionToken: () => 'fixture-token-that-is-long-enough-1234567890',
@@ -274,7 +274,7 @@ describe('bundled Harness runtime', () => {
       });
       expect(ready).toMatchObject({
         kind: 'ready',
-        version: '0.1.2-rc.1',
+        version: '0.1.5-rc.2',
       });
       await bootstrap.commit(staged.profileGeneration);
     },

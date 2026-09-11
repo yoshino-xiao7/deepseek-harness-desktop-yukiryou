@@ -1,11 +1,11 @@
 /**
- * Temporary downstream patch for DeepSeek Harness 0.1.2-rc.1.
+ * Temporary downstream patch for DeepSeek Harness 0.1.5-rc.2.
  *
- * rc.1 includes the Vision model and image pipeline, but the pi-ai
+ * 0.1.5-rc.2 still ships Vision models and the image pipeline, but the pi-ai
  * Models settings editor still does not expose its existing `models[].input`
  * field. Keep this transformation exact and version-scoped.
  */
-export const MODEL_CAPABILITIES_PATCH_DSH_VERSION = '0.1.2-rc.1';
+export const MODEL_CAPABILITIES_PATCH_DSH_VERSION = '0.1.5-rc.2';
 export const MODEL_CAPABILITIES_PATCH_MARKER =
   'deepseek-yukiryou:model-capabilities-patch:v2';
 
@@ -58,11 +58,6 @@ const MODEL_FIELDS_PATCH = `\t\t\t\t\t\t\t\t\t\teditCapacity(index, "maxTokens",
 \t\t\t\t\t\t\t\t})]
 \t\t\t\t\t\t\t})]`;
 
-const ADDABLE_PROVIDERS_ANCHOR =
-  '\t\t\tconst addable = state.rows.filter((row) => !row.configured && row.entry.settingsNs !== "");';
-const ADDABLE_PROVIDERS_PATCH =
-  '\t\t\tconst addable = state.rows.filter((row) => !row.configured && row.entry.settingsNs !== "" && state.namespaces.has(row.entry.settingsNs));';
-
 export function patchModelCapabilitiesEditor(source: string): string {
   if (source.includes(MODEL_CAPABILITIES_PATCH_MARKER)) return source;
 
@@ -86,11 +81,6 @@ export function patchModelCapabilitiesEditor(source: string): string {
     patched,
     MODEL_FIELDS_ANCHOR,
     MODEL_FIELDS_PATCH,
-  );
-  patched = replaceExactlyOnce(
-    patched,
-    ADDABLE_PROVIDERS_ANCHOR,
-    ADDABLE_PROVIDERS_PATCH,
   );
   return patched;
 }
@@ -119,11 +109,6 @@ export function unpatchModelCapabilitiesEditor(source: string): string {
     unpatched,
     MODEL_FIELDS_PATCH,
     MODEL_FIELDS_ANCHOR,
-  );
-  unpatched = replaceExactlyOnce(
-    unpatched,
-    ADDABLE_PROVIDERS_PATCH,
-    ADDABLE_PROVIDERS_ANCHOR,
   );
   return unpatched;
 }

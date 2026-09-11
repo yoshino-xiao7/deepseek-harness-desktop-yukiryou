@@ -100,8 +100,8 @@ run(nodeExecutable, [
   npmCli,
   'ci',
   '--omit=dev',
-  // rc.1 publishes composition services as peers. runtime/package.json pins
-  // that complete composition explicitly, avoiding npm's conflicting UI-peer
+  // 0.1.5-rc.2 still publishes composition services as peers. runtime/package.json
+  // pins that complete composition explicitly, avoiding npm's conflicting UI-peer
   // backtracking while still making every runtime peer a locked dependency.
   '--legacy-peer-deps',
   '--strict-allow-scripts',

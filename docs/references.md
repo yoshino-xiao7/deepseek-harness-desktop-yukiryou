@@ -4,7 +4,9 @@
 
 - [DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)：MIT、Developer Preview、官方启动方式 `npx @deepseek-ai/dsh web`。
 - [DeepSeek Harness 0.1.1-rc.1 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.1-rc.1)：Vision Exp 模型、Bubblewrap 修复与 rc.1 变更说明。
-- [DeepSeek Harness 0.1.1-rc.2 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.1-rc.2)：本项目当前固定基线；包含 Files API 图片复用和图片规格适配。
+- [DeepSeek Harness 0.1.1-rc.2 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.1-rc.2)：早期固定基线；包含 Files API 图片复用和图片规格适配。
+- [DeepSeek Harness 0.1.5-rc.1 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.5-rc.1)：会话日志 V3、右侧 Sidebar、默认 DeepSeek-V41-Flash 等自 0.1.2-rc.1 以来的汇总变更。
+- [DeepSeek Harness 0.1.5-rc.2 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.5-rc.2)：本项目当前固定基线；反馈提交确认与交付文件卡片排版优化。
 - [DeepSeek API 模型与价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)：今日消耗估算所用的官方峰谷时段与模型费率来源。
 - [DeepSeek Harness package.json](https://github.com/deepseek-ai/deepseek-harness/blob/master/package.json)：当前版本与 Node engine 要求。
 - [DeepSeek Harness LICENSE](https://github.com/deepseek-ai/deepseek-harness/blob/master/LICENSE)：MIT 许可证正文。

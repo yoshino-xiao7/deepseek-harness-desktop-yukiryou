@@ -6,6 +6,16 @@
 
 ## [未发布]
 
+## [1.0.10] - 2026-09-11
+
+### Runtime
+
+- 内置 DeepSeek Harness 升级至 `0.1.5-rc.2`；production lock 显式冻结拆分后的全部非可选 Peer、原生脚本 allowlist 与 npm 完整性，并把 Runtime Home 回退代际更新为 `runtime.pre-dsh-0.1.5-rc.2[.N]`。
+- 适配上游会话日志 V3：首次打开非空数据前创建新的回退副本；升级后的会话不能被旧 Runtime 降级读取。既有 `0.1.2-rc.1` 历史回退副本保持不动。
+- 随包 Web 跟随上游：新会话默认 `DeepSeek-V41-Flash`（`deepseek-flash`）；支持任意类型文件上传、官方右侧 Sidebar 文档/文件预览，以及反馈提交确认。本机 Workspace Review 仍由桌面壳独立承载，不占用官方 `rightbar`。
+- macOS/Linux Runtime 启动等待与 Windows 对齐为 60 秒，以便 0.1.5-rc.2 在并发装配失败后完成回滚并写出 Loader 诊断，插件隔离仍能匹配 entry 身份。
+- 复核并继续保留模型输入能力、会话选择恢复与上下文容量 Tooltip 三个版本保护补丁；提供方命名空间过滤已由上游覆盖，已从模型补丁中删除。侧栏底部 `hHd-Xa_*` / `VOzbGW_trigger` 兼容样式在 0.1.5-rc.2 仍命中，继续保留。
+
 ## [1.0.9] - 2026-09-05
 
 - 仅检测到更新才显示更新入口：设置先缩短，更新按钮随后显现，同一目标版本仅播放一次。应用更新入口迁入正式侧栏槽位，与设置独立命中；下载状态保持可聚焦，并补充悬停、按下及减少动态效果支持。
@@ -363,6 +373,8 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[1.0.10]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.10
+[1.0.9]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.9
 [1.0.8]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.8
 [1.0.3]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.3
 [1.0.2]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.2

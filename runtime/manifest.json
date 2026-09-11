@@ -18,8 +18,8 @@
     }
   },
   "dsh": {
-    "version": "0.1.2-rc.1",
-    "integrity": "sha512-RPq48TzxvwpdT9/7W1tbhZDBMmeK+bxDrX9cqQC27Wx/LqtgJF8PSa3b3xriU8oxtvhwYmk21w2cej3uMQrnVA=="
+    "version": "0.1.5-rc.2",
+    "integrity": "sha512-8Xc8hCQHcIWRmTCVU/xZdp6/qMsWMeAd2ObChKDEsfhUPJFXx6H0lgeb1DxUMD86HZrrVN+1bCvn1ppjZ/fOxw=="
   },
   "pnpm": {
     "version": "10.34.5",
