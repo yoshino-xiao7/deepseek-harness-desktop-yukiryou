@@ -61,6 +61,8 @@ Team ID 固定为 `7G6J4S76PN`。证书和 API 私钥不得提交到仓库、Act
 6. 公开成功后同一工作流再同步 OSS；确认版本化对象、`latest-mac.yml`、`latest.yml`、`downloads/latest.json` 与插件目录全部成功后，国内更新及官网直链才算就绪。
 7. 版本/tag 一旦存在，不允许覆盖或强推；任何修改都必须提升版本。
 
+恢复已公证产物时，`Resume notarized desktop release` 可通过 `windows_source_run_id` 选择独立通过的完整 Windows 候选运行。两端必须来自本仓库 main 的已完成手动运行并指向同一提交；macOS 全部门禁及 Windows 质量、集成、启动、便携包、自动更新、安装、修复安装和卸载步骤必须成功。缺失、跳过或失败的门禁一律拒绝。恢复继续校验产物清单与校验和、复验最终 DMG/ZIP，并将 Draft 绑定原始产物提交；公开前复验及国内镜像同步流程保持不变。
+
 面向用户的版本变化同时汇总到根目录 `CHANGELOG.md`。Release 正文由对应的 `docs/releases/v<version>.md` 自动生成，不在 GitHub 页面临时手写。
 版本说明正文不要再写一级标题；GitHub Release 页面已经使用版本名称作为页面标题。说明应聚焦相对上一公开版本的变化，只有仓库从未存在公开 Release 时才能使用“首个公开版本”。
 
