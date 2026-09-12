@@ -11,6 +11,10 @@ on:
         description: Failed Release macOS run containing accepted notarized artifacts
         required: true
         type: string
+      windows_source_run_id:
+        description: Optional successful full Windows candidate run for the same commit
+        required: false
+        type: string
 
 permissions:
   actions: read
@@ -47,11 +51,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          WINDOWS_SOURCE_RUN_ID: ${{ inputs.windows_source_run_id }}
         run: |
-          source_sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.head_sha')
-          source_workflow=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.path')
-          test "${source_workflow}" = ".github/workflows/release-macos.yml"
-          test -n "${source_sha}"
+          source_sha=$(node scripts/verify-release-recovery-source.ts)
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_TAG} already exists; versions are immutable."
             exit 1
@@ -78,7 +80,7 @@ jobs:
           name: windows-x64-unsigned-exe-and-portable
           path: windows-assets
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.source_run_id }}
+          run-id: ${{ inputs.windows_source_run_id || inputs.source_run_id }}
           github-token: ${{ github.token }}
       - name: Require matching notarized provenance
         env:
@@ -131,6 +133,7 @@ jobs:
       - name: Create immutable draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           release_flags=(--draft)
           if [[ "${RELEASE_VERSION}" == *-* ]]; then
@@ -138,6 +141,7 @@ jobs:
           fi
           gh release create "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
+            --target "${SOURCE_SHA}" \
             --title "DeepSeek YukiRyou ${RELEASE_VERSION}" \
             --notes-file "docs/releases/${RELEASE_TAG}.md" \
             "${release_flags[@]}" \
