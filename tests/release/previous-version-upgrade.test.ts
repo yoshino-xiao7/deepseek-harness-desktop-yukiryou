@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { _electron as electron, type ElectronApplication } from 'playwright';
@@ -113,6 +114,9 @@ describe('previous-version upgrade', () => {
     const runtimeHome = join(userData, 'runtime');
     const upgradeMarkerPath = join(userData, rcUpgradeMarkerName);
     const markerBeforeCandidate = await readOptionalFile(upgradeMarkerPath);
+    const backupsBeforeCandidate = await snapshotUpgradeBackups(userData);
+    const desktopLogPath = join(userData, 'logs', 'desktop.log');
+    const logBeforeCandidate = await readFile(desktopLogPath, 'utf8');
     const preservedDirectory = join(runtimeHome, 'upgrade-preserved');
     const sentinelPath = join(preservedDirectory, 'sentinel.txt');
     const settingsPath = join(runtimeHome, 'settings.yaml');
@@ -147,13 +151,18 @@ describe('previous-version upgrade', () => {
 
     await expect(readFile(sentinelPath)).resolves.toEqual(sentinel);
 
-    const desktopLog = await readFile(join(userData, 'logs', 'desktop.log'), 'utf8');
+    const desktopLog = await readFile(desktopLogPath, 'utf8');
+    expect(desktopLog.startsWith(logBeforeCandidate)).toBe(true);
+    // A previous release using the same Runtime can already have created the
+    // rollback copy. Only the candidate's new log entries belong to this gate.
     const upgradeRecords = desktopLog
+      .slice(logBeforeCandidate.length)
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as { event?: unknown; details?: unknown })
       .filter((record) => record.event === 'runtime.upgrade-backup-created')
-      .filter((record) => record.details === `backup=${rcBackupDirectoryName}`);
+      .filter((record) => typeof record.details === 'string' &&
+        record.details.startsWith(`backup=${rcBackupDirectoryName}`));
     const backupHome = join(userData, rcBackupDirectoryName);
     if (markerBeforeCandidate === undefined) {
       await expect(
@@ -173,11 +182,39 @@ describe('previous-version upgrade', () => {
       await expect(readFile(upgradeMarkerPath, 'utf8')).resolves.toBe(
         markerBeforeCandidate,
       );
-      await expect(lstat(backupHome)).rejects.toMatchObject({ code: 'ENOENT' });
+      // Preserve existing backup bytes and paths, including numbered copies;
+      // reject deletion, modification, or a new backup on a same-Runtime update.
+      await expect(snapshotUpgradeBackups(userData)).resolves.toEqual(
+        backupsBeforeCandidate,
+      );
       expect(upgradeRecords).toEqual([]);
     }
   }, 240_000);
 });
+
+async function snapshotUpgradeBackups(userData: string): Promise<Record<string, string>> {
+  const snapshot: Record<string, string> = {};
+  const visit = async (relativePath: string): Promise<void> => {
+    const path = join(userData, relativePath);
+    const stat = await lstat(path);
+    if (stat.isSymbolicLink()) {
+      snapshot[relativePath] = `symlink:${await readlink(path)}`;
+    } else if (stat.isDirectory()) {
+      snapshot[relativePath] = 'directory';
+      for (const name of (await readdir(path)).sort()) await visit(join(relativePath, name));
+    } else if (stat.isFile()) {
+      snapshot[relativePath] = `sha256:${createHash('sha256').update(await readFile(path)).digest('hex')}`;
+    } else {
+      throw new Error(`Unexpected backup entry: ${relativePath}`);
+    }
+  };
+  for (const name of (await readdir(userData)).sort()) {
+    if (name === rcBackupDirectoryName || name.startsWith(`${rcBackupDirectoryName}.`)) {
+      await visit(name);
+    }
+  }
+  return snapshot;
+}
 
 async function readOptionalFile(path: string): Promise<string | undefined> {
   try {
