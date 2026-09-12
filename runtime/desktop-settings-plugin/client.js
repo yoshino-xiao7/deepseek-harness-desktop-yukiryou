@@ -164,10 +164,16 @@ window.__ModuleLoader__.load({
     // Temporary 0.1.5-rc.2 chrome geometry; exact selectors fail closed on mismatch.
     // Remove when sidebar.footer.action provides inline layout alongside Settings.
     const css = `
-      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) { flex-direction: row; align-items: center; gap: 8px; }
-      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_settingsArea { order: 0; flex: 1; width: auto; }
-      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_footerActions { order: 1; width: auto; }
-      .hHd-Xa_collapsed .hHd-Xa_footArea:has(.dsh-desktop-footer-update) { flex-direction: column; gap: 0; }
+      /* Footer plugins share one slot. Keep their rows full width, and reserve
+         only the final row for Settings and the update action. */
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) { display: grid; grid-template-columns: minmax(0, 1fr) 80px; align-items: center; gap: 0 8px; }
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_footerActions,
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_footerActions > [data-slot="sidebar.footer.action"] { display: contents !important; }
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_footerActions > :where(:not([data-slot])),
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_footerActions > :where([data-slot="sidebar.footer.action"]) > * { grid-column: 1 / -1; min-width: 0; }
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) > .hHd-Xa_settingsArea { grid-column: 1; order: 1; width: auto; }
+      .hHd-Xa_footArea:has(.dsh-desktop-footer-update) .dsh-desktop-footer-update { grid-column: 2; order: 2; }
+      .hHd-Xa_collapsed .hHd-Xa_footArea:has(.dsh-desktop-footer-update) { display: flex; flex-direction: column; gap: 0; }
       .hHd-Xa_settingsArea .VOzbGW_trigger { transition: background-color 140ms ease, transform 140ms ease; }
       .hHd-Xa_settingsArea .VOzbGW_trigger:hover { transform: translateY(-1px); background: var(--dsw-alias-interactive-bg-hover); }
       .hHd-Xa_settingsArea .VOzbGW_trigger:active { transform: scale(.98); }
@@ -183,12 +189,10 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1);
         cursor: pointer; transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
       }
-      .hHd-Xa_footArea:has([data-update-reveal="entering"]) { animation: dsh-update-gap 420ms ease both; }
-      .hHd-Xa_footerActions:has([data-update-reveal="entering"]) { overflow: hidden; animation: dsh-update-reserve 420ms ease both; }
+      .hHd-Xa_footArea:has([data-update-reveal="entering"]) { animation: dsh-update-reserve 420ms ease both; }
       .dsh-desktop-footer-update[data-update-reveal="entering"] { animation: dsh-update-emerge 420ms ease both; }
-      .hHd-Xa_collapsed .hHd-Xa_footArea:has([data-update-reveal="entering"]), .hHd-Xa_collapsed .hHd-Xa_footerActions:has([data-update-reveal="entering"]) { animation: none; }
-      @keyframes dsh-update-gap { from { gap: 0; } 55%, to { gap: 8px; } }
-      @keyframes dsh-update-reserve { from { width: 0; } 55%, to { width: 80px; } }
+      .hHd-Xa_collapsed .hHd-Xa_footArea:has([data-update-reveal="entering"]) { animation: none; }
+      @keyframes dsh-update-reserve { from { grid-template-columns: minmax(0, 1fr) 0px; column-gap: 0; } 55%, to { grid-template-columns: minmax(0, 1fr) 80px; column-gap: 8px; } }
       @keyframes dsh-update-emerge { from, 55% { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: translateX(0); } }
       .dsh-desktop-footer-update[data-wide="true"] { width: 80px; }
       .dsh-desktop-footer-update svg { width: 18px; height: 18px; flex: none; }
@@ -201,7 +205,7 @@ window.__ModuleLoader__.load({
       .dsh-desktop-footer-update[data-update-status="downloaded"] { color: var(--dsw-static-deepseek-500, #4d6bfe); border-color: currentColor; }
       @media (prefers-reduced-motion: reduce) {
         .dsh-desktop-footer-update { transition: none; transform: none !important; animation: none !important; }
-        .hHd-Xa_footArea:has([data-update-reveal="entering"]), .hHd-Xa_footerActions:has([data-update-reveal="entering"]) { animation: none !important; }
+        .hHd-Xa_footArea:has([data-update-reveal="entering"]) { animation: none !important; }
       }
 
       :root {

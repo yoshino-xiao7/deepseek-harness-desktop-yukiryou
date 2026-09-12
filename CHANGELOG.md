@@ -6,6 +6,13 @@
 
 ## [未发布]
 
+## [1.0.11] - 2026-09-12
+
+### 修复
+
+- 修复侧栏余额插件与更新按钮同时显示时，设置行被撑高、按钮错位的问题。余额插件保留完整行，设置与更新按钮在下一行对齐。
+- 更新按钮入场动画只为自身预留空间，避免挤压其他侧栏插件；保持窄侧栏、折叠侧栏及不同下载状态下的布局稳定。
+
 ## [1.0.10] - 2026-09-11
 
 ### Runtime
@@ -373,6 +380,7 @@
 - 仅提供 ZIP，尚未提供 DMG 安装包。
 - 属于早期测试版本，建议重要工作保留备份。
 
+[1.0.11]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.11
 [1.0.10]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.10
 [1.0.9]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.9
 [1.0.8]: https://github.com/yoshino-xiao7/deepseek-harness-desktop-yukiryou/releases/tag/v1.0.8
