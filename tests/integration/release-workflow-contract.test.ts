@@ -5,6 +5,7 @@ import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 
 interface WorkflowStep {
+  env?: Record<string, string>;
   if?: string;
   name?: string;
   run?: string;
@@ -523,7 +524,13 @@ describe('macOS release workflow contract', () => {
     );
     expect(commands).toContain('tag_sha=');
     expect(commands).toContain('"${tag_sha}" != "${source_sha}"');
-    expect(commands).not.toContain('--target "${SOURCE_SHA}"');
+    expect(commands).toContain(
+      'source_sha=$(node scripts/verify-release-recovery-source.ts)',
+    );
+    expect(steps[createDraftIndex]?.env?.SOURCE_SHA).toBe(
+      '${{ steps.source.outputs.sha }}',
+    );
+    expect(steps[createDraftIndex]?.run).toContain('--target "${SOURCE_SHA}"');
     expect(commands).toContain('release_flags=(--draft)');
     expect(commands).toContain('release_flags+=(--prerelease)');
     expect(verifyDmgIndex).toBeGreaterThan(-1);
