@@ -10,3 +10,10 @@
 # deliverables occupant so it can render produced files plus the review card.
 - id: ui-deliverables
   disabled: true
+
+# Harness 0.1.5-rc.2 registers third-party RPC routes from Connection's
+# service context. Its webServer dependency must be declared on that owner,
+# or generic RPC registration fails while the host still reports ready.
+# Keep webRuntime: the base row uses it to resolve the trustedHosts config.
+- id: connection
+  inject: [webRuntime, webServer]
