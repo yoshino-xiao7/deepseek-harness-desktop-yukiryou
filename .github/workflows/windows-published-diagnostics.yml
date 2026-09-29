@@ -1,12 +1,6 @@
 name: Windows published startup diagnostics
 
 on:
-  push:
-    branches:
-      - yukiryou/v0.2.3-beta.2
-    paths:
-      - '.github/workflows/windows-published-diagnostics.yml'
-      - 'tests/e2e/windows-published-startup.test.ts'
   workflow_dispatch:
     inputs:
       release_tag:

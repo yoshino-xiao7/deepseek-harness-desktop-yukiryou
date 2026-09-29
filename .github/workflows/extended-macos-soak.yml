@@ -2,8 +2,6 @@ name: Extended macOS soak
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 17 * * 0'
 
 permissions:
   contents: read

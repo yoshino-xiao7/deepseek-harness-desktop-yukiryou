@@ -39,8 +39,11 @@
 
 ---
 
+> **Maintenance mode (2026-09-29):** DeepSeek Harness now has downloadable macOS and Windows Desktop releases and continues to evolve them in the official repository. This project is pausing new foundational desktop-shell work and will keep existing releases, compatibility fixes, security fixes, and critical installation support. Prefer the [official Harness Desktop Releases](https://github.com/deepseek-ai/deepseek-harness/releases). See [`docs/maintenance-mode.md`](docs/maintenance-mode.md) for the full scope.
+
 ## Contents
 
+- [Maintenance mode](#maintenance-mode-2026-09-29)
 - [Project positioning](#project-positioning)
 - [Download and install](#download-and-install)
   - [macOS](#macos)
@@ -58,11 +61,23 @@
 - [Documentation](#documentation)
 - [Get involved](#get-involved)
 
+## Maintenance mode (2026-09-29)
+
+DeepSeek Harness now publishes Desktop releases for macOS and Windows. The official Desktop application owns the foundational Harness desktop shell, bundled runtime, and plugin-management path, so this project will not continue expanding the same foundational capabilities.
+
+This repository keeps the published DeepSeek YukiRyou releases and historical source. Maintenance is limited to:
+
+- compatibility fixes after official Harness upgrades;
+- severe startup, installation, update, and data-retention issues;
+- security fixes and migration guidance for existing public releases.
+
+New features, independent runtime forks, and foundational capabilities that duplicate the official Desktop application are paused. For the official product, use the [official Releases](https://github.com/deepseek-ai/deepseek-harness/releases) and [official Harness repository](https://github.com/deepseek-ai/deepseek-harness).
+
 ## Project positioning
 
-DeepSeek Harness provides a local Web UI, but routine use still involves preparing a runtime, starting commands, managing ports, and recovering failed processes. DeepSeek YukiRyou packages those responsibilities into an installable cross-platform desktop app. It starts the pinned Harness runtime, cleans up only the processes it owns, and presents the complete Web UI in a native window.
+DeepSeek Harness now provides both a Web UI and an official Desktop application. This project originally packaged the Harness Web UI, pinned runtime, process lifecycle, and release updates into an installable cross-platform desktop app, while adding account status, workspace files, and change review around the official interface.
 
-This is not a rewrite of Harness and does not change how the agent works. Its job is to deliver Harness to the desktop with predictable startup, recovery, isolation, and updates, while adding desktop capabilities for account status, workspace files, and change review.
+This is not a rewrite of Harness and does not change how the agent works. Foundational desktop-shell work is now in maintenance mode; the historical implementation and published releases remain available.
 
 > Currently supported: Apple Silicon on macOS 14+ and Windows 11 x64. Intel Macs, Windows on Arm, and Linux are not currently supported.
 

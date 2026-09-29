@@ -39,8 +39,11 @@
 
 ---
 
+> **维护模式（2026-09-29）**：DeepSeek Harness 官方已经提供可下载的 macOS 与 Windows 桌面版，并继续在官方仓库迭代。本项目暂停新的基础桌面壳功能，保留现有发行版、兼容性修复、安全修复和严重安装问题处理。请优先查看 [官方 Harness Desktop Releases](https://github.com/deepseek-ai/deepseek-harness/releases)。完整说明见 [`docs/maintenance-mode.md`](docs/maintenance-mode.md)。
+
 ## 目录
 
+- [维护模式](#维护模式2026-09-29)
 - [项目定位](#项目定位)
 - [下载与安装](#下载与安装)
   - [macOS](#macos)
@@ -58,11 +61,23 @@
 - [文档导航](#文档导航)
 - [参与项目](#参与项目)
 
+## 维护模式（2026-09-29）
+
+官方 DeepSeek Harness 已公开桌面发行版，并提供 macOS 与 Windows 安装包。官方桌面端现在负责 Harness 的基础桌面承载、运行时打包和插件管理；本项目不再继续扩展相同的基础桌面壳能力。
+
+本仓库继续保留已发布的 DeepSeek YukiRyou 发行版及其历史代码，维护范围收窄为：
+
+- 官方 Harness 升级后的兼容性修复；
+- 严重启动、安装、升级和数据保留问题；
+- 现有公开版本的安全修复与用户迁移说明。
+
+新功能、独立运行时分叉和与官方桌面端重复的基础能力暂不继续开发。需要使用官方版本时，请直接查看 [官方 Releases](https://github.com/deepseek-ai/deepseek-harness/releases) 和 [官方 Harness 项目](https://github.com/deepseek-ai/deepseek-harness)。
+
 ## 项目定位
 
-官方 DeepSeek Harness 提供 Web UI，但日常使用仍需要准备运行环境、启动命令、管理本地端口和处理异常退出。DeepSeek YukiRyou 把这些工作收进一个可安装的跨平台桌面应用：应用启动时拉起内置 Harness，退出时回收自己创建的进程，并用原生窗口承载完整 Web UI。
+官方 DeepSeek Harness 现在同时提供 Web UI 和桌面版。本项目最初将 Harness Web UI、固定运行时、进程生命周期和发行更新收进一个可安装的跨平台桌面应用，并在官方界面之外补足账户状态、工作区文件和变更审核等桌面能力。
 
-它不是 Harness 的重写版本，也不会改变 Agent 的工作方式。它专注于把 Harness 稳定、安全、可恢复地交付到桌面，并在官方界面之外补足账户状态、工作区文件和变更审核等桌面能力。
+它不是 Harness 的重写版本，也不会改变 Agent 的工作方式。基础桌面壳能力现已进入维护模式，历史实现和已发布版本继续保留。
 
 > 当前支持 Apple Silicon macOS 14+ 与 Windows 11 x64。Intel Mac、Windows on Arm 和 Linux 暂不支持。
 
